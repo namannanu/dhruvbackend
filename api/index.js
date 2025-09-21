@@ -1,5 +1,19 @@
 // Vercel serverless entry point
-const app = require('../src/server');
+const server = require('../src/server');
 
-// For Vercel serverless deployment
-module.exports = app;
+const ensureDatabaseConnection =
+  server.ensureDatabaseConnection || (() => Promise.resolve());
+
+module.exports = async (req, res) => {
+  try {
+    await ensureDatabaseConnection();
+  } catch (error) {
+    console.error('MongoDB connection error during request:', error.message);
+    res
+      .status(500)
+      .json({ status: 'error', message: 'Database connection failed' });
+    return;
+  }
+
+  return server(req, res);
+};

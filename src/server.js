@@ -9,10 +9,19 @@ dotenv.config({ path: path.join(__dirname, 'config', 'config.env') });
 
 const PORT = process.env.PORT || 3000;
 
+let connectionPromise;
+
+const ensureDatabaseConnection = () => {
+  if (!connectionPromise) {
+    connectionPromise = connectDB();
+  }
+  return connectionPromise;
+};
+
 const startServer = async () => {
   try {
     console.log('WorkConnect backend starting...');
-    await connectDB();
+    await ensureDatabaseConnection();
     app.listen(PORT, () => {
       console.log(`Server listening on port ${PORT}`);
     });
@@ -24,6 +33,11 @@ const startServer = async () => {
 
 if (require.main === module) {
   startServer();
+} else {
+  ensureDatabaseConnection().catch((error) => {
+    console.error('Failed to initialise MongoDB connection:', error.message);
+  });
 }
 
 module.exports = app;
+module.exports.ensureDatabaseConnection = ensureDatabaseConnection;
