@@ -31,13 +31,22 @@ const startServer = async () => {
   }
 };
 
+const handler = async (req, res) => {
+  try {
+    await ensureDatabaseConnection();
+    return app(req, res);
+  } catch (error) {
+    console.error('Failed to initialise MongoDB connection:', error.message);
+    res
+      .status(500)
+      .json({ status: 'error', message: 'Database connection failed' });
+  }
+};
+
 if (require.main === module) {
   startServer();
-} else {
-  ensureDatabaseConnection().catch((error) => {
-    console.error('Failed to initialise MongoDB connection:', error.message);
-  });
 }
 
-module.exports = app;
+module.exports = handler;
 module.exports.ensureDatabaseConnection = ensureDatabaseConnection;
+module.exports.app = app;
