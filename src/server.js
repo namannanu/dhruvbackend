@@ -3,9 +3,9 @@ const path = require('path');
 const connectDB = require('./config/db');
 const app = require('./app');
 
-dotenv.config({
-  path: path.join(__dirname, 'config', 'config.env')
-});
+// Load environment variables, prioritising project-level .env if present.
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+dotenv.config({ path: path.join(__dirname, 'config', 'config.env') });
 
 const PORT = process.env.PORT || 3000;
 

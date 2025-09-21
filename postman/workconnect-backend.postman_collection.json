@@ -1,0 +1,1885 @@
+{
+  "info": {
+    "name": "WorkConnect Backend",
+    "description": "Postman collection for exercising the WorkConnect backend API endpoints.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": {
+      "major": 1,
+      "minor": 0,
+      "patch": 0
+    }
+  },
+  "variable": [
+    {
+      "key": "rootUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api"
+    },
+    {
+      "key": "authToken",
+      "value": ""
+    },
+    {
+      "key": "workerId",
+      "value": ""
+    },
+    {
+      "key": "employerId",
+      "value": ""
+    },
+    {
+      "key": "businessId",
+      "value": ""
+    },
+    {
+      "key": "teamMemberId",
+      "value": ""
+    },
+    {
+      "key": "jobId",
+      "value": ""
+    },
+    {
+      "key": "applicationId",
+      "value": ""
+    },
+    {
+      "key": "attendanceRecordId",
+      "value": ""
+    },
+    {
+      "key": "shiftId",
+      "value": ""
+    },
+    {
+      "key": "swapId",
+      "value": ""
+    },
+    {
+      "key": "conversationId",
+      "value": ""
+    },
+    {
+      "key": "notificationId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{rootUrl}}/health",
+              "host": [
+                "{{rootUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Sign Up Worker",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userType\": \"worker\",\n  \"email\": \"worker1@example.com\",\n  \"password\": \"Password123!\",\n  \"firstName\": \"Alex\",\n  \"lastName\": \"Doe\",\n  \"phone\": \"+1234567890\",\n  \"bio\": \"Experienced barista\",\n  \"skills\": [\"customer service\", \"espresso\"],\n  \"experience\": \"3 years in specialty coffee\",\n  \"languages\": [\"English\", \"Spanish\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/signup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "signup"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Sign Up Employer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userType\": \"employer\",\n  \"email\": \"employer1@example.com\",\n  \"password\": \"Password123!\",\n  \"firstName\": \"Morgan\",\n  \"lastName\": \"Lee\",\n  \"phone\": \"+1234567899\",\n  \"companyName\": \"Cafe Collective\",\n  \"description\": \"Neighborhood cafe hiring baristas\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/signup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "signup"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"worker1@example.com\",\n  \"password\": \"Password123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Current Session",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Current User",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Alex\",\n  \"lastName\": \"Doe\",\n  \"phone\": \"+1234567890\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users?userType=worker",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "userType",
+                  "value": "worker"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get User By ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{workerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{workerId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Workers",
+      "item": [
+        {
+          "name": "Get My Worker Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/workers/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "workers",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update My Worker Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bio\": \"Updated worker bio\",\n  \"skills\": [\"customer service\", \"latte art\"],\n  \"experience\": \"4 years in hospitality\",\n  \"languages\": [\"English\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/workers/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "workers",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Worker Profile By ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/workers/{{workerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "workers",
+                "{{workerId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Worker Applications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/workers/{{workerId}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "workers",
+                "{{workerId}}",
+                "applications"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Worker Attendance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/workers/{{workerId}}/attendance?date=2025-09-21",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "workers",
+                "{{workerId}}",
+                "attendance"
+              ],
+              "query": [
+                {
+                  "key": "date",
+                  "value": "2025-09-21"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Worker Shifts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/workers/{{workerId}}/shifts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "workers",
+                "{{workerId}}",
+                "shifts"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Employers",
+      "item": [
+        {
+          "name": "Get My Employer Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/employers/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "employers",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Employer Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyName\": \"Cafe Collective\",\n  \"description\": \"Updated description for the company\",\n  \"phone\": \"+1234567899\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/employers/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "employers",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Employer Dashboard Snapshot",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/employers/me/dashboard?businessId={{businessId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "employers",
+                "me",
+                "dashboard"
+              ],
+              "query": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Employer Analytics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/employers/me/analytics?businessId={{businessId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "employers",
+                "me",
+                "analytics"
+              ],
+              "query": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Businesses",
+      "item": [
+        {
+          "name": "List Businesses",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/businesses?ownerId={{employerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "businesses"
+              ],
+              "query": [
+                {
+                  "key": "ownerId",
+                  "value": "{{employerId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Business",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Cafe Collective Downtown\",\n  \"description\": \"Downtown location\",\n  \"address\": {\n    \"street\": \"123 Market St\",\n    \"city\": \"San Francisco\",\n    \"state\": \"CA\",\n    \"postalCode\": \"94105\"\n  },\n  \"phone\": \"+14155550001\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/businesses",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "businesses"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Business",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Updated description\",\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/businesses/{{businessId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "businesses",
+                "{{businessId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Business",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/businesses/{{businessId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "businesses",
+                "{{businessId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Select Business",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/businesses/{{businessId}}/select",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "businesses",
+                "{{businessId}}",
+                "select"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Team Members",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/businesses/{{businessId}}/team-members",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "businesses",
+                "{{businessId}}",
+                "team-members"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Team Member",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jamie Supervisor\",\n  \"email\": \"jamie@example.com\",\n  \"role\": \"supervisor\",\n  \"permissions\": [\"post_jobs\", \"view_applications\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/businesses/{{businessId}}/team-members",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "businesses",
+                "{{businessId}}",
+                "team-members"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Team Member",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"manager\",\n  \"permissions\": [\"post_jobs\", \"hire_workers\", \"manage_schedules\"],\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/businesses/{{businessId}}/team-members/{{teamMemberId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "businesses",
+                "{{businessId}}",
+                "team-members",
+                "{{teamMemberId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Team Member",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/businesses/{{businessId}}/team-members/{{teamMemberId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "businesses",
+                "{{businessId}}",
+                "team-members",
+                "{{teamMemberId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Jobs",
+      "item": [
+        {
+          "name": "List Jobs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/jobs?lat=37.7749&lng=-122.4194&radius=25&tags=barista,coffee",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "jobs"
+              ],
+              "query": [
+                {
+                  "key": "lat",
+                  "value": "37.7749"
+                },
+                {
+                  "key": "lng",
+                  "value": "-122.4194"
+                },
+                {
+                  "key": "radius",
+                  "value": "25"
+                },
+                {
+                  "key": "tags",
+                  "value": "barista,coffee"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Job Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "jobs",
+                "{{jobId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Job Posting",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Morning Shift Barista\",\n  \"description\": \"Prepare espresso drinks and support front-of-house team.\",\n  \"hourlyRate\": 22,\n  \"urgency\": \"medium\",\n  \"tags\": [\"barista\", \"coffee\"],\n  \"schedule\": {\n    \"startDate\": \"2025-09-25T08:00:00.000Z\",\n    \"endDate\": \"2025-10-25T12:00:00.000Z\",\n    \"startTime\": \"08:00\",\n    \"endTime\": \"12:00\",\n    \"recurrence\": \"weekly\",\n    \"workDays\": [\"monday\", \"wednesday\", \"friday\"]\n  },\n  \"location\": {\n    \"address\": \"123 Market St\",\n    \"city\": \"San Francisco\",\n    \"state\": \"CA\",\n    \"postalCode\": \"94105\",\n    \"latitude\": 37.7936,\n    \"longitude\": -122.3965\n  },\n  \"verificationRequired\": false,\n  \"business\": \"{{businessId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "jobs"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Job Posting",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hourlyRate\": 24,\n  \"tags\": [\"barista\", \"customer service\"],\n  \"description\": \"Updated description with competitive pay.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "jobs",
+                "{{jobId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Job Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"closed\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs/{{jobId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "jobs",
+                "{{jobId}}",
+                "status"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Bulk Create Jobs",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jobs\": [\n    {\n      \"title\": \"Evening Shift Barista\",\n      \"description\": \"Close out shift and restock.\",\n      \"hourlyRate\": 21,\n      \"tags\": [\"barista\"],\n      \"status\": \"active\"\n    },\n    {\n      \"title\": \"Weekend Prep Cook\",\n      \"description\": \"Support kitchen team on weekends.\",\n      \"hourlyRate\": 20,\n      \"tags\": [\"kitchen\", \"prep\"],\n      \"status\": \"active\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs/bulk",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "jobs",
+                "bulk"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Applications For Job",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/jobs/{{jobId}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "jobs",
+                "{{jobId}}",
+                "applications"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Hire Applicant For Job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/jobs/applications/{{applicationId}}/hire",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "jobs",
+                "applications",
+                "{{applicationId}}",
+                "hire"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Worker Apply To Job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Hi! I have 3 years of barista experience and would love to join your team.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs/{{jobId}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "jobs",
+                "{{jobId}}",
+                "applications"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Applications",
+      "item": [
+        {
+          "name": "List Applications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications?jobId={{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications"
+              ],
+              "query": [
+                {
+                  "key": "jobId",
+                  "value": "{{jobId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List My Applications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Application",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"hired\",\n  \"message\": \"Welcome to the team!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{applicationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{applicationId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Attendance",
+      "item": [
+        {
+          "name": "List Attendance Records",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/attendance?workerId={{workerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attendance"
+              ],
+              "query": [
+                {
+                  "key": "workerId",
+                  "value": "{{workerId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Schedule Attendance Record",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"job\": \"{{jobId}}\",\n  \"worker\": \"{{workerId}}\",\n  \"scheduledStart\": \"2025-09-25T08:00:00.000Z\",\n  \"scheduledEnd\": \"2025-09-25T16:00:00.000Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/attendance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attendance"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Clock In",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/attendance/{{attendanceRecordId}}/clock-in",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attendance",
+                "{{attendanceRecordId}}",
+                "clock-in"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Clock Out",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hourlyRate\": 22\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/attendance/{{attendanceRecordId}}/clock-out",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attendance",
+                "{{attendanceRecordId}}",
+                "clock-out"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Attendance Record",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"completed\",\n  \"totalHours\": 7.5,\n  \"earnings\": 165\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/attendance/{{attendanceRecordId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attendance",
+                "{{attendanceRecordId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Shift Swaps",
+      "item": [
+        {
+          "name": "List Swap Requests",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/shift-swaps?workerId={{workerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "shift-swaps"
+              ],
+              "query": [
+                {
+                  "key": "workerId",
+                  "value": "{{workerId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Request Shift Swap",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shiftId\": \"{{shiftId}}\",\n  \"toWorkerId\": \"{{workerId}}\",\n  \"message\": \"Can you cover my morning shift?\",\n  \"requestedFor\": \"2025-09-26T08:00:00.000Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/shift-swaps",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "shift-swaps"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Swap Request",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"approved\",\n  \"message\": \"Happy to take this shift\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/shift-swaps/{{swapId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "shift-swaps",
+                "{{swapId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Worker Shifts (Swap Helper)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/shift-swaps/shifts?workerId={{workerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "shift-swaps",
+                "shifts"
+              ],
+              "query": [
+                {
+                  "key": "workerId",
+                  "value": "{{workerId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "List Notifications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user\": \"{{workerId}}\",\n  \"type\": \"application\",\n  \"priority\": \"medium\",\n  \"title\": \"Application received\",\n  \"body\": \"Thanks for applying!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Mark Notification Read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/{{notificationId}}/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "{{notificationId}}",
+                "read"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Conversations",
+      "item": [
+        {
+          "name": "List Conversations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/conversations?jobId={{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "conversations"
+              ],
+              "query": [
+                {
+                  "key": "jobId",
+                  "value": "{{jobId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Conversation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"participants\": [\"{{employerId}}\", \"{{workerId}}\"],\n  \"job\": \"{{jobId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/conversations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "conversations"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Conversation Messages",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/conversations/{{conversationId}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "conversations",
+                "{{conversationId}}",
+                "messages"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send Conversation Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"Hello! Thanks for applying.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/conversations/{{conversationId}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "conversations",
+                "{{conversationId}}",
+                "messages"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Mark Conversation Read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/conversations/{{conversationId}}/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "conversations",
+                "{{conversationId}}",
+                "read"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Budget",
+      "item": [
+        {
+          "name": "Get Budget",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/budget?businessId={{businessId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "budget"
+              ],
+              "query": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Budget",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"business\": \"{{businessId}}\",\n  \"month\": 9,\n  \"year\": 2025,\n  \"monthlyBudget\": 15000,\n  \"alerts\": [\n    {\n      \"category\": \"labor\",\n      \"threshold\": 12000,\n      \"priority\": \"medium\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/budget",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "budget"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Process Job Posting Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 100,\n  \"currency\": \"USD\",\n  \"description\": \"Job posting purchase\",\n  \"job\": {\n    \"title\": \"Premium Featured Barista\",\n    \"description\": \"Featured job posting with premium visibility.\",\n    \"hourlyRate\": 24,\n    \"tags\": [\"barista\", \"premium\"],\n    \"location\": {\n      \"address\": \"123 Market St\",\n      \"city\": \"San Francisco\",\n      \"state\": \"CA\",\n      \"postalCode\": \"94105\"\n    },\n    \"business\": \"{{businessId}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payments/job-posting",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payments",
+                "job-posting"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Subscriptions",
+      "item": [
+        {
+          "name": "Get My Subscription",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/subscriptions/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subscriptions",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Upgrade Subscription",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plan\": \"premium\",\n  \"renewsAt\": \"2026-09-21T00:00:00.000Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/subscriptions/upgrade",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subscriptions",
+                "upgrade"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

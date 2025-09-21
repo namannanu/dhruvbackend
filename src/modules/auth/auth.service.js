@@ -5,10 +5,18 @@ const EmployerProfile = require('../employers/employerProfile.model');
 const Business = require('../businesses/business.model');
 const AppError = require('../../shared/utils/appError');
 
-const signToken = (userId) =>
-  jwt.sign({ id: userId }, process.env.JWT_SECRET, {
+const ensureJwtSecret = () => {
+  if (!process.env.JWT_SECRET) {
+    throw new AppError('JWT secret is not configured on the server', 500);
+  }
+};
+
+const signToken = (userId) => {
+  ensureJwtSecret();
+  return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d'
   });
+};
 
 const buildUserResponse = async (user) => {
   const base = user.toObject({ getters: true });
