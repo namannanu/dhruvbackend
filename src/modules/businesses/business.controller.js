@@ -16,11 +16,27 @@ const ensureOwner = async (userId, businessId) => {
 };
 
 exports.listBusinesses = catchAsync(async (req, res) => {
-  const ownerId = req.user.userType === 'employer' ? req.user._id : req.query.ownerId;
-  const filter = ownerId ? { owner: ownerId } : {};
+  let filter = {};
+
+  if (req.user.userType === 'employer') {
+    // Employers can ONLY see their own businesses
+    filter.owner = req.user._id;
+  } else if (req.user.userType === 'admin' && req.query.ownerId) {
+    // Admins can query any employer’s businesses
+    filter.owner = req.query.ownerId;
+  }
+
   const businesses = await Business.find(filter);
-  res.status(200).json({ status: 'success', results: businesses.length, data: businesses });
+
+  res.status(200).json({
+    status: 'success',
+    results: businesses.length,
+    data: businesses
+  });
 });
+
+
+
 
 exports.createBusiness = catchAsync(async (req, res) => {
   if (req.user.userType !== 'employer') {
