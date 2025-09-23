@@ -11,14 +11,40 @@ const app = express();
 app.disable('x-powered-by');
 
 const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
-    ? process.env.CORS_ORIGINS?.split(',').map(origin => origin.trim()) 
-    : true,
+  origin: function(origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, etc)
+    if (!origin) return callback(null, true);
+    
+    if (process.env.NODE_ENV === 'production') {
+      const allowedOrigins = process.env.CORS_ORIGINS?.split(',').map(o => o.trim()) || [];
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    } else {
+      // Allow all origins in development
+      callback(null, true);
+    }
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
-  exposedHeaders: ['Set-Cookie', 'Authorization'],
-  maxAge: 86400 // 24 hours
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'Accept',
+    'Origin',
+    'X-Requested-With',
+    'X-Auth-Token'
+  ],
+  exposedHeaders: [
+    'Set-Cookie',
+    'Authorization',
+    'X-Auth-Token'
+  ],
+  maxAge: 86400, // 24 hours
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 };
 
 if (process.env.NODE_ENV !== 'test') {

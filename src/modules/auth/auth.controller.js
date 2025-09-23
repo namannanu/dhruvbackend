@@ -24,3 +24,17 @@ exports.me = catchAsync(async (req, res) => {
 exports.logout = (req, res) => {
   authService.logout(res); // no DB needed
 };
+
+exports.refreshToken = catchAsync(async (req, res) => {
+  let token = req.headers.authorization?.split(' ')[1];
+  if (!token && req.cookies) {
+    token = req.cookies.jwt;
+  }
+  
+  if (!token) {
+    throw new AppError('No token provided', 401);
+  }
+
+  const data = await authService.refreshUserToken(token);
+  await authService.issueAuthResponse(res, data, 200);
+});

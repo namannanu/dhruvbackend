@@ -107,19 +107,29 @@ exports.login = async ({ email, password }) => {
 
 exports.issueAuthResponse = async (res, data, statusCode = 200) => {
   const token = signToken(data.user._id);
+  
+  // Set Access-Control-Allow-Credentials header
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  // Set cookie for web clients
   const cookieOptions = {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'none',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    path: '/',
     domain: process.env.COOKIE_DOMAIN || undefined
   };
   res.cookie('jwt', token, cookieOptions);
 
+  // Include token in response body for mobile clients
   res.status(statusCode).json({
     status: 'success',
     token,
-    data
+    data: {
+      ...data,
+      tokenExpiry: Date.now() + (7 * 24 * 60 * 60 * 1000) // 7 days in milliseconds
+    }
   });
 };
 
@@ -137,4 +147,29 @@ exports.logout = (res) => {
     expires: new Date(0)
   });
   res.status(200).json({ status: 'success' });
+};
+
+exports.refreshUserToken = async (token) => {
+  try {
+    const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id);
+    
+    if (!user) {
+      throw new AppError('User no longer exists', 401);
+    }
+
+    if (user.changedPasswordAfter(decoded.iat)) {
+      throw new AppError('Password was changed. Please login again', 401);
+    }
+
+    return buildUserResponse(user);
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError') {
+      throw new AppError('Invalid token. Please login again', 401);
+    }
+    if (error.name === 'TokenExpiredError') {
+      throw new AppError('Token expired. Please login again', 401);
+    }
+    throw error;
+  }
 };
