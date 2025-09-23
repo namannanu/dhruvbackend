@@ -11,20 +11,11 @@ const app = express();
 app.disable('x-powered-by');
 
 const corsOptions = {
-  origin: (origin, callback) => {
-    if (!origin) {
-      return callback(null, true);
-    }
-    const allowed = (process.env.CORS_ORIGINS || '')
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean);
-    if (!allowed.length || allowed.includes(origin)) {
-      return callback(null, true);
-    }
-    callback(new Error('Not allowed by CORS'));
-  },
-  credentials: true
+  origin: true, // Allow all origins in development
+  credentials: true,
+  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['set-cookie']
 };
 
 if (process.env.NODE_ENV !== 'test') {

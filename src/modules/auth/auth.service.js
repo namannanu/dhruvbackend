@@ -110,7 +110,9 @@ exports.issueAuthResponse = async (res, data, statusCode = 200) => {
   const cookieOptions = {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax'
+    sameSite: 'none',
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    domain: process.env.COOKIE_DOMAIN || undefined
   };
   res.cookie('jwt', token, cookieOptions);
 

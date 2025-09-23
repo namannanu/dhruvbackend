@@ -64,7 +64,7 @@ exports.deleteBusiness = catchAsync(async (req, res) => {
   }
   await business.deleteOne();
   await TeamMember.deleteMany({ business: business._id });
-  res.status(204).json({ status: 'success' });
+  res.status(204).end();
 });
 
 exports.selectBusiness = catchAsync(async (req, res) => {
