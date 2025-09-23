@@ -11,22 +11,7 @@ const app = express();
 app.disable('x-powered-by');
 
 const corsOptions = {
-  origin: function(origin, callback) {
-    // Allow requests with no origin (mobile apps, curl, etc)
-    if (!origin) return callback(null, true);
-    
-    if (process.env.NODE_ENV === 'production') {
-      const allowedOrigins = process.env.CORS_ORIGINS?.split(',').map(o => o.trim()) || [];
-      if (allowedOrigins.indexOf(origin) !== -1) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    } else {
-      // Allow all origins in development
-      callback(null, true);
-    }
-  },
+  origin: '*', // Allow all origins
   credentials: true,
   methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
@@ -35,7 +20,10 @@ const corsOptions = {
     'Accept',
     'Origin',
     'X-Requested-With',
-    'X-Auth-Token'
+    'Access-Control-Allow-Headers',
+    'Access-Control-Request-Method',
+    'Access-Control-Request-Headers',
+    'Access-Control-Allow-Origin'
   ],
   exposedHeaders: [
     'Set-Cookie',
@@ -51,7 +39,27 @@ if (process.env.NODE_ENV !== 'test') {
   app.use(morgan('dev'));
 }
 
+// Enable CORS preflight for all routes
+app.options('*', cors(corsOptions));
+
+// Apply CORS middleware
 app.use(cors(corsOptions));
+
+// Add headers to allow CORS
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
+  next();
+});
+
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 
