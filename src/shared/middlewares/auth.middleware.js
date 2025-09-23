@@ -6,29 +6,50 @@ const catchAsync = require('../utils/catchAsync');
 
 exports.protect = catchAsync(async (req, res, next) => {
   let token;
+  
+  // Check Authorization header first
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     token = req.headers.authorization.split(' ')[1];
-  } else if (req.cookies && req.cookies.jwt) {
+  } 
+  // Fallback to cookie
+  else if (req.cookies && req.cookies.jwt) {
     token = req.cookies.jwt;
   }
 
   if (!token) {
-    return next(new AppError('You are not logged in', 401));
+    return next(new AppError('Authentication required. Please log in.', 401));
   }
 
-  const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
+  try {
+    const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
+    
+    const currentUser = await User.findById(decoded.id)
+      .select('+passwordChangedAt')
+      .exec();
 
-  const currentUser = await User.findById(decoded.id);
-  if (!currentUser) {
-    return next(new AppError('User no longer exists', 401));
+    if (!currentUser) {
+      return next(new AppError('User account no longer exists or has been disabled.', 401));
+    }
+
+    if (currentUser.changedPasswordAfter(decoded.iat)) {
+      return next(new AppError('Password was recently changed. Please log in again.', 401));
+    }
+
+    // Update last activity
+    currentUser.lastActiveAt = new Date();
+    await currentUser.save({ validateBeforeSave: false });
+
+    req.user = currentUser;
+    next();
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError') {
+      return next(new AppError('Invalid authentication token. Please log in again.', 401));
+    }
+    if (error.name === 'TokenExpiredError') {
+      return next(new AppError('Your session has expired. Please log in again.', 401));
+    }
+    return next(error);
   }
-
-  if (currentUser.changedPasswordAfter(decoded.iat)) {
-    return next(new AppError('Password recently changed, please log in again', 401));
-  }
-
-  req.user = currentUser;
-  next();
 });
 
 exports.restrictTo = (...roles) => (req, res, next) => {

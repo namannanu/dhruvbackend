@@ -11,11 +11,14 @@ const app = express();
 app.disable('x-powered-by');
 
 const corsOptions = {
-  origin: true, // Allow all origins in development
+  origin: process.env.NODE_ENV === 'production' 
+    ? process.env.CORS_ORIGINS?.split(',').map(origin => origin.trim()) 
+    : true,
   credentials: true,
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  exposedHeaders: ['set-cookie']
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
+  exposedHeaders: ['Set-Cookie', 'Authorization'],
+  maxAge: 86400 // 24 hours
 };
 
 if (process.env.NODE_ENV !== 'test') {
