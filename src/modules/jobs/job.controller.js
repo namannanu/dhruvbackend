@@ -8,7 +8,7 @@ const catchAsync = require('../../shared/utils/catchAsync');
 const AppError = require('../../shared/utils/appError');
 const { haversine } = require('../../shared/utils/distance');
 
-const JOB_FREE_QUOTA = 2;
+const JOB_FREE_QUOTA = 20000;///////               change to 2
 
 const buildJobResponse = async (job, currentUser) => {
   const jobObj = job.toObject();
