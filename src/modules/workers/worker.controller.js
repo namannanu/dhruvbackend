@@ -356,6 +356,64 @@ exports.applyToJob = catchAsync(async (req, res, next) => {
   res.status(201).json({ status: 'success', data: populatedApplication });
 });
 
+exports.withdrawApplication = catchAsync(async (req, res, next) => {
+  if (req.user.userType !== 'worker') {
+    return next(new AppError('Only workers can withdraw applications', 403));
+  }
+
+  if (req.params.workerId && req.user._id.toString() !== req.params.workerId.toString()) {
+    return next(new AppError('You can only withdraw your own applications', 403));
+  }
+
+  const workerId = req.params.workerId || req.user._id;
+  const { applicationId } = req.params;
+
+  const application = await Application.findById(applicationId);
+  if (!application) {
+    return next(new AppError('Application not found', 404));
+  }
+
+  if (application.worker.toString() !== workerId.toString()) {
+    return next(new AppError('You can only withdraw your own applications', 403));
+  }
+
+  if (application.status === 'withdrawn') {
+    const alreadyWithdrawn = await Application.findById(application._id)
+      .populate({ path: 'job', populate: { path: 'business' } });
+    return res.status(200).json({ status: 'success', data: alreadyWithdrawn });
+  }
+
+  if (application.status === 'hired') {
+    return next(new AppError('You cannot withdraw an application that has already been hired', 400));
+  }
+
+  if (application.status === 'rejected') {
+    return next(new AppError('This application has already been decided', 400));
+  }
+
+  const job = await Job.findById(application.job);
+
+  application.status = 'withdrawn';
+  application.withdrawnAt = new Date();
+  application.rejectedAt = undefined;
+
+  if (typeof req.body.message !== 'undefined') {
+    application.message = req.body.message;
+  }
+
+  await application.save();
+
+  if (job) {
+    job.applicantsCount = Math.max(0, job.applicantsCount - 1);
+    await job.save();
+  }
+
+  const populatedApplication = await Application.findById(application._id)
+    .populate({ path: 'job', populate: { path: 'business' } });
+
+  return res.status(200).json({ status: 'success', data: populatedApplication });
+});
+
 exports.getWorkerApplications = catchAsync(async (req, res, next) => {
   const workerId = req.params.workerId || req.user._id;
   if (req.user.userType === 'worker' && req.user._id.toString() !== workerId.toString()) {

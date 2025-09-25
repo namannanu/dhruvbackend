@@ -71,13 +71,38 @@ exports.updateApplication = catchAsync(async (req, res, next) => {
     if (application.worker.toString() !== req.user._id.toString()) {
       return next(new AppError('You can only modify your application', 403));
     }
+    const previousStatus = application.status;
+
     if (req.body.status === 'withdrawn') {
-      application.status = 'rejected';
-      application.rejectedAt = new Date();
+      if (previousStatus === 'hired') {
+        return next(new AppError('You cannot withdraw an application that has already been hired', 400));
+      }
+
+      if (previousStatus === 'rejected') {
+        return next(new AppError('You cannot withdraw an application that has already been decided', 400));
+      }
+
+      if (previousStatus !== 'withdrawn') {
+        application.status = 'withdrawn';
+        application.withdrawnAt = new Date();
+        application.rejectedAt = undefined;
+
+        if (application.job && typeof application.job.applicantsCount === 'number') {
+          if (typeof application.job.save === 'function' && previousStatus === 'pending') {
+            application.job.applicantsCount = Math.max(0, application.job.applicantsCount - 1);
+            await application.job.save();
+          }
+        }
+      }
     }
-    application.message = req.body.message || application.message;
+
+    if (typeof req.body.message !== 'undefined') {
+      application.message = req.body.message;
+    }
+
     await application.save();
-    return res.status(200).json({ status: 'success', data: application });
+    const updatedApplication = await Application.findById(application._id).populate('job');
+    return res.status(200).json({ status: 'success', data: updatedApplication });
   }
   if (req.user.userType === 'employer') {
     if (application.job.employer.toString() !== req.user._id.toString()) {
@@ -89,9 +114,11 @@ exports.updateApplication = catchAsync(async (req, res, next) => {
     application.status = req.body.status;
     if (req.body.status === 'hired') {
       application.hiredAt = new Date();
+      application.withdrawnAt = undefined;
     }
     if (req.body.status === 'rejected') {
       application.rejectedAt = new Date();
+      application.withdrawnAt = undefined;
     }
     await application.save();
     return res.status(200).json({ status: 'success', data: application });

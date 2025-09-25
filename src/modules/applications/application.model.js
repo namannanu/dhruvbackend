@@ -25,14 +25,15 @@ const applicationSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['pending', 'hired', 'rejected'],
+      enum: ['pending', 'hired', 'rejected', 'withdrawn'],
       default: 'pending'
     },
     message: { type: String, trim: true },
     snapshot: snapshotSchema,
     hiringNotes: String,
     hiredAt: Date,
-    rejectedAt: Date
+    rejectedAt: Date,
+    withdrawnAt: Date
   },
   { timestamps: true }
 );

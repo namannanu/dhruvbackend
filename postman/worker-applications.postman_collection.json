@@ -93,12 +93,48 @@
         },
         "description": "List applications for the given workerId. Use the authenticated worker's ID to view their own submissions."
       }
+    },
+    {
+      "name": "Withdraw Application",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{workerToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"message\": \"Optional context for withdrawing this application.\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/workers/me/applications/{{applicationId}}/withdraw",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "workers",
+            "me",
+            "applications",
+            "{{applicationId}}",
+            "withdraw"
+          ]
+        },
+        "description": "Withdraw the authenticated worker's application. Provide {{applicationId}} from a previous applications response."
+      }
     }
   ],
   "variable": [
     {
       "key": "baseUrl",
-      "value": "http://localhost:3000"
+      "value": "http://localhost:3000/api"
     },
     {
       "key": "workerToken",
@@ -117,6 +153,12 @@
       "value": "",
       "type": "string",
       "description": "ObjectId of the worker whose applications you want to list"
+    },
+    {
+      "key": "applicationId",
+      "value": "",
+      "type": "string",
+      "description": "ObjectId of the application you want to withdraw"
     }
   ]
 }
