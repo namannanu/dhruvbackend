@@ -415,8 +415,14 @@ exports.withdrawApplication = catchAsync(async (req, res, next) => {
 });
 
 exports.getWorkerApplications = catchAsync(async (req, res, next) => {
-  const workerId = req.params.workerId || req.user._id;
-  if (req.user.userType === 'worker' && req.user._id.toString() !== workerId.toString()) {
+  const workerParam = req.params.workerId;
+  const workerId =
+    workerParam && workerParam !== 'me' ? workerParam : req.user._id;
+
+  if (
+    req.user.userType === 'worker' &&
+    req.user._id.toString() !== workerId.toString()
+  ) {
     return next(new AppError('You can only view your own applications', 403));
   }
   const applications = await Application.find({ worker: workerId })
