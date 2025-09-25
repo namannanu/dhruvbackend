@@ -27,6 +27,13 @@ exports.protect = catchAsync(async (req, res, next) => {
       .select('+passwordChangedAt')
       .exec();
 
+    console.log('protect middleware debug:', {
+      decodedId: decoded.id,
+      userFound: !!currentUser,
+      userType: currentUser?.userType,
+      userId: currentUser?._id
+    });
+
     if (!currentUser) {
       return next(new AppError('User account no longer exists or has been disabled.', 401));
     }
@@ -53,6 +60,14 @@ exports.protect = catchAsync(async (req, res, next) => {
 });
 
 exports.restrictTo = (...roles) => (req, res, next) => {
+  console.log('restrictTo middleware debug:', {
+    hasUser: !!req.user,
+    userType: req.user?.userType,
+    userId: req.user?._id,
+    requiredRoles: roles,
+    userTypeInRoles: req.user ? roles.includes(req.user.userType) : false
+  });
+  
   if (!req.user || !roles.includes(req.user.userType)) {
     return next(new AppError('You do not have permission to perform this action', 403));
   }
