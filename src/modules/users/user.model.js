@@ -25,11 +25,23 @@ const userSchema = new mongoose.Schema(
     lastName: { type: String, trim: true },
     phone: { type: String, trim: true },
     premium: { type: Boolean, default: false },
-    freeJobsPosted: { type: Number, default: 0 },
-    freeApplicationsUsed: { type: Number, default: 0 },
+    // Employer-specific fields
+    freeJobsPosted: { 
+      type: Number, 
+      default: function() {
+        return this.userType === 'employer' ? 0 : undefined;
+      }
+    },
     selectedBusiness: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Business'
+    },
+    // Worker-specific fields  
+    freeApplicationsUsed: { 
+      type: Number, 
+      default: function() {
+        return this.userType === 'worker' ? 0 : undefined;
+      }
     },
     lastLoginAt: Date,
     passwordChangedAt: Date
@@ -42,6 +54,25 @@ userSchema.virtual('fullName').get(function () {
 });
 
 userSchema.pre('save', async function (next) {
+  // Clean up userType-specific fields
+  if (this.userType === 'worker') {
+    // Workers don't need employer-specific fields
+    this.freeJobsPosted = undefined;
+    this.selectedBusiness = undefined;
+    // Ensure worker-specific fields have defaults
+    if (this.freeApplicationsUsed === undefined) {
+      this.freeApplicationsUsed = 0;
+    }
+  } else if (this.userType === 'employer') {
+    // Employers don't need worker-specific fields
+    this.freeApplicationsUsed = undefined;
+    // Ensure employer-specific fields have defaults
+    if (this.freeJobsPosted === undefined) {
+      this.freeJobsPosted = 0;
+    }
+  }
+
+  // Handle password hashing
   if (!this.isModified('password')) {
     return next();
   }
