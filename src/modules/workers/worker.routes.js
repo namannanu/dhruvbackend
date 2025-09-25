@@ -6,9 +6,11 @@ const router = express.Router();
 
 router.use(protect);
 router.get('/me', restrictTo('worker'), controller.getWorkerProfile);
+router.get('/me/dashboard', restrictTo('worker'), controller.getWorkerDashboardMetrics);
 router.patch('/me', restrictTo('worker'), controller.updateWorkerProfile);
 
 router.get('/:workerId', controller.getWorkerProfile);
+router.get('/:workerId/dashboard', controller.getWorkerDashboardMetrics);
 router.patch('/:workerId', restrictTo('worker'), controller.updateWorkerProfile);
 router.get('/:workerId/applications', controller.getWorkerApplications);
 router.get('/:workerId/attendance', controller.getWorkerAttendance);
