@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const WorkerProfile = require('./workerProfile.model');
 const User = require('../users/user.model');
+const Job = require('../jobs/job.model');
 const Application = require('../applications/application.model');
 const AttendanceRecord = require('../attendance/attendance.model');
 const Shift = require('../shifts/shift.model');
@@ -9,6 +10,8 @@ const catchAsync = require('../../shared/utils/catchAsync');
 const AppError = require('../../shared/utils/appError');
 
 // Helper function to convert legacy availability to new format
+const APPLICATION_FREE_QUOTA = 300;
+
 const convertLegacyAvailability = (legacyAvailability) => {
   const daysOfWeek = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
   const defaultAvailability = daysOfWeek.map(day => ({
@@ -291,6 +294,66 @@ exports.updateWorkerProfile = catchAsync(async (req, res, next) => {
       profile: enhancedProfile 
     } 
   });
+});
+
+exports.applyToJob = catchAsync(async (req, res, next) => {
+  if (req.user.userType !== 'worker') {
+    return next(new AppError('Only workers can apply to jobs', 403));
+  }
+
+  if (req.params.workerId && req.user._id.toString() !== req.params.workerId.toString()) {
+    return next(new AppError('You can only apply to jobs as yourself', 403));
+  }
+
+  const workerId = req.params.workerId || req.user._id;
+  const { jobId, message } = req.body;
+
+  if (!jobId) {
+    return next(new AppError('jobId is required to apply', 400));
+  }
+
+  const job = await Job.findById(jobId);
+  if (!job || job.status !== 'active') {
+    return next(new AppError('Job is not available for applications', 400));
+  }
+
+  const existing = await Application.findOne({ job: job._id, worker: workerId });
+  if (existing) {
+    return next(new AppError('You have already applied to this job', 400));
+  }
+
+  if (!req.user.premium && req.user.freeApplicationsUsed >= APPLICATION_FREE_QUOTA) {
+    return next(new AppError('Free application limit reached. Upgrade to continue.', 402));
+  }
+
+  const profile = await WorkerProfile.findOne({ user: workerId });
+  const snapshotName = req.user.fullName || [req.user.firstName, req.user.lastName].filter(Boolean).join(' ').trim();
+
+  const application = await Application.create({
+    job: job._id,
+    worker: workerId,
+    message: message || '',
+    snapshot: {
+      name: snapshotName || undefined,
+      email: req.user.email,
+      phone: req.user.phone,
+      skills: profile?.skills || [],
+      experience: profile?.experience || ''
+    }
+  });
+
+  job.applicantsCount += 1;
+  await job.save();
+
+  if (!req.user.premium) {
+    req.user.freeApplicationsUsed = (req.user.freeApplicationsUsed || 0) + 1;
+    await req.user.save();
+  }
+
+  const populatedApplication = await Application.findById(application._id)
+    .populate({ path: 'job', populate: { path: 'business' } });
+
+  res.status(201).json({ status: 'success', data: populatedApplication });
 });
 
 exports.getWorkerApplications = catchAsync(async (req, res, next) => {

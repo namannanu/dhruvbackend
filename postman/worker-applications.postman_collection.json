@@ -1,0 +1,122 @@
+{
+  "info": {
+    "_postman_id": "b986c5ec-bf62-4abb-8a8d-1f25ab0fcbe9",
+    "name": "Worker Applications",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Requests to list jobs and submit job applications as a worker."
+  },
+  "item": [
+    {
+      "name": "List Active Jobs",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{workerToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/jobs?status=active",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "jobs"
+          ],
+          "query": [
+            {
+              "key": "status",
+              "value": "active"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Apply To Job",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{workerToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"jobId\": \"{{jobId}}\",\n  \"message\": \"Hi! I have 3 years of experience in hospitality and can start immediately.\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/workers/me/applications",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "workers",
+            "me",
+            "applications"
+          ]
+        },
+        "description": "Submit a job application as the authenticated worker. Replace {{jobId}} with a specific job's ObjectId."
+      },
+      "response": []
+    },
+    {
+      "name": "View Worker Applications",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{workerToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/workers/{{workerId}}/applications",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "workers",
+            "{{workerId}}",
+            "applications"
+          ]
+        },
+        "description": "List applications for the given workerId. Use the authenticated worker's ID to view their own submissions."
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "workerToken",
+      "value": "",
+      "type": "string",
+      "description": "JWT for an authenticated worker user"
+    },
+    {
+      "key": "jobId",
+      "value": "",
+      "type": "string",
+      "description": "ObjectId of an active job"
+    },
+    {
+      "key": "workerId",
+      "value": "",
+      "type": "string",
+      "description": "ObjectId of the worker whose applications you want to list"
+    }
+  ]
+}
