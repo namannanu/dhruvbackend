@@ -188,8 +188,26 @@ exports.getWorkerProfile = catchAsync(async (req, res, next) => {
 
 exports.updateWorkerProfile = catchAsync(async (req, res, next) => {
   const workerId = req.params.workerId || req.user._id;
-  if (req.user.userType !== 'worker' || req.user._id.toString() !== workerId.toString()) {
+  
+  console.log('🔍 UpdateWorkerProfile Debug:', {
+    paramsWorkerId: req.params.workerId,
+    userIdFromToken: req.user._id?.toString(),
+    finalWorkerId: workerId?.toString(),
+    userType: req.user.userType,
+    path: req.path,
+    bodyKeys: Object.keys(req.body),
+    bodyData: req.body
+  });
+  
+  // For /workers/me route, workerId will be req.user._id (from token)
+  // For /workers/:workerId route, check if user can update that specific worker
+  if (req.params.workerId && req.user._id.toString() !== req.params.workerId.toString()) {
     return next(new AppError('You can only update your own profile', 403));
+  }
+  
+  // Ensure user is a worker
+  if (req.user.userType !== 'worker') {
+    return next(new AppError('Only workers can update worker profiles', 403));
   }
 
   // Handle user fields - allow updating name by splitting it
