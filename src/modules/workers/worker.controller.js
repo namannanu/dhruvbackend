@@ -563,3 +563,97 @@ exports.getWorkerDashboardMetrics = catchAsync(async (req, res, next) => {
     }
   });
 });
+
+// Get worker attendance schedule (grouped by date)
+exports.getWorkerAttendanceSchedule = catchAsync(async (req, res, next) => {
+  const workerId = req.params.workerId || req.user._id;
+  const { status = 'all', from, to, jobId, businessId } = req.query;
+
+  // Build filter
+  const filter = { worker: workerId };
+  
+  if (status !== 'all') {
+    filter.status = status;
+  }
+  
+  if (jobId) {
+    filter.job = jobId;
+  }
+  
+  if (businessId) {
+    filter.business = businessId;
+  }
+
+  // Date range filter
+  if (from || to) {
+    filter.scheduledStart = {};
+    if (from) {
+      filter.scheduledStart.$gte = new Date(from);
+    }
+    if (to) {
+      filter.scheduledStart.$lte = new Date(to);
+    }
+  }
+
+  const attendanceRecords = await AttendanceRecord.find(filter)
+    .populate('job', 'title description hourlyRate')
+    .populate('business', 'name address')
+    .sort({ scheduledStart: 1 });
+
+  // Group by date
+  const groupedSchedule = {};
+  let totalHours = 0;
+  let totalEarnings = 0;
+
+  attendanceRecords.forEach(record => {
+    const date = record.scheduledStart.toISOString().split('T')[0];
+    
+    if (!groupedSchedule[date]) {
+      groupedSchedule[date] = {
+        date,
+        shifts: [],
+        dailyHours: 0,
+        dailyEarnings: 0
+      };
+    }
+
+    const shift = {
+      id: record._id,
+      job: record.job,
+      business: record.business,
+      scheduledStart: record.scheduledStart,
+      scheduledEnd: record.scheduledEnd,
+      clockIn: record.clockIn,
+      clockOut: record.clockOut,
+      status: record.status,
+      hoursWorked: record.hoursWorked || 0,
+      earnings: record.earnings || 0
+    };
+
+    groupedSchedule[date].shifts.push(shift);
+    groupedSchedule[date].dailyHours += shift.hoursWorked;
+    groupedSchedule[date].dailyEarnings += shift.earnings;
+    
+    totalHours += shift.hoursWorked;
+    totalEarnings += shift.earnings;
+  });
+
+  // Convert to array and sort by date
+  const scheduleArray = Object.values(groupedSchedule).sort((a, b) => 
+    new Date(a.date) - new Date(b.date)
+  );
+
+  res.status(200).json({
+    status: 'success',
+    results: scheduleArray.length,
+    data: {
+      schedule: scheduleArray,
+      summary: {
+        totalDays: scheduleArray.length,
+        totalShifts: attendanceRecords.length,
+        totalHours: Math.round(totalHours * 100) / 100,
+        totalEarnings: Math.round(totalEarnings * 100) / 100
+      }
+    }
+  });
+});
