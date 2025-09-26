@@ -20,11 +20,6 @@ const subscriptionRoutes = require('../modules/subscriptions/subscription.routes
 const router = express.Router();
 const shiftsRouter = express.Router();
 
-// Global OPTIONS handler for all API routes
-router.options('*', (req, res) => {
-  res.status(204).end();
-});
-
 shiftsRouter.use(protectAuth);
 shiftsRouter.get('/', shiftController.listShifts);
 shiftsRouter.get('/swaps', shiftController.listSwaps);

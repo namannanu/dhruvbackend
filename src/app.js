@@ -4,25 +4,16 @@ const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
 const AppError = require('./shared/utils/appError');
 const globalErrorHandler = require('./shared/middlewares/globalErrorHandler');
-const setupCors = require('./shared/middlewares/cors.middleware');
 const routes = require('./routes');
 
 const app = express();
 
 app.disable('x-powered-by');
 
-// Apply enhanced CORS middleware first (before any other middleware)
-app.use(setupCors);
-
-if (process.env.NODE_ENV !== 'test') {
-  app.use(morgan('dev'));
-}
-
-// Backup CORS configuration for additional security
 const corsOptions = {
-  origin: true, // Allow all origins
+  origin: '*', // Allow all origins
   credentials: true,
-  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS', 'HEAD'],
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
     'Content-Type',
     'Authorization',
@@ -32,13 +23,42 @@ const corsOptions = {
     'Access-Control-Allow-Headers',
     'Access-Control-Request-Method',
     'Access-Control-Request-Headers',
-    'Cache-Control',
-    'Pragma'
+    'Access-Control-Allow-Origin'
   ],
+  exposedHeaders: [
+    'Set-Cookie',
+    'Authorization',
+    'X-Auth-Token'
+  ],
+  maxAge: 86400, // 24 hours
+  preflightContinue: false,
   optionsSuccessStatus: 204
 };
 
+if (process.env.NODE_ENV !== 'test') {
+  app.use(morgan('dev'));
+}
+
+// Enable CORS preflight for all routes
+app.options('*', cors(corsOptions));
+
+// Apply CORS middleware
 app.use(cors(corsOptions));
+
+// Add headers to allow CORS
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
+  next();
+});
 
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
@@ -47,9 +67,7 @@ app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'success',
     message: 'WorkConnect API is healthy',
-    timestamp: new Date().toISOString(),
-    cors: 'enabled',
-    version: '2.0.1'
+    timestamp: new Date().toISOString()
   });
 });
 
