@@ -1,6 +1,8 @@
 const AttendanceRecord = require('./attendance.model');
 const Job = require('../jobs/job.model');
 const User = require('../users/user.model');
+const WorkerEmployment = require('../workers/workerEmployment.model');
+const WorkerProfile = require('../workers/workerProfile.model');
 const AppError = require('../../shared/utils/appError');
 const catchAsync = require('../../shared/utils/catchAsync');
 
@@ -166,25 +168,112 @@ const buildManagementSummary = (records) => {
 };
 
 exports.listAttendance = catchAsync(async (req, res, next) => {
+  const { 
+    workerId, 
+    workerName,
+    businessId, 
+    date, 
+    startDate,
+    endDate,
+    status,
+    employmentStatus,
+    includeEmploymentDetails = 'false'
+  } = req.query;
+
   const filter = {};
-  if (req.query.workerId) {
-    filter.worker = req.query.workerId;
+  
+  // Filter by specific worker ID
+  if (workerId) {
+    filter.worker = workerId;
   }
-  if (req.query.businessId) {
-    filter.business = req.query.businessId;
+  
+  // Filter by worker name (partial match)
+  if (workerName) {
+    const users = await User.find({
+      $or: [
+        { firstName: { $regex: workerName, $options: 'i' } },
+        { lastName: { $regex: workerName, $options: 'i' } },
+        { email: { $regex: workerName, $options: 'i' } }
+      ]
+    }).select('_id');
+    const userIds = users.map(u => u._id);
+    filter.worker = { $in: userIds };
   }
-  if (req.query.date) {
-    const range = buildDayRange(req.query.date);
+  
+  if (businessId) {
+    filter.business = businessId;
+  }
+  
+  // Date filtering
+  if (date) {
+    const range = buildDayRange(date);
     if (!range) {
       return next(new AppError('Invalid date parameter', 400));
     }
     filter.scheduledStart = { $gte: range.start, $lte: range.end };
+  } else if (startDate || endDate) {
+    const dateFilter = {};
+    if (startDate) {
+      const startRange = buildDayRange(startDate);
+      if (!startRange) {
+        return next(new AppError('Invalid startDate parameter', 400));
+      }
+      dateFilter.$gte = startRange.start;
+    }
+    if (endDate) {
+      const endRange = buildDayRange(endDate);
+      if (!endRange) {
+        return next(new AppError('Invalid endDate parameter', 400));
+      }
+      dateFilter.$lte = endRange.end;
+    }
+    filter.scheduledStart = dateFilter;
   }
-  if (req.query.status && req.query.status !== 'all') {
-    filter.status = req.query.status;
+  
+  if (status && status !== 'all') {
+    filter.status = status;
   }
-  const records = await AttendanceRecord.find(filter).sort({ scheduledStart: -1 });
-  res.status(200).json({ status: 'success', results: records.length, data: records });
+
+  // Get attendance records
+  const records = await AttendanceRecord.find(filter)
+    .populate('worker', 'firstName lastName email phone')
+    .populate('job', 'title description hourlyRate')
+    .populate('business', 'name address')
+    .sort({ scheduledStart: -1 });
+
+  let enhancedRecords = records;
+
+  // Include employment details if requested
+  if (includeEmploymentDetails === 'true') {
+    const workerIds = [...new Set(records.map(r => r.worker._id))];
+    const employmentRecords = await WorkerEmployment.find({
+      worker: { $in: workerIds },
+      ...(employmentStatus && { employmentStatus })
+    }).populate('employer', 'firstName lastName email');
+
+    // Create a map of worker employment data
+    const employmentMap = new Map();
+    employmentRecords.forEach(emp => {
+      const workerId = emp.worker.toString();
+      if (!employmentMap.has(workerId)) {
+        employmentMap.set(workerId, []);
+      }
+      employmentMap.get(workerId).push(emp);
+    });
+
+    // Enhance records with employment information
+    enhancedRecords = records.map(record => ({
+      ...record.toObject(),
+      employmentHistory: employmentMap.get(record.worker._id.toString()) || [],
+      currentEmployment: employmentMap.get(record.worker._id.toString())?.find(e => e.employmentStatus === 'active') || null
+    }));
+  }
+
+  res.status(200).json({ 
+    status: 'success', 
+    results: enhancedRecords.length, 
+    data: enhancedRecords 
+  });
 });
 
 exports.scheduleAttendance = catchAsync(async (req, res, next) => {
@@ -447,4 +536,259 @@ exports.updateAttendance = catchAsync(async (req, res, next) => {
   Object.assign(record, req.body);
   await record.save();
   res.status(200).json({ status: 'success', data: record });
+});
+
+// Search workers by name and see their employment dates and schedules
+exports.searchWorkersByName = catchAsync(async (req, res, next) => {
+  const { name, includeSchedule = 'true' } = req.query;
+  
+  if (!name) {
+    return next(new AppError('Worker name is required for search', 400));
+  }
+
+  // Find workers matching the name
+  const workers = await User.find({
+    userType: 'worker',
+    $or: [
+      { firstName: { $regex: name, $options: 'i' } },
+      { lastName: { $regex: name, $options: 'i' } },
+      { email: { $regex: name, $options: 'i' } }
+    ]
+  }).select('firstName lastName email phone');
+
+  if (workers.length === 0) {
+    return res.status(200).json({
+      status: 'success',
+      results: 0,
+      data: [],
+      message: 'No workers found matching the search criteria'
+    });
+  }
+
+  const workerIds = workers.map(w => w._id);
+  
+  // Get employment history for these workers
+  const employmentRecords = await WorkerEmployment.find({
+    worker: { $in: workerIds }
+  })
+    .populate('employer', 'firstName lastName email')
+    .populate('business', 'name address')
+    .populate('job', 'title description hourlyRate startDate endDate')
+    .sort({ hireDate: -1 });
+
+  // Get attendance/schedule data if requested
+  let scheduleData = [];
+  if (includeSchedule === 'true') {
+    scheduleData = await AttendanceRecord.find({
+      worker: { $in: workerIds }
+    })
+      .populate('job', 'title hourlyRate')
+      .populate('business', 'name')
+      .sort({ scheduledStart: -1 })
+      .limit(50); // Limit to recent 50 records per worker
+  }
+
+  // Organize data by worker
+  const workerData = workers.map(worker => {
+    const workerEmployment = employmentRecords.filter(
+      emp => emp.worker.toString() === worker._id.toString()
+    );
+    
+    const workerSchedule = scheduleData.filter(
+      schedule => schedule.worker.toString() === worker._id.toString()
+    );
+
+    return {
+      worker: {
+        id: worker._id,
+        name: `${worker.firstName} ${worker.lastName}`.trim(),
+        email: worker.email,
+        phone: worker.phone
+      },
+      employmentHistory: workerEmployment.map(emp => ({
+        employmentId: emp._id,
+        employer: emp.employer,
+        business: emp.business,
+        position: emp.position,
+        hireDate: emp.hireDate,
+        endDate: emp.endDate,
+        employmentStatus: emp.employmentStatus,
+        hourlyRate: emp.hourlyRate,
+        jobDetails: emp.job
+      })),
+      currentEmployment: workerEmployment.find(emp => emp.employmentStatus === 'active'),
+      recentSchedule: includeSchedule === 'true' ? workerSchedule.slice(0, 10) : [],
+      totalEmployments: workerEmployment.length,
+      totalScheduledShifts: workerSchedule.length
+    };
+  });
+
+  res.status(200).json({
+    status: 'success',
+    results: workerData.length,
+    data: workerData
+  });
+});
+
+// Get employment timeline for a specific worker
+exports.getWorkerEmploymentTimeline = catchAsync(async (req, res, next) => {
+  const { workerId } = req.params;
+  const { startDate, endDate } = req.query;
+
+  // Verify worker exists
+  const worker = await User.findById(workerId).select('firstName lastName email');
+  if (!worker) {
+    return next(new AppError('Worker not found', 404));
+  }
+
+  // Get employment history
+  const employmentFilter = { worker: workerId };
+  const employmentRecords = await WorkerEmployment.find(employmentFilter)
+    .populate('employer', 'firstName lastName email')
+    .populate('business', 'name address contactInfo')
+    .populate('job', 'title description hourlyRate startDate endDate workDays workingHours')
+    .sort({ hireDate: -1 });
+
+  // Get attendance records within date range if specified
+  const attendanceFilter = { worker: workerId };
+  if (startDate || endDate) {
+    const dateFilter = {};
+    if (startDate) {
+      const start = buildDayRange(startDate);
+      if (!start) {
+        return next(new AppError('Invalid startDate parameter', 400));
+      }
+      dateFilter.$gte = start.start;
+    }
+    if (endDate) {
+      const end = buildDayRange(endDate);
+      if (!end) {
+        return next(new AppError('Invalid endDate parameter', 400));
+      }
+      dateFilter.$lte = end.end;
+    }
+    attendanceFilter.scheduledStart = dateFilter;
+  }
+
+  const attendanceRecords = await AttendanceRecord.find(attendanceFilter)
+    .populate('job', 'title hourlyRate')
+    .populate('business', 'name')
+    .sort({ scheduledStart: -1 });
+
+  // Create timeline data
+  const timeline = {
+    worker: {
+      id: worker._id,
+      name: `${worker.firstName} ${worker.lastName}`.trim(),
+      email: worker.email
+    },
+    employmentHistory: employmentRecords.map(emp => ({
+      employmentId: emp._id,
+      employer: emp.employer,
+      business: emp.business,
+      position: emp.position,
+      hireDate: emp.hireDate,
+      endDate: emp.endDate,
+      employmentStatus: emp.employmentStatus,
+      hourlyRate: emp.hourlyRate,
+      workLocation: emp.workLocation,
+      jobDetails: emp.job,
+      employmentDuration: emp.employmentDuration
+    })),
+    attendanceRecords: attendanceRecords.map(record => ({
+      id: record._id,
+      date: toDateString(record.scheduledStart),
+      scheduledStart: toTimeString(record.scheduledStart),
+      scheduledEnd: toTimeString(record.scheduledEnd),
+      clockIn: toTimeString(record.clockIn),
+      clockOut: toTimeString(record.clockOut),
+      status: record.status,
+      hoursWorked: record.hoursWorked,
+      earnings: record.earnings,
+      job: record.job,
+      business: record.business
+    })),
+    summary: {
+      totalEmployments: employmentRecords.length,
+      activeEmployments: employmentRecords.filter(emp => emp.employmentStatus === 'active').length,
+      totalAttendanceRecords: attendanceRecords.length,
+      totalHoursWorked: attendanceRecords.reduce((sum, record) => sum + (record.hoursWorked || 0), 0),
+      totalEarnings: attendanceRecords.reduce((sum, record) => sum + (record.earnings || 0), 0)
+    }
+  };
+
+  res.status(200).json({
+    status: 'success',
+    data: timeline
+  });
+});
+
+// Get all workers employed on a specific date
+exports.getWorkersEmployedOnDate = catchAsync(async (req, res, next) => {
+  const { date } = req.params;
+  const { includeSchedule = 'false' } = req.query;
+
+  if (!date) {
+    return next(new AppError('Date parameter is required', 400));
+  }
+
+  const targetDate = new Date(date);
+  if (Number.isNaN(targetDate.valueOf())) {
+    return next(new AppError('Invalid date format. Use YYYY-MM-DD', 400));
+  }
+
+  // Find employment records that were active on the target date
+  const employmentRecords = await WorkerEmployment.find({
+    hireDate: { $lte: targetDate },
+    $or: [
+      { endDate: null }, // Still active
+      { endDate: { $gte: targetDate } } // Ended after target date
+    ]
+  })
+    .populate('worker', 'firstName lastName email phone')
+    .populate('employer', 'firstName lastName email')
+    .populate('business', 'name address')
+    .populate('job', 'title description hourlyRate');
+
+  let workersData = employmentRecords.map(emp => ({
+    worker: emp.worker,
+    employer: emp.employer,
+    business: emp.business,
+    employment: {
+      employmentId: emp._id,
+      position: emp.position,
+      hireDate: emp.hireDate,
+      endDate: emp.endDate,
+      employmentStatus: emp.employmentStatus,
+      hourlyRate: emp.hourlyRate,
+      daysEmployed: Math.ceil((targetDate - emp.hireDate) / (1000 * 60 * 60 * 24))
+    },
+    jobDetails: emp.job
+  }));
+
+  // Include schedule information for that specific date if requested
+  if (includeSchedule === 'true') {
+    const dateRange = buildDayRange(date);
+    const workerIds = employmentRecords.map(emp => emp.worker._id);
+    
+    const scheduleRecords = await AttendanceRecord.find({
+      worker: { $in: workerIds },
+      scheduledStart: { $gte: dateRange.start, $lte: dateRange.end }
+    }).populate('job', 'title').populate('business', 'name');
+
+    // Add schedule info to each worker
+    workersData = workersData.map(workerData => ({
+      ...workerData,
+      scheduleForDate: scheduleRecords.filter(
+        schedule => schedule.worker.toString() === workerData.worker._id.toString()
+      )
+    }));
+  }
+
+  res.status(200).json({
+    status: 'success',
+    date: toDateString(targetDate),
+    results: workersData.length,
+    data: workersData
+  });
 });

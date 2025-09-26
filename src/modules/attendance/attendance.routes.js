@@ -5,6 +5,13 @@ const { protect, restrictTo } = require('../../shared/middlewares/auth.middlewar
 const router = express.Router();
 
 router.use(protect);
+
+// Search and timeline routes (for employers mainly)
+router.get('/search/workers', restrictTo('employer'), controller.searchWorkersByName);
+router.get('/timeline/worker/:workerId', restrictTo('employer'), controller.getWorkerEmploymentTimeline);
+router.get('/employed-on/:date', restrictTo('employer'), controller.getWorkersEmployedOnDate);
+
+// Existing routes
 router.get('/management', restrictTo('employer'), controller.getManagementView);
 router.get('/', controller.listAttendance);
 router.post('/', restrictTo('employer'), controller.scheduleAttendance);

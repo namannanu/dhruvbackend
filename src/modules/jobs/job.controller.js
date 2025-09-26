@@ -4,6 +4,7 @@ const Business = require('../businesses/business.model');
 const User = require('../users/user.model');
 const EmployerProfile = require('../employers/employerProfile.model');
 const WorkerProfile = require('../workers/workerProfile.model');
+const WorkerEmployment = require('../workers/workerEmployment.model');
 const catchAsync = require('../../shared/utils/catchAsync');
 const AppError = require('../../shared/utils/appError');
 const { haversine } = require('../../shared/utils/distance');
@@ -195,19 +196,52 @@ exports.hireApplicant = catchAsync(async (req, res, next) => {
     return next(new AppError('You can only hire for your own jobs', 403));
   }
 
+  // Update application status
   application.status = 'hired';
   application.hiredAt = new Date();
   await application.save();
 
+  // Reject other applications for this job
   await Application.updateMany(
     { job: application.job._id, _id: { $ne: application._id } },
     { status: 'rejected', rejectedAt: new Date() }
   );
 
+  // Update job status
   application.job.status = 'filled';
   application.job.hiredWorker = application.worker;
   await application.job.save();
 
+  // Create employment record for hire tracking
+  const employmentRecord = await WorkerEmployment.create({
+    worker: application.worker,
+    employer: req.user._id,
+    business: application.job.business,
+    job: application.job._id,
+    application: application._id,
+    hireDate: new Date(),
+    employmentStatus: 'active',
+    position: application.job.title,
+    hourlyRate: application.job.hourlyRate,
+    workLocation: application.job.location,
+    startDate: application.job.startDate,
+    endDate: application.job.endDate
+  });
+
+  // Update worker profile with current employment info
+  await WorkerProfile.updateOne(
+    { user: application.worker },
+    {
+      $inc: { completedJobs: 1 },
+      $set: {
+        employmentStatus: 'employed',
+        currentEmployer: req.user._id,
+        hireDate: new Date()
+      }
+    }
+  );
+
+  // Update business and employer stats
   await Business.updateOne(
     { _id: application.job.business },
     { $inc: { 'stats.hires': 1 } }
@@ -216,7 +250,22 @@ exports.hireApplicant = catchAsync(async (req, res, next) => {
     { user: req.user._id },
     { $inc: { totalHires: 1 } }
   );
-  await WorkerProfile.updateOne({ user: application.worker }, { $inc: { completedJobs: 1 } });
 
-  res.status(200).json({ status: 'success', data: application });
+  // Return enriched response with employment info
+  const responseData = {
+    ...application.toObject(),
+    employmentRecord: {
+      employmentId: employmentRecord._id,
+      hireDate: employmentRecord.hireDate,
+      position: employmentRecord.position,
+      hourlyRate: employmentRecord.hourlyRate,
+      employmentStatus: employmentRecord.employmentStatus
+    }
+  };
+
+  res.status(200).json({ 
+    status: 'success', 
+    message: 'Applicant hired successfully and employment record created',
+    data: responseData 
+  });
 });

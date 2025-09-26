@@ -1,9 +1,9 @@
 {
   "info": {
     "_postman_id": "b986c5ec-bf62-4abb-8a8d-1f25ab0fcbe9",
-    "name": "Worker & Employer Applications",
+    "name": "WorkConnect API - Complete Suite",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Requests to manage job applications as a worker and review or hire as an employer."
+    "description": "Comprehensive API collection for WorkConnect platform including job applications, employment tracking, and advanced attendance management with search functionality."
   },
   "item": [
     {
@@ -373,8 +373,282 @@
     }
     ,
     {
+      "name": "Employment Tracking",
+      "description": "Worker employment history and employer worker management endpoints for tracking hire dates and employment status.",
+      "item": [
+        {
+          "name": "Get My Employment History (Worker)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{workerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/workers/me/employment/history",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "workers",
+                "me",
+                "employment",
+                "history"
+              ]
+            },
+            "description": "Returns the authenticated worker's complete employment history with employers, businesses, and job details."
+          }
+        },
+        {
+          "name": "Get My Current Employment (Worker)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{workerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/workers/me/employment/current",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "workers",
+                "me",
+                "employment",
+                "current"
+              ]
+            },
+            "description": "Returns the authenticated worker's current active employment details if any."
+          }
+        },
+        {
+          "name": "Get My Scheduled Dates (Worker)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{workerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/workers/me/employment/scheduled-dates?startDate=2025-01-01&endDate=2025-12-31",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "workers",
+                "me",
+                "employment",
+                "scheduled-dates"
+              ],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "2025-01-01",
+                  "description": "Optional start date filter (YYYY-MM-DD)"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2025-12-31",
+                  "description": "Optional end date filter (YYYY-MM-DD)"
+                },
+                {
+                  "key": "employmentId",
+                  "value": "",
+                  "description": "Filter by specific employment record"
+                }
+              ]
+            },
+            "description": "Returns the worker's scheduled dates based on their employment history and job schedules."
+          }
+        },
+        {
+          "name": "End My Employment (Worker)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{workerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Found better opportunity\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/workers/me/employment/end",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "workers",
+                "me",
+                "employment",
+                "end"
+              ]
+            },
+            "description": "Allows a worker to end their current active employment (quit/resign)."
+          }
+        },
+        {
+          "name": "Get My Workers (Employer)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/employers/me/workers?status=active",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "employers",
+                "me",
+                "workers"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "active",
+                  "description": "Filter by employment status: active, terminated, all"
+                }
+              ]
+            },
+            "description": "Returns all workers hired by the authenticated employer with their employment details."
+          }
+        },
+        {
+          "name": "Get Worker Employment History (Employer)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/employers/me/workers/{{workerId}}/employment",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "employers",
+                "me",
+                "workers",
+                "{{workerId}}",
+                "employment"
+              ]
+            },
+            "description": "Returns employment history for a specific worker hired by this employer."
+          }
+        },
+        {
+          "name": "Get Workers Scheduled Dates (Employer)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/employers/me/workers/scheduled-dates?startDate=2025-01-01&endDate=2025-12-31&status=active",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "employers",
+                "me",
+                "workers",
+                "scheduled-dates"
+              ],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "2025-01-01",
+                  "description": "Optional start date filter (YYYY-MM-DD)"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2025-12-31",
+                  "description": "Optional end date filter (YYYY-MM-DD)"
+                },
+                {
+                  "key": "status",
+                  "value": "active",
+                  "description": "Employment status filter: active, terminated, all"
+                }
+              ]
+            },
+            "description": "Returns scheduled dates for all workers hired by this employer."
+          }
+        },
+        {
+          "name": "Terminate Worker Employment (Employer)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Performance issues\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/employers/me/workers/{{workerId}}/terminate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "employers",
+                "me",
+                "workers",
+                "{{workerId}}",
+                "terminate"
+              ]
+            },
+            "description": "Allows an employer to terminate a worker's active employment."
+          }
+        }
+      ]
+    },
+    {
       "name": "Attendance Management",
-      "description": "Employer-focused endpoints to schedule shifts, review daily attendance, and finalize payroll totals.",
+      "description": "Enhanced attendance management with comprehensive search functionality for employers and workers.",
       "item": [
         {
           "name": "Get Attendance Dashboard",
@@ -408,6 +682,183 @@
               ]
             },
             "description": "Returns attendance records formatted for the dashboard view along with summary metrics for the selected date."
+          }
+        },
+        {
+          "name": "Search Attendance Records",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/attendance?workerName=Miguel&startDate=2025-01-01&endDate=2025-12-31&status=completed&includeEmploymentDetails=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attendance"
+              ],
+              "query": [
+                {
+                  "key": "workerId",
+                  "value": "",
+                  "description": "Filter by specific worker ID"
+                },
+                {
+                  "key": "workerName",
+                  "value": "Miguel",
+                  "description": "Search by worker name (partial match)"
+                },
+                {
+                  "key": "businessId",
+                  "value": "",
+                  "description": "Filter by business ID"
+                },
+                {
+                  "key": "date",
+                  "value": "",
+                  "description": "Filter by specific date (YYYY-MM-DD)"
+                },
+                {
+                  "key": "startDate",
+                  "value": "2025-01-01",
+                  "description": "Start date for range filter (YYYY-MM-DD)"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2025-12-31",
+                  "description": "End date for range filter (YYYY-MM-DD)"
+                },
+                {
+                  "key": "status",
+                  "value": "completed",
+                  "description": "Status filter: scheduled, clocked-in, completed, missed, all"
+                },
+                {
+                  "key": "employmentStatus",
+                  "value": "",
+                  "description": "Employment status filter: active, terminated"
+                },
+                {
+                  "key": "includeEmploymentDetails",
+                  "value": "true",
+                  "description": "Include employment history in response"
+                }
+              ]
+            },
+            "description": "Enhanced search for attendance records with multiple filter options and employment details."
+          }
+        },
+        {
+          "name": "Search Workers by Name",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/attendance/search/workers?name=Miguel&includeSchedule=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attendance",
+                "search",
+                "workers"
+              ],
+              "query": [
+                {
+                  "key": "name",
+                  "value": "Miguel",
+                  "description": "Worker name to search for (partial matching)"
+                },
+                {
+                  "key": "includeSchedule",
+                  "value": "true",
+                  "description": "Include recent schedule data in response"
+                }
+              ]
+            },
+            "description": "Search for workers by name and retrieve their employment history and recent schedule data."
+          }
+        },
+        {
+          "name": "Get Worker Employment Timeline",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/attendance/timeline/worker/{{workerId}}?startDate=2025-01-01&endDate=2025-12-31",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attendance",
+                "timeline",
+                "worker",
+                "{{workerId}}"
+              ],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "2025-01-01",
+                  "description": "Optional start date filter for attendance records"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2025-12-31",
+                  "description": "Optional end date filter for attendance records"
+                }
+              ]
+            },
+            "description": "Get comprehensive employment timeline for a specific worker including employment history and attendance records."
+          }
+        },
+        {
+          "name": "Get Workers Employed on Date",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/attendance/employed-on/{{attendanceDate}}?includeSchedule=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attendance",
+                "employed-on",
+                "{{attendanceDate}}"
+              ],
+              "query": [
+                {
+                  "key": "includeSchedule",
+                  "value": "true",
+                  "description": "Include schedule information for the specified date"
+                }
+              ]
+            },
+            "description": "Find all workers who were employed on a specific date with their employment details and optional schedule info."
           }
         },
         {
@@ -556,6 +1007,12 @@
       "value": "2024-10-01",
       "type": "string",
       "description": "ISO date (YYYY-MM-DD) used when querying the attendance dashboard"
+    },
+    {
+      "key": "employmentId",
+      "value": "",
+      "type": "string",
+      "description": "ObjectId of the employment record you want to query"
     }
   ]
 }
