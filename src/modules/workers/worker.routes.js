@@ -18,6 +18,9 @@ router.get('/:workerId/applications', controller.getWorkerApplications);
 router.post('/:workerId/applications', restrictTo('worker'), controller.applyToJob);
 router.patch('/:workerId/applications/:applicationId/withdraw', restrictTo('worker'), controller.withdrawApplication);
 router.get('/:workerId/attendance', controller.getWorkerAttendance);
+router.get('/:workerId/attendance/schedule', controller.getWorkerAttendanceSchedule);
 router.get('/:workerId/shifts', controller.getWorkerShifts);
 
 module.exports = router;
+
+

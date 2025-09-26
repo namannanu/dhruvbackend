@@ -158,6 +158,59 @@
             },
             "description": "Fetch applications for a specific workerId (useful when querying as an admin or employer)."
           }
+        },
+        {
+          "name": "List Attendance Schedule",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{workerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/workers/{{workerId}}/attendance/schedule?status=all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "workers",
+                "{{workerId}}",
+                "attendance",
+                "schedule"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "all",
+                  "description": "Optional status filter (scheduled, clocked-in, completed, missed)"
+                },
+                {
+                  "key": "from",
+                  "value": "",
+                  "description": "Optional start date (YYYY-MM-DD) to bound the schedule window"
+                },
+                {
+                  "key": "to",
+                  "value": "",
+                  "description": "Optional end date (YYYY-MM-DD) to bound the schedule window"
+                },
+                {
+                  "key": "jobId",
+                  "value": "",
+                  "description": "Filter schedule entries for a specific job"
+                },
+                {
+                  "key": "businessId",
+                  "value": "",
+                  "description": "Filter schedule entries for a specific business"
+                }
+              ]
+            },
+            "description": "Returns a grouped view of the worker's attendance schedule including past and upcoming dates, along with daily totals."
+          }
         }
       ]
     },
