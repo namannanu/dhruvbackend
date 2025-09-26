@@ -4,6 +4,10 @@ const { protect, restrictTo } = require('../../shared/middlewares/auth.middlewar
 
 const router = express.Router();
 
+// Debug logging
+console.log('Worker Controller functions:', Object.keys(controller));
+console.log('Auth middleware:', { protect: typeof protect, restrictTo: typeof restrictTo });
+
 router.use(protect);
 router.get('/me', restrictTo('worker'), controller.getWorkerProfile);
 router.get('/me/dashboard', restrictTo('worker'), controller.getWorkerDashboardMetrics);
