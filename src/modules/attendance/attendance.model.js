@@ -30,8 +30,12 @@ const attendanceSchema = new mongoose.Schema(
     },
     totalHours: { type: Number, default: 0 },
     earnings: { type: Number, default: 0 },
+    hourlyRate: Number,
     isLate: { type: Boolean, default: false },
-    notes: String
+    notes: String,
+    workerNameSnapshot: String,
+    jobTitleSnapshot: String,
+    locationSnapshot: String
   },
   { timestamps: true }
 );

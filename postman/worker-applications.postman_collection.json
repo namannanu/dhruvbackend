@@ -318,11 +318,143 @@
         }
       ]
     }
+    ,
+    {
+      "name": "Attendance Management",
+      "description": "Employer-focused endpoints to schedule shifts, review daily attendance, and finalize payroll totals.",
+      "item": [
+        {
+          "name": "Get Attendance Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/attendance/management?date={{attendanceDate}}&status=all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attendance",
+                "management"
+              ],
+              "query": [
+                {
+                  "key": "date",
+                  "value": "{{attendanceDate}}"
+                },
+                {
+                  "key": "status",
+                  "value": "all"
+                }
+              ]
+            },
+            "description": "Returns attendance records formatted for the dashboard view along with summary metrics for the selected date."
+          }
+        },
+        {
+          "name": "Schedule Attendance Record",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"worker\": \"{{workerId}}\",\n  \"job\": \"{{jobId}}\",\n  \"scheduledStart\": \"2024-10-01T18:00:00.000Z\",\n  \"scheduledEnd\": \"2024-10-01T22:00:00.000Z\",\n  \"hourlyRate\": 18,\n  \"notes\": \"Dinner shift coverage\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/attendance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attendance"
+              ]
+            },
+            "description": "Create a scheduled attendance record for a worker. Requires an employer token and valid worker/job IDs."
+          }
+        },
+        {
+          "name": "Mark Shift Complete",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/attendance/{{attendanceRecordId}}/mark-complete",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attendance",
+                "{{attendanceRecordId}}",
+                "mark-complete"
+              ]
+            },
+            "description": "Marks a clocked-in shift as completed using the scheduled end time to finalise hours and earnings."
+          }
+        },
+        {
+          "name": "Update Attendance Hours",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"totalHours\": 4,\n  \"hourlyRate\": 18\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/attendance/{{attendanceRecordId}}/hours",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attendance",
+                "{{attendanceRecordId}}",
+                "hours"
+              ]
+            },
+            "description": "Adjust the total hours (and optionally hourly rate) for a completed attendance record."
+          }
+        }
+      ]
+    }
   ],
   "variable": [
     {
       "key": "baseUrl",
-      "value": "http://localhost:3000/api"
+      "value": "https://dhruvbackend.vercel.app/api"
     },
     {
       "key": "workerToken",
@@ -359,6 +491,18 @@
       "value": "",
       "type": "string",
       "description": "ObjectId of the employer whose applications you want to list"
+    },
+    {
+      "key": "attendanceRecordId",
+      "value": "",
+      "type": "string",
+      "description": "ObjectId of the attendance record you want to manage"
+    },
+    {
+      "key": "attendanceDate",
+      "value": "2024-10-01",
+      "type": "string",
+      "description": "ISO date (YYYY-MM-DD) used when querying the attendance dashboard"
     }
   ]
 }
