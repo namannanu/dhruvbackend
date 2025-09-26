@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const WorkerProfile = require('./workerProfile.model');
+const WorkerEmployment = require('./workerEmployment.model');
 const User = require('../users/user.model');
 const Application = require('../applications/application.model');
 const AttendanceRecord = require('../attendance/attendance.model');
@@ -561,5 +562,117 @@ exports.getWorkerDashboardMetrics = catchAsync(async (req, res, next) => {
       // Include query parameter for compatibility
       include: req.query.include || 'freeTier,premium,counts'
     }
+  });
+});
+
+// Get worker's employment history
+exports.getMyEmploymentHistory = catchAsync(async (req, res, next) => {
+  const employmentHistory = await WorkerEmployment.getWorkerHistory(req.user._id);
+
+  res.status(200).json({
+    status: 'success',
+    results: employmentHistory.length,
+    data: employmentHistory
+  });
+});
+
+// Get worker's scheduled dates based on employment history
+exports.getMyScheduledDates = catchAsync(async (req, res, next) => {
+  const { startDate, endDate, employmentId } = req.query;
+  
+  // Build filter for employment records
+  const employmentFilter = { worker: req.user._id };
+  if (employmentId) {
+    employmentFilter._id = employmentId;
+  }
+
+  // Get employment records
+  const employmentRecords = await WorkerEmployment.find(employmentFilter)
+    .populate('job', 'title startDate endDate workDays workingHours');
+
+  // Extract scheduled dates from employment records
+  const scheduledDates = [];
+  
+  employmentRecords.forEach(employment => {
+    if (employment.job) {
+      const schedule = {
+        employmentId: employment._id,
+        employer: employment.employer,
+        business: employment.business,
+        position: employment.position,
+        hireDate: employment.hireDate,
+        jobStartDate: employment.job.startDate,
+        jobEndDate: employment.job.endDate,
+        workDays: employment.job.workDays,
+        workingHours: employment.job.workingHours,
+        hourlyRate: employment.hourlyRate
+      };
+
+      // Filter by date range if provided
+      if (startDate && endDate) {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        
+        if (employment.job.startDate <= end && 
+            (!employment.job.endDate || employment.job.endDate >= start)) {
+          scheduledDates.push(schedule);
+        }
+      } else {
+        scheduledDates.push(schedule);
+      }
+    }
+  });
+
+  res.status(200).json({
+    status: 'success',
+    results: scheduledDates.length,
+    data: scheduledDates
+  });
+});
+
+// Get current employment status
+exports.getCurrentEmployment = catchAsync(async (req, res, next) => {
+  const currentEmployment = await WorkerEmployment.findOne({
+    worker: req.user._id,
+    employmentStatus: 'active'
+  })
+    .populate('employer', 'firstName lastName email phone')
+    .populate('business', 'name address contactInfo')
+    .populate('job', 'title description hourlyRate workDays workingHours');
+
+  if (!currentEmployment) {
+    return res.status(200).json({
+      status: 'success',
+      data: null,
+      message: 'No active employment found'
+    });
+  }
+
+  res.status(200).json({
+    status: 'success',
+    data: currentEmployment
+  });
+});
+
+// End current employment (for workers to quit)
+exports.endMyEmployment = catchAsync(async (req, res, next) => {
+  const { reason } = req.body;
+
+  const currentEmployment = await WorkerEmployment.findOne({
+    worker: req.user._id,
+    employmentStatus: 'active'
+  });
+
+  if (!currentEmployment) {
+    return next(new AppError('No active employment found', 404));
+  }
+
+  // End the employment
+  await currentEmployment.endEmployment(reason || 'Worker resignation');
+
+  res.status(200).json({
+    status: 'success',
+    message: 'Employment ended successfully',
+    data: currentEmployment
   });
 });

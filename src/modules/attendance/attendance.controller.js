@@ -1,8 +1,9 @@
 const AttendanceRecord = require('./attendance.model');
 const Job = require('../jobs/job.model');
 const User = require('../users/user.model');
-const WorkerEmployment = require('../workers/workerEmployment.model');
 const WorkerProfile = require('../workers/workerProfile.model');
+const WorkerEmployment = require('../workers/workerEmployment.model');
+const Application = require('../applications/application.model');
 const AppError = require('../../shared/utils/appError');
 const catchAsync = require('../../shared/utils/catchAsync');
 

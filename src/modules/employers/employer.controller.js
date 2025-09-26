@@ -4,6 +4,8 @@ const Business = require('../businesses/business.model');
 const Job = require('../jobs/job.model');
 const Application = require('../applications/application.model');
 const AttendanceRecord = require('../attendance/attendance.model');
+const WorkerEmployment = require('../workers/workerEmployment.model');
+const WorkerProfile = require('../workers/workerProfile.model');
 const catchAsync = require('../../shared/utils/catchAsync');
 const AppError = require('../../shared/utils/appError');
 
@@ -241,5 +243,134 @@ exports.getAnalytics = catchAsync(async (req, res, next) => {
         ? jobs.reduce((sum, job) => sum + job.hourlyRate, 0) / jobs.length
         : 0
     }
+  });
+});
+
+// Get all workers hired by this employer
+exports.getMyWorkers = catchAsync(async (req, res, next) => {
+  const { status = 'active' } = req.query;
+  
+  const filter = { employer: req.user._id };
+  if (status !== 'all') {
+    filter.employmentStatus = status;
+  }
+
+  const workers = await WorkerEmployment.find(filter)
+    .populate('worker', 'firstName lastName email phone')
+    .populate('business', 'name')
+    .populate('job', 'title')
+    .sort({ hireDate: -1 });
+
+  res.status(200).json({
+    status: 'success',
+    results: workers.length,
+    data: workers
+  });
+});
+
+// Get employment history for a specific worker hired by this employer
+exports.getWorkerEmploymentHistory = catchAsync(async (req, res, next) => {
+  const { workerId } = req.params;
+
+  const employmentHistory = await WorkerEmployment.find({
+    worker: workerId,
+    employer: req.user._id
+  })
+    .populate('business', 'name address')
+    .populate('job', 'title description hourlyRate')
+    .sort({ hireDate: -1 });
+
+  if (employmentHistory.length === 0) {
+    return next(new AppError('No employment history found for this worker', 404));
+  }
+
+  res.status(200).json({
+    status: 'success',
+    results: employmentHistory.length,
+    data: employmentHistory
+  });
+});
+
+// Get scheduled dates for all workers hired by this employer
+exports.getWorkersScheduledDates = catchAsync(async (req, res, next) => {
+  const { startDate, endDate, status = 'active' } = req.query;
+
+  const filter = { employer: req.user._id };
+  if (status !== 'all') {
+    filter.employmentStatus = status;
+  }
+
+  const workers = await WorkerEmployment.find(filter)
+    .populate('worker', 'firstName lastName email')
+    .populate('job', 'title startDate endDate workDays workingHours')
+    .populate('business', 'name');
+
+  // Group by worker and extract scheduled dates
+  const workerSchedules = workers.map(employment => {
+    const schedule = {
+      workerId: employment.worker._id,
+      workerName: `${employment.worker.firstName} ${employment.worker.lastName}`.trim(),
+      workerEmail: employment.worker.email,
+      employmentId: employment._id,
+      business: employment.business.name,
+      position: employment.position,
+      hireDate: employment.hireDate,
+      employmentStatus: employment.employmentStatus,
+      hourlyRate: employment.hourlyRate
+    };
+
+    if (employment.job) {
+      schedule.jobDetails = {
+        title: employment.job.title,
+        startDate: employment.job.startDate,
+        endDate: employment.job.endDate,
+        workDays: employment.job.workDays,
+        workingHours: employment.job.workingHours
+      };
+
+      // Filter by date range if provided
+      if (startDate && endDate) {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        
+        if (employment.job.startDate > end || 
+            (employment.job.endDate && employment.job.endDate < start)) {
+          return null; // Filter out this worker
+        }
+      }
+    }
+
+    return schedule;
+  }).filter(Boolean); // Remove null entries
+
+  res.status(200).json({
+    status: 'success',
+    results: workerSchedules.length,
+    data: workerSchedules
+  });
+});
+
+// Terminate a worker's employment
+exports.terminateWorker = catchAsync(async (req, res, next) => {
+  const { workerId } = req.params;
+  const { reason } = req.body;
+
+  const employment = await WorkerEmployment.findOne({
+    worker: workerId,
+    employer: req.user._id,
+    employmentStatus: 'active'
+  });
+
+  if (!employment) {
+    return next(new AppError('Active employment not found for this worker', 404));
+  }
+
+  // End the employment
+  await employment.endEmployment(reason || 'Employer termination');
+
+  res.status(200).json({
+    status: 'success',
+    message: 'Worker employment terminated successfully',
+    data: employment
   });
 });
