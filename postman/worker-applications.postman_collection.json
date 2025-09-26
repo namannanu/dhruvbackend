@@ -1,146 +1,340 @@
 {
   "info": {
     "_postman_id": "b986c5ec-bf62-4abb-8a8d-1f25ab0fcbe9",
-    "name": "Worker Applications",
+    "name": "Worker & Employer Applications",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Requests to list jobs and submit job applications as a worker."
+    "description": "Requests to manage job applications as a worker and review or hire as an employer."
   },
   "item": [
     {
-      "name": "List Active Jobs",
-      "request": {
-        "method": "GET",
-        "header": [
-          {
-            "key": "Authorization",
-            "value": "Bearer {{workerToken}}",
-            "type": "text"
-          }
-        ],
-        "url": {
-          "raw": "{{baseUrl}}/jobs?status=active",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "jobs"
-          ],
-          "query": [
-            {
-              "key": "status",
-              "value": "active"
+      "name": "Worker Flows",
+      "description": "Requests an authenticated worker can use to find jobs and manage their applications.",
+      "item": [
+        {
+          "name": "List Active Jobs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{workerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/jobs?status=active",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "jobs"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "active"
+                }
+              ]
             }
-          ]
+          }
+        },
+        {
+          "name": "List My Applications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{workerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "me"
+              ]
+            },
+            "description": "Returns the authenticated worker's applications sorted newest-first."
+          }
+        },
+        {
+          "name": "Apply To Job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{workerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Hi! I have 3 years of experience in hospitality and can start immediately.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs/{{jobId}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "jobs",
+                "{{jobId}}",
+                "applications"
+              ]
+            },
+            "description": "Submit a job application for the specified jobId using the authenticated worker context."
+          },
+          "response": []
+        },
+        {
+          "name": "Withdraw Application",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{workerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"withdrawn\",\n  \"message\": \"Optional context for withdrawing this application.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{applicationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{applicationId}}"
+              ]
+            },
+            "description": "Withdraw the authenticated worker's application or update the message on an existing application."
+          }
+        },
+        {
+          "name": "List Applications By Worker Id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{workerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications?workerId={{workerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications"
+              ],
+              "query": [
+                {
+                  "key": "workerId",
+                  "value": "{{workerId}}"
+                }
+              ]
+            },
+            "description": "Fetch applications for a specific workerId (useful when querying as an admin or employer)."
+          }
         }
-      }
+      ]
     },
     {
-      "name": "Apply To Job",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Authorization",
-            "value": "Bearer {{workerToken}}",
-            "type": "text"
-          },
-          {
-            "key": "Content-Type",
-            "value": "application/json",
-            "type": "text"
+      "name": "Employer Flows",
+      "description": "Requests an authenticated employer can use to review, reject, or hire applicants across their jobs.",
+      "item": [
+        {
+          "name": "List Employer Applications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/employers/me/applications?status=pending&limit=20&page=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "employers",
+                "me",
+                "applications"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "pending"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Paginated list of applications tied to jobs owned by the authenticated employer. Supports status, jobId, businessId, search, sortBy, and sortOrder query params."
           }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"jobId\": \"{{jobId}}\",\n  \"message\": \"Hi! I have 3 years of experience in hospitality and can start immediately.\"\n}"
         },
-        "url": {
-          "raw": "{{baseUrl}}/workers/me/applications",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "workers",
-            "me",
-            "applications"
-          ]
-        },
-        "description": "Submit a job application as the authenticated worker. Replace {{jobId}} with a specific job's ObjectId."
-      },
-      "response": []
-    },
-    {
-      "name": "View Worker Applications",
-      "request": {
-        "method": "GET",
-        "header": [
-          {
-            "key": "Authorization",
-            "value": "Bearer {{workerToken}}",
-            "type": "text"
+        {
+          "name": "Update Application Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"rejected\",\n  \"message\": \"Thanks for applying, but we've moved forward with another candidate.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/employers/me/applications/{{applicationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "employers",
+                "me",
+                "applications",
+                "{{applicationId}}"
+              ]
+            },
+            "description": "Update the status or message for an application owned by one of the employer's jobs."
           }
-        ],
-        "url": {
-          "raw": "{{baseUrl}}/workers/{{workerId}}/applications",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "workers",
-            "{{workerId}}",
-            "applications"
-          ]
         },
-        "description": "List applications for the given workerId. Use the authenticated worker's ID to view their own submissions."
-      }
-    },
-    {
-      "name": "Withdraw Application",
-      "request": {
-        "method": "PATCH",
-        "header": [
-          {
-            "key": "Authorization",
-            "value": "Bearer {{workerToken}}",
-            "type": "text"
-          },
-          {
-            "key": "Content-Type",
-            "value": "application/json",
-            "type": "text"
+        {
+          "name": "Hire Applicant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/employers/me/applications/{{applicationId}}/hire",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "employers",
+                "me",
+                "applications",
+                "{{applicationId}}",
+                "hire"
+              ]
+            },
+            "description": "Mark an application as hired. This also rejects other applicants, updates job stats, and fills the job posting."
           }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"message\": \"Optional context for withdrawing this application.\"\n}"
         },
-        "url": {
-          "raw": "{{baseUrl}}/workers/me/applications/{{applicationId}}/withdraw",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "workers",
-            "me",
-            "applications",
-            "{{applicationId}}",
-            "withdraw"
-          ]
+        {
+          "name": "List Applications For Job",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/jobs/{{jobId}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "jobs",
+                "{{jobId}}",
+                "applications"
+              ]
+            },
+            "description": "List applications scoped to a specific job posting owned by the authenticated employer."
+          }
         },
-        "description": "Withdraw the authenticated worker's application. Provide {{applicationId}} from a previous applications response."
-      }
+        {
+          "name": "List Employer Applications By Id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/employers/{{employerId}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "employers",
+                "{{employerId}}",
+                "applications"
+              ]
+            },
+            "description": "Fetch applications for a specific employerId (useful when testing admin/impersonation scenarios)."
+          }
+        }
+      ]
     }
   ],
   "variable": [
     {
       "key": "baseUrl",
-      "value": "http://localhost:3000"
+      "value": "http://localhost:3000/api"
     },
     {
       "key": "workerToken",
       "value": "",
       "type": "string",
       "description": "JWT for an authenticated worker user"
+    },
+    {
+      "key": "employerToken",
+      "value": "",
+      "type": "string",
+      "description": "JWT for an authenticated employer user"
     },
     {
       "key": "jobId",
@@ -158,7 +352,13 @@
       "key": "applicationId",
       "value": "",
       "type": "string",
-      "description": "ObjectId of the application you want to withdraw"
+      "description": "ObjectId of the application you want to manage"
+    },
+    {
+      "key": "employerId",
+      "value": "",
+      "type": "string",
+      "description": "ObjectId of the employer whose applications you want to list"
     }
   ]
 }

@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const EmployerProfile = require('./employerProfile.model');
 const Business = require('../businesses/business.model');
 const Job = require('../jobs/job.model');
@@ -76,6 +77,129 @@ exports.getDashboard = catchAsync(async (req, res, next) => {
       businesses,
       attendance
     }
+  });
+});
+
+exports.listEmployerApplications = catchAsync(async (req, res, next) => {
+  const employerId = req.params.employerId || req.user._id;
+  ensureEmployer(req, employerId);
+
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+
+  const jobFilter = { employer: employerId };
+  if (req.query.businessId) {
+    jobFilter.business = req.query.businessId;
+  }
+  if (req.query.jobId) {
+    jobFilter._id = req.query.jobId;
+  }
+
+  const jobIds = await Job.distinct('_id', jobFilter);
+  const normalizeToObjectId = (value) => {
+    if (value instanceof mongoose.Types.ObjectId) {
+      return value;
+    }
+    if (typeof value === 'string' && mongoose.Types.ObjectId.isValid(value)) {
+      return new mongoose.Types.ObjectId(value);
+    }
+    return null;
+  };
+  const normalizedJobIds = jobIds.map(normalizeToObjectId).filter(Boolean);
+
+  if (!normalizedJobIds.length) {
+    return res.status(200).json({
+      status: 'success',
+      pagination: { total: 0, page, pages: 0, limit },
+      summary: { pending: 0, hired: 0, rejected: 0, withdrawn: 0 },
+      data: []
+    });
+  }
+
+  const filter = { job: { $in: normalizedJobIds } };
+  const allowedStatuses = new Set(['pending', 'hired', 'rejected', 'withdrawn']);
+  if (req.query.status) {
+    const requestedStatuses = req.query.status
+      .split(',')
+      .map((status) => status.trim().toLowerCase())
+      .filter(Boolean);
+    const validStatuses = requestedStatuses.filter((status) => allowedStatuses.has(status));
+    if (!validStatuses.length) {
+      return next(new AppError('Invalid status filter', 400));
+    }
+    filter.status = validStatuses.length === 1 ? validStatuses[0] : { $in: validStatuses };
+  }
+
+  if (req.query.search) {
+    const searchTerm = req.query.search.trim();
+    if (searchTerm.length) {
+      const regex = new RegExp(searchTerm, 'i');
+      filter.$or = [
+        { 'snapshot.name': regex },
+        { 'snapshot.email': regex },
+        { 'snapshot.phone': regex },
+        { message: regex }
+      ];
+    }
+  }
+
+  const allowedSortFields = new Set([
+    'createdAt',
+    'status',
+    'hiredAt',
+    'rejectedAt',
+    'withdrawnAt'
+  ]);
+  const sortBy = allowedSortFields.has(req.query.sortBy) ? req.query.sortBy : 'createdAt';
+  const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
+  const sort = { [sortBy]: sortOrder };
+
+  const skip = (page - 1) * limit;
+
+  const applicationsQuery = Application.find(filter)
+    .populate({
+      path: 'job',
+      select: 'title status business schedule location createdAt hiredWorker'
+    })
+    .populate({
+      path: 'worker',
+      select: 'firstName lastName email phone userType'
+    })
+    .sort(sort)
+    .skip(skip)
+    .limit(limit);
+
+  const [applications, total, statusCounts] = await Promise.all([
+    applicationsQuery,
+    Application.countDocuments(filter),
+    Application.aggregate([
+      { $match: filter },
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ])
+  ]);
+
+  const summary = {
+    pending: 0,
+    hired: 0,
+    rejected: 0,
+    withdrawn: 0
+  };
+  statusCounts.forEach((item) => {
+    if (item && item._id && Object.prototype.hasOwnProperty.call(summary, item._id)) {
+      summary[item._id] = item.count;
+    }
+  });
+
+  res.status(200).json({
+    status: 'success',
+    pagination: {
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      limit
+    },
+    summary,
+    data: applications
   });
 });
 
