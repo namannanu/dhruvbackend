@@ -47,7 +47,9 @@ app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'success',
     message: 'WorkConnect API is healthy',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    cors: 'enabled',
+    version: '2.0.1'
   });
 });
 
