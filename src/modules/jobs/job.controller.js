@@ -237,8 +237,8 @@ exports.hireApplicant = catchAsync(async (req, res, next) => {
     position: application.job.title,
     hourlyRate: application.job.hourlyRate,
     workLocation: application.job.location,
-    startDate: application.job.startDate,
-    endDate: application.job.endDate
+    startDate: req.body.startDate ? new Date(req.body.startDate) : new Date(),
+    endDate: null // Initially null for active employment
   });
 
   // Update worker profile with current employment info
