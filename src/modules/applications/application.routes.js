@@ -7,7 +7,6 @@ const router = express.Router({ mergeParams: true });
 router.use(protect);
 router.get('/', controller.listApplications);
 router.get('/me', controller.listMyApplications);
-router.post('/:jobId/apply', controller.createApplication);
 router.patch('/:applicationId', controller.updateApplication);
 
 module.exports = router;

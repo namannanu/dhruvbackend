@@ -24,16 +24,29 @@ const buildJobResponse = async (job, currentUser) => {
 
 exports.listJobs = catchAsync(async (req, res) => {
   const filter = {};
-  if (req.query.employerId) {
-    filter.employer = req.query.employerId;
+  
+  // Handle different user types
+  if (req.user.userType === 'worker') {
+    // For workers, show all active jobs except their own (if they're also employers)
+    filter.status = 'active';
+    filter.employer = { $ne: req.user._id }; // Exclude jobs posted by the worker themselves
+  } else if (req.user.userType === 'employer') {
+    // For employers, show their own jobs by default, or all if specifically requested
+    if (req.query.employerId) {
+      filter.employer = req.query.employerId;
+    } else if (!req.query.all) {
+      filter.employer = req.user._id; // Show only their own jobs
+    }
   }
+  
+  // Additional filters
   if (req.query.businessId) {
     filter.business = req.query.businessId;
   }
   if (req.query.status) {
     filter.status = req.query.status;
-  } else {
-    filter.status = { $ne: 'draft' };
+  } else if (!filter.status) {
+    filter.status = { $ne: 'draft' }; // Exclude drafts for general listing
   }
   if (req.query.tags) {
     filter.tags = { $in: req.query.tags.split(',').map((tag) => tag.trim()) };

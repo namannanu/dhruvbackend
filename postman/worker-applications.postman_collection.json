@@ -171,15 +171,14 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/workers/{{workerId}}/attendance/schedule?status=all",
+              "raw": "{{baseUrl}}/workers/{{workerId}}/attendance?status=all&from=2025-01-01&to=2025-12-31",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "workers",
                 "{{workerId}}",
-                "attendance",
-                "schedule"
+                "attendance"
               ],
               "query": [
                 {
@@ -189,12 +188,12 @@
                 },
                 {
                   "key": "from",
-                  "value": "",
+                  "value": "2025-01-01",
                   "description": "Optional start date (YYYY-MM-DD) to bound the schedule window"
                 },
                 {
                   "key": "to",
-                  "value": "",
+                  "value": "2025-12-31",
                   "description": "Optional end date (YYYY-MM-DD) to bound the schedule window"
                 },
                 {
@@ -209,7 +208,31 @@
                 }
               ]
             },
-            "description": "Returns a grouped view of the worker's attendance schedule including past and upcoming dates, along with daily totals."
+            "description": "Returns the worker's attendance records including scheduled, completed, and upcoming shifts."
+          }
+        },
+        {
+          "name": "Get Worker Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{workerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/workers/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "workers",
+                "me"
+              ]
+            },
+            "description": "Get the authenticated worker's profile information including employment status and hire date."
           }
         }
       ]
@@ -304,19 +327,18 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/employers/me/applications/{{applicationId}}/hire",
+              "raw": "{{baseUrl}}/jobs/applications/{{applicationId}}/hire",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "employers",
-                "me",
+                "jobs",
                 "applications",
                 "{{applicationId}}",
                 "hire"
               ]
             },
-            "description": "Mark an application as hired. This also rejects other applicants, updates job stats, and fills the job posting."
+            "description": "Mark an application as hired. This creates a WorkerEmployment record, rejects other applicants, updates job stats, and fills the job posting with hire date tracking."
           }
         },
         {
@@ -400,7 +422,27 @@
               ]
             },
             "description": "Returns the authenticated worker's complete employment history with employers, businesses, and job details."
-          }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/workers/me/employment/history",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["workers", "me", "employment", "history"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"status\": \"success\",\n  \"results\": 2,\n  \"data\": [\n    {\n      \"_id\": \"employment123\",\n      \"hireDate\": \"2025-01-15T00:00:00.000Z\",\n      \"endDate\": null,\n      \"employmentStatus\": \"active\",\n      \"position\": \"Dishwasher\",\n      \"hourlyRate\": 18,\n      \"workLocation\": \"Downtown Restaurant\",\n      \"employer\": {\n        \"firstName\": \"John\",\n        \"lastName\": \"Smith\",\n        \"email\": \"john@restaurant.com\"\n      },\n      \"business\": {\n        \"name\": \"Downtown Bistro\",\n        \"address\": \"123 Main St\"\n      },\n      \"job\": {\n        \"title\": \"Dishwasher\",\n        \"description\": \"Kitchen support role\",\n        \"hourlyRate\": 18\n      }\n    }\n  ]\n}"
+            }
+          ]
         },
         {
           "name": "Get My Current Employment (Worker)",
@@ -789,7 +831,31 @@
               ]
             },
             "description": "Search for workers by name and retrieve their employment history and recent schedule data."
-          }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/attendance/search/workers?name=Miguel&includeSchedule=true",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["attendance", "search", "workers"],
+                  "query": [
+                    {"key": "name", "value": "Miguel"},
+                    {"key": "includeSchedule", "value": "true"}
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"status\": \"success\",\n  \"results\": 1,\n  \"data\": [\n    {\n      \"worker\": {\n        \"id\": \"worker123\",\n        \"name\": \"Miguel Johnson\",\n        \"email\": \"miguel@example.com\",\n        \"phone\": \"+1234567890\"\n      },\n      \"employmentHistory\": [\n        {\n          \"employmentId\": \"emp123\",\n          \"employer\": {\n            \"firstName\": \"John\",\n            \"lastName\": \"Smith\"\n          },\n          \"business\": {\n            \"name\": \"Downtown Bistro\"\n          },\n          \"position\": \"Dishwasher\",\n          \"hireDate\": \"2025-01-15T00:00:00.000Z\",\n          \"employmentStatus\": \"active\",\n          \"hourlyRate\": 18\n        }\n      ],\n      \"currentEmployment\": {\n        \"employmentId\": \"emp123\",\n        \"position\": \"Dishwasher\",\n        \"hireDate\": \"2025-01-15T00:00:00.000Z\"\n      },\n      \"recentSchedule\": [\n        {\n          \"date\": \"2025-09-27\",\n          \"scheduledStart\": \"18:00\",\n          \"scheduledEnd\": \"22:00\",\n          \"status\": \"scheduled\"\n        }\n      ]\n    }\n  ]\n}"
+            }
+          ]
         },
         {
           "name": "Get Worker Employment Timeline",
@@ -879,7 +945,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"worker\": \"{{workerId}}\",\n  \"job\": \"{{jobId}}\",\n  \"scheduledStart\": \"2024-10-01T18:00:00.000Z\",\n  \"scheduledEnd\": \"2024-10-01T22:00:00.000Z\",\n  \"hourlyRate\": 18,\n  \"notes\": \"Dinner shift coverage\"\n}"
+              "raw": "{\n  \"worker\": \"{{workerId}}\",\n  \"job\": \"{{jobId}}\",\n  \"scheduledStart\": \"2025-09-27T18:00:00.000Z\",\n  \"scheduledEnd\": \"2025-09-27T22:00:00.000Z\",\n  \"hourlyRate\": 18,\n  \"notes\": \"Dinner shift coverage\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/attendance",
@@ -1004,7 +1070,7 @@
     },
     {
       "key": "attendanceDate",
-      "value": "2024-10-01",
+      "value": "2025-09-27",
       "type": "string",
       "description": "ISO date (YYYY-MM-DD) used when querying the attendance dashboard"
     },

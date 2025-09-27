@@ -17,6 +17,14 @@ router.patch('/me', controller.updateEmployerProfile);
 router.get('/me/dashboard', controller.getDashboard);
 router.get('/me/analytics', controller.getAnalytics);
 
+// Job management routes
+router.get('/me/jobs', jobController.listJobs);
+router.post('/me/jobs', jobController.createJob);
+router.patch('/me/jobs/:jobId', jobController.updateJob);
+router.patch('/me/jobs/:jobId/status', jobController.updateJobStatus);
+router.get('/me/jobs/:jobId', jobController.getJob);
+router.get('/me/jobs/:jobId/applications', jobController.listApplicationsForJob);
+
 // Employment management routes
 router.get('/me/workers', controller.getMyWorkers);
 router.get('/me/workers/:workerId/employment', controller.getWorkerEmploymentHistory);
@@ -31,5 +39,12 @@ router.get('/:employerId', controller.getEmployerProfile);
 router.patch('/:employerId', controller.updateEmployerProfile);
 router.get('/:employerId/dashboard', controller.getDashboard);
 router.get('/:employerId/analytics', controller.getAnalytics);
+
+// Job management routes for specific employer
+router.get('/:employerId/jobs', jobController.listJobs);
+router.patch('/:employerId/jobs/:jobId', jobController.updateJob);
+router.patch('/:employerId/jobs/:jobId/status', jobController.updateJobStatus);
+router.get('/:employerId/jobs/:jobId', jobController.getJob);
+router.get('/:employerId/jobs/:jobId/applications', jobController.listApplicationsForJob);
 
 module.exports = router;
