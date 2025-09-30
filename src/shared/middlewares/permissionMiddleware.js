@@ -247,9 +247,12 @@ const ENDPOINT_PERMISSIONS = {
  */
 async function getUserPermissions(userId, businessId) {
   try {
+    console.log(`Getting permissions for user ${userId} and business ${businessId}`);
+    
     // First check if user is the business owner
     const business = await Business.findById(businessId);
     if (business && business.owner && business.owner.toString() === userId.toString()) {
+      console.log(`User ${userId} is owner of business ${businessId} - granting all permissions`);
       return Object.keys(ALL_PERMISSIONS); // Owner gets all permissions
     }
 
@@ -261,6 +264,8 @@ async function getUserPermissions(userId, businessId) {
     });
 
     if (teamMember) {
+      console.log(`Found team member with role ${teamMember.role} for user ${userId}`);
+      
       // If user is admin, return all permissions
       if (teamMember.role === 'admin') {
         return Object.keys(ALL_PERMISSIONS);
@@ -268,13 +273,17 @@ async function getUserPermissions(userId, businessId) {
       
       // If user has specific permissions assigned, use those
       if (teamMember.permissions && teamMember.permissions.length > 0) {
+        console.log(`Using custom permissions for user ${userId}:`, teamMember.permissions);
         return teamMember.permissions;
       }
       
       // Fall back to role-based permissions
-      return ROLE_PERMISSIONS[teamMember.role] || [];
+      const rolePermissions = ROLE_PERMISSIONS[teamMember.role] || [];
+      console.log(`Using role-based permissions for ${teamMember.role}:`, rolePermissions);
+      return rolePermissions;
     }
 
+    console.log(`No permissions found for user ${userId} in business ${businessId}`);
     // If not a team member and not owner, return empty permissions
     return [];
   } catch (error) {
