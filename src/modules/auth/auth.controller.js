@@ -1,6 +1,8 @@
 const authService = require('./auth.service');
 const catchAsync = require('../../shared/utils/catchAsync');
 const AppError = require('../../shared/utils/appError');
+const { getUserPermissions } = require('../../shared/middlewares/permissionMiddleware');
+const TeamMember = require('../businesses/teamMember.model');
 
 exports.signup = catchAsync(async (req, res) => {
   const data = await authService.signup(req.body);
@@ -37,4 +39,59 @@ exports.refreshToken = catchAsync(async (req, res) => {
 
   const data = await authService.refreshUserToken(token);
   await authService.issueAuthResponse(res, data, 200);
+});
+
+exports.getUserPermissions = catchAsync(async (req, res) => {
+  const { businessId } = req.query;
+  
+  if (!businessId) {
+    return res.status(400).json({
+      status: 'fail',
+      message: 'Business ID is required'
+    });
+  }
+
+  console.log(`🔄 Getting permissions for user ${req.user._id} and business ${businessId}`);
+  
+  const permissions = await getUserPermissions(req.user._id, businessId);
+  
+  console.log(`✅ Found ${permissions.length} permissions for user:`, permissions);
+  
+  res.status(200).json({
+    status: 'success',
+    permissions
+  });
+});
+
+exports.getUserTeamMemberInfo = catchAsync(async (req, res) => {
+  const { businessId } = req.query;
+  
+  if (!businessId) {
+    return res.status(400).json({
+      status: 'fail',
+      message: 'Business ID is required'
+    });
+  }
+
+  console.log(`🔄 Getting team member info for user ${req.user._id} and business ${businessId}`);
+  
+  const teamMember = await TeamMember.findOne({
+    user: req.user._id,
+    business: businessId,
+    active: true
+  }).populate('user', 'firstName lastName email');
+
+  if (!teamMember) {
+    return res.status(404).json({
+      status: 'fail',
+      message: 'User is not a team member of this business'
+    });
+  }
+
+  console.log(`✅ Found team member: ${teamMember.user.email} with role: ${teamMember.role}`);
+  
+  res.status(200).json({
+    status: 'success',
+    teamMember
+  });
 });
