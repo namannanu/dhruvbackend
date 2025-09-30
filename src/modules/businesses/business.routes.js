@@ -15,7 +15,7 @@ router.delete('/:businessId', requirePermissions('delete_business'), controller.
 router.post('/:businessId/select', restrictTo('employer'), controller.selectBusiness); // No specific permission needed
 
 // Team management routes with permission protection
-router.get('/:businessId/team-members', requirePermissions(['view_applications', 'edit_team_members']), controller.manageTeamMember.list);
+router.get('/:businessId/team-members', requirePermissions(['view_team_members']), controller.manageTeamMember.list);
 router.post('/:businessId/team-members', requirePermissions('invite_team_members'), controller.manageTeamMember.create);
 router.patch(
   '/:businessId/team-members/:memberId',

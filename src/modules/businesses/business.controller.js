@@ -77,7 +77,7 @@ exports.selectBusiness = catchAsync(async (req, res) => {
 exports.manageTeamMember = {
   list: catchAsync(async (req, res) => {
     const business = await ensureOwner(req.user._id, req.params.businessId);
-    const members = await TeamMember.find({ business: business._id });
+    const members = await TeamMember.find({ business: business._id }).populate('user', 'firstName lastName email phone');
     res.status(200).json({ status: 'success', data: members });
   }),
   create: catchAsync(async (req, res) => {
