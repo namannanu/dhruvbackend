@@ -82,10 +82,65 @@ exports.manageTeamMember = {
   }),
   create: catchAsync(async (req, res) => {
     const business = await ensureOwner(req.user._id, req.params.businessId);
+    
+    console.log('🔄 Creating team member with request body:', req.body);
+    
+    const { email, name, role, permissions } = req.body;
+    
+    if (!email) {
+      throw new AppError('Email is required', 400);
+    }
+    
+    console.log(`📧 Looking for user with email: ${email}`);
+    
+    // Check if user already exists
+    let user = await User.findOne({ email: email.toLowerCase() });
+    
+    if (!user) {
+      console.log('👤 User not found, creating new user');
+      // Create a placeholder user for the invitation
+      user = await User.create({
+        email: email.toLowerCase(),
+        firstName: name ? name.split(' ')[0] : email.split('@')[0],
+        lastName: name ? name.split(' ').slice(1).join(' ') : '',
+        userType: 'employer', // Default type for team members
+        password: 'temp_password_' + Math.random().toString(36).substring(7), // Temporary password
+        // Note: User should be prompted to set a real password when they first log in
+      });
+      console.log('✅ Created new user:', user._id);
+    } else {
+      console.log('✅ Found existing user:', user._id);
+    }
+    
+    // Check if team member already exists
+    const existingMember = await TeamMember.findOne({
+      business: business._id,
+      user: user._id
+    });
+    
+    if (existingMember) {
+      throw new AppError('User is already a team member of this business', 400);
+    }
+    
+    console.log('🔄 Creating team member record');
+    
     const member = await TeamMember.create({
       business: business._id,
-      ...req.body
+      user: user._id,
+      name: name || `${user.firstName} ${user.lastName}`.trim(),
+      email: email.toLowerCase(),
+      role: role || 'staff',
+      permissions: permissions || [],
+      isActive: true
     });
+    
+    console.log('✅ Created team member:', member._id);
+    
+    // Populate the user data before sending response
+    await member.populate('user', 'firstName lastName email');
+    
+    console.log('📤 Sending response with populated member data');
+    
     res.status(201).json({ status: 'success', data: member });
   }),
   update: catchAsync(async (req, res) => {
