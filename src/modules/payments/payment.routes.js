@@ -1,10 +1,11 @@
 const express = require('express');
 const controller = require('./payment.controller');
 const { protect, restrictTo } = require('../../shared/middlewares/auth.middleware');
+const { requirePermissions } = require('../../shared/middlewares/permissionMiddleware');
 
 const router = express.Router();
 
-router.use(protect, restrictTo('employer'));
-router.post('/job-posting', controller.processJobPayment);
+router.use(protect);
+router.post('/job-posting', requirePermissions(['manage_payments']), controller.processJobPayment);
 
 module.exports = router;

@@ -2,17 +2,19 @@ const express = require('express');
 const controller = require('./job.controller');
 const applicationController = require('../applications/application.controller');
 const { protect } = require('../../shared/middlewares/auth.middleware');
+const { requirePermissions } = require('../../shared/middlewares/permissionMiddleware');
 
 const router = express.Router();
 
-router.get('/', protect, controller.listJobs);
-router.get('/:jobId', protect, controller.getJob);
-router.get('/:jobId/applications', protect, controller.listApplicationsForJob);
-router.post('/:jobId/applications', protect, applicationController.createApplication);
-router.patch('/:jobId/status', protect, controller.updateJobStatus);
-router.patch('/:jobId', protect, controller.updateJob);
-router.post('/', protect, controller.createJob);
-router.post('/bulk', protect, controller.createJobsBulk);
-router.post('/applications/:applicationId/hire', protect, controller.hireApplicant);
+// Job management routes with permission protection
+router.get('/', protect, requirePermissions('view_jobs'), controller.listJobs);
+router.get('/:jobId', protect, requirePermissions('view_jobs'), controller.getJob);
+router.get('/:jobId/applications', protect, requirePermissions('view_applications'), controller.listApplicationsForJob);
+router.post('/:jobId/applications', protect, applicationController.createApplication); // Workers can apply without special permission
+router.patch('/:jobId/status', protect, requirePermissions('edit_jobs'), controller.updateJobStatus);
+router.patch('/:jobId', protect, requirePermissions('edit_jobs'), controller.updateJob);
+router.post('/', protect, requirePermissions('create_jobs'), controller.createJob);
+router.post('/bulk', protect, requirePermissions('create_jobs'), controller.createJobsBulk);
+router.post('/applications/:applicationId/hire', protect, requirePermissions('hire_workers'), controller.hireApplicant);
 
 module.exports = router;

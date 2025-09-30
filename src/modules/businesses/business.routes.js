@@ -1,26 +1,30 @@
 const express = require('express');
 const controller = require('./business.controller');
 const { protect, restrictTo } = require('../../shared/middlewares/auth.middleware');
+const { requirePermissions } = require('../../shared/middlewares/permissionMiddleware');
 
 const router = express.Router();
 
 router.use(protect);
-router.get('/', controller.listBusinesses);
-router.post('/', restrictTo('employer'), controller.createBusiness);
-router.patch('/:businessId', restrictTo('employer'), controller.updateBusiness);
-router.delete('/:businessId', restrictTo('employer'), controller.deleteBusiness);
-router.post('/:businessId/select', restrictTo('employer'), controller.selectBusiness);
 
-router.get('/:businessId/team-members', restrictTo('employer'), controller.manageTeamMember.list);
-router.post('/:businessId/team-members', restrictTo('employer'), controller.manageTeamMember.create);
+// Business management routes with permission protection
+router.get('/', controller.listBusinesses); // No specific permission needed - users can see their businesses
+router.post('/', restrictTo('employer'), requirePermissions('create_business'), controller.createBusiness);
+router.patch('/:businessId', requirePermissions('edit_business'), controller.updateBusiness);
+router.delete('/:businessId', requirePermissions('delete_business'), controller.deleteBusiness);
+router.post('/:businessId/select', restrictTo('employer'), controller.selectBusiness); // No specific permission needed
+
+// Team management routes with permission protection
+router.get('/:businessId/team-members', requirePermissions(['view_applications', 'edit_team_members']), controller.manageTeamMember.list);
+router.post('/:businessId/team-members', requirePermissions('invite_team_members'), controller.manageTeamMember.create);
 router.patch(
   '/:businessId/team-members/:memberId',
-  restrictTo('employer'),
+  requirePermissions('edit_team_members'),
   controller.manageTeamMember.update
 );
 router.delete(
   '/:businessId/team-members/:memberId',
-  restrictTo('employer'),
+  requirePermissions('remove_team_members'),
   controller.manageTeamMember.remove
 );
 
