@@ -309,6 +309,66 @@ function hasAllPermissions(userPermissions, requiredPermissions) {
 }
 
 /**
+ * Get business ID from request context
+ */
+async function getBusinessIdFromRequest(req) {
+  try {
+    // 1. Check URL parameters first
+    if (req.params.businessId) {
+      return req.params.businessId;
+    }
+
+    // 2. Check if employerId parameter maps to a business
+    if (req.params.employerId) {
+      const business = await Business.findOne({ owner: req.params.employerId });
+      if (business) {
+        return business._id.toString();
+      }
+    }
+
+    // 3. Check body and query parameters
+    if (req.body.businessId) {
+      return req.body.businessId;
+    }
+    
+    if (req.query.businessId) {
+      return req.query.businessId;
+    }
+
+    // 4. Check headers
+    if (req.headers['x-business-id']) {
+      return req.headers['x-business-id'];
+    }
+
+    // 5. Use user's selected business
+    if (req.user && req.user.selectedBusiness) {
+      return req.user.selectedBusiness.toString();
+    }
+
+    // 6. If user is an employer, find their primary business
+    if (req.user && req.user.userType === 'employer') {
+      const business = await Business.findOne({ owner: req.user.id || req.user._id });
+      if (business) {
+        return business._id.toString();
+      }
+    }
+
+    // 7. For /me endpoints, try to find business by user ID
+    if (req.path.includes('/me') && req.user) {
+      const business = await Business.findOne({ owner: req.user.id || req.user._id });
+      if (business) {
+        return business._id.toString();
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error getting business ID from request:', error);
+    return null;
+  }
+}
+
+/**
  * Middleware to check if user has required permissions for an endpoint
  */
 function requirePermissions(permissions, options = {}) {
@@ -320,10 +380,7 @@ function requirePermissions(permissions, options = {}) {
       }
 
       // Get business ID from request
-      const businessId = req.params.businessId || 
-                        req.body.businessId || 
-                        req.query.businessId ||
-                        req.user.selectedBusinessId;
+      const businessId = await getBusinessIdFromRequest(req);
 
       if (!businessId && options.requireBusinessId !== false) {
         return next(new AppError('Business ID required', 400));
@@ -351,8 +408,9 @@ function requirePermissions(permissions, options = {}) {
         ));
       }
 
-      // Add permissions to request for use in controllers
+      // Add permissions and business ID to request for use in controllers
       req.userPermissions = userPermissions;
+      req.businessId = businessId;
       next();
     } catch (error) {
       console.error('Permission check error:', error);
@@ -393,8 +451,13 @@ function autoCheckPermissions(options = {}) {
  * Helper function to check permissions in controllers
  */
 async function checkUserPermission(userId, businessId, permission) {
-  const userPermissions = await getUserPermissions(userId, businessId);
-  return hasPermission(userPermissions, permission);
+  try {
+    const userPermissions = await getUserPermissions(userId, businessId);
+    return hasPermission(userPermissions, permission);
+  } catch (error) {
+    console.error('Error checking user permission:', error);
+    return false;
+  }
 }
 
 /**
@@ -422,6 +485,7 @@ module.exports = {
   ROLE_PERMISSIONS,
   ENDPOINT_PERMISSIONS,
   getUserPermissions,
+  getBusinessIdFromRequest,
   hasPermission,
   hasAnyPermission,
   hasAllPermissions,
