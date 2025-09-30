@@ -13,7 +13,7 @@ router.get('/timeline/worker/:workerId', requirePermissions('view_attendance'), 
 router.get('/employed-on/:date', requirePermissions('view_attendance'), controller.getWorkersEmployedOnDate);
 
 // Attendance management routes with permission protection
-router.get('/management', requirePermissions('manage_attendance'), controller.getManagementView);
+router.get('/management', requirePermissions('view_attendance'), controller.getManagementView);
 router.get('/', requirePermissions('view_attendance'), controller.listAttendance);
 router.post('/', requirePermissions('create_schedules'), controller.scheduleAttendance);
 router.post('/:recordId/clock-in', controller.clockIn); // Workers can clock in without special permission

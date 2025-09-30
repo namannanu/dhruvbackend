@@ -249,7 +249,7 @@ async function getUserPermissions(userId, businessId) {
   try {
     // First check if user is the business owner
     const business = await Business.findById(businessId);
-    if (business && business.ownerId && business.ownerId.toString() === userId.toString()) {
+    if (business && business.owner && business.owner.toString() === userId.toString()) {
       return Object.keys(ALL_PERMISSIONS); // Owner gets all permissions
     }
 
