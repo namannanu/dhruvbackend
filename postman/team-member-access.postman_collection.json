@@ -1,0 +1,222 @@
+{
+  "info": {
+    "name": "Team Member Access",
+    "_postman_id": "f8f6fd0d-4d33-4edc-93b8-5c7f6aab7d1d",
+    "description": "Collection to exercise team-member flows (login, fetch businesses, jobs, and applications) with X-Business-Id headers.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth - Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/auth/login",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{login_email}}\",\n  \"password\": \"{{login_password}}\"\n}"
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Login succeeded', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "const json = pm.response.json();",
+              "if (json && json.token) {",
+              "  pm.collectionVariables.set('token', json.token);",
+              "}",
+              "",
+              "const selectedBusiness = json?.data?.user?.selectedBusiness || json?.data?.employerProfile?.defaultBusiness?._id;",
+              "if (selectedBusiness) {",
+              "  pm.collectionVariables.set('business_id', selectedBusiness);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Businesses - List Accessible",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/businesses",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "businesses"
+          ]
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Fetched businesses', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "const data = pm.response.json();",
+              "if (Array.isArray(data?.data) && data.data.length > 0) {",
+              "  const firstBiz = data.data[0];",
+              "  pm.collectionVariables.set('business_id', firstBiz.id || firstBiz._id || pm.collectionVariables.get('business_id'));",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Team - List Members",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "X-Business-Id",
+            "value": "{{business_id}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/businesses/{{business_id}}/team-members",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "businesses",
+            "{{business_id}}",
+            "team-members"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Jobs - List by Business",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "X-Business-Id",
+            "value": "{{business_id}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/jobs?businessId={{business_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "jobs"
+          ],
+          "query": [
+            {
+              "key": "businessId",
+              "value": "{{business_id}}"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Employer Applications - List",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "X-Business-Id",
+            "value": "{{business_id}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/employers/me/applications?businessId={{business_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "employers",
+            "me",
+            "applications"
+          ],
+          "query": [
+            {
+              "key": "businessId",
+              "value": "{{business_id}}"
+            }
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://dhruvbackend.vercel.app"
+    },
+    {
+      "key": "login_email",
+      "value": ""
+    },
+    {
+      "key": "login_password",
+      "value": ""
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "business_id",
+      "value": ""
+    }
+  ]
+}
