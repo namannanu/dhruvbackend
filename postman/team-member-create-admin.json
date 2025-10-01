@@ -1,0 +1,19 @@
+{
+  "name": "John Smith",
+  "email": "john.smith@example.com",
+  "role": "admin",
+  "permissions": [
+    "post_jobs",
+    "hire_workers",
+    "view_applications",
+    "manage_schedules",
+    "manage_payments",
+    "view_analytics",
+    "invite_team_members",
+    "edit_team_members",
+    "view_team_members",
+    "manage_team_members",
+    "remove_team_members",
+    "manage_permissions"
+  ]
+}

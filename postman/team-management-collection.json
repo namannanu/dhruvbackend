@@ -1,0 +1,189 @@
+{
+  "info": {
+    "name": "Team Management API Tests",
+    "description": "Testing team member creation, updating, and management",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://dhruvbackend.vercel.app",
+      "type": "string"
+    },
+    {
+      "key": "businessId",
+      "value": "68d7d7b32d372a364f7e3781",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "YOUR_JWT_TOKEN_HERE",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Create Team Member - Admin",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{authToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"John Smith\",\n  \"email\": \"john.smith@example.com\",\n  \"role\": \"admin\",\n  \"permissions\": [\n    \"post_jobs\",\n    \"hire_workers\",\n    \"view_applications\",\n    \"manage_schedules\",\n    \"manage_payments\",\n    \"view_analytics\",\n    \"invite_team_members\",\n    \"edit_team_members\",\n    \"view_team_members\",\n    \"manage_team_members\",\n    \"remove_team_members\",\n    \"manage_permissions\"\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/businesses/{{businessId}}/team-members",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "businesses", "{{businessId}}", "team-members"]
+        }
+      }
+    },
+    {
+      "name": "Create Team Member - Role Based (Admin)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{authToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Sarah Johnson\",\n  \"email\": \"sarah.johnson@example.com\",\n  \"role\": \"admin\",\n  \"permissions\": []\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/businesses/{{businessId}}/team-members",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "businesses", "{{businessId}}", "team-members"]
+        }
+      }
+    },
+    {
+      "name": "Create Team Member - Manager",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{authToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Jane Doe\",\n  \"email\": \"jane.doe@example.com\",\n  \"role\": \"manager\",\n  \"permissions\": [\n    \"post_jobs\",\n    \"view_applications\",\n    \"manage_schedules\",\n    \"view_team_members\",\n    \"view_analytics\"\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/businesses/{{businessId}}/team-members",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "businesses", "{{businessId}}", "team-members"]
+        }
+      }
+    },
+    {
+      "name": "Get All Team Members",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{authToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/businesses/{{businessId}}/team-members",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "businesses", "{{businessId}}", "team-members"]
+        }
+      }
+    },
+    {
+      "name": "Update Team Member Permissions",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{authToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"permissions\": []\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/businesses/{{businessId}}/team-members/TEAM_MEMBER_ID",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "businesses", "{{businessId}}", "team-members", "TEAM_MEMBER_ID"]
+        }
+      }
+    },
+    {
+      "name": "Get User Permissions",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{authToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/permissions?businessId={{businessId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "permissions"],
+          "query": [
+            {
+              "key": "businessId",
+              "value": "{{businessId}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Get User Team Member Info",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{authToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/team-member?businessId={{businessId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "team-member"],
+          "query": [
+            {
+              "key": "businessId",
+              "value": "{{businessId}}"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

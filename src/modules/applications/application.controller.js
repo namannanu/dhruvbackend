@@ -4,6 +4,7 @@ const WorkerProfile = require('../workers/workerProfile.model');
 const User = require('../users/user.model');
 const catchAsync = require('../../shared/utils/catchAsync');
 const AppError = require('../../shared/utils/appError');
+const { ensureBusinessAccess } = require('../../shared/utils/businessAccess');
 
 const APPLICATION_FREE_QUOTA = 3;
 
@@ -105,9 +106,16 @@ exports.updateApplication = catchAsync(async (req, res, next) => {
     return res.status(200).json({ status: 'success', data: updatedApplication });
   }
   if (req.user.userType === 'employer') {
-    if (application.job.employer.toString() !== req.user._id.toString()) {
-      return next(new AppError('You can only update applications for your jobs', 403));
+    if (!application.job) {
+      return next(new AppError('Job information missing for application', 400));
     }
+
+    await ensureBusinessAccess({
+      user: req.user,
+      businessId: application.job.business,
+      requiredPermissions: 'manage_applications',
+    });
+
     if (!['pending', 'hired', 'rejected'].includes(req.body.status)) {
       return next(new AppError('Invalid status', 400));
     }

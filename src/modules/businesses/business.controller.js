@@ -3,24 +3,22 @@ const TeamMember = require('./teamMember.model');
 const User = require('../users/user.model');
 const catchAsync = require('../../shared/utils/catchAsync');
 const AppError = require('../../shared/utils/appError');
-
-const ensureOwner = async (userId, businessId) => {
-  const business = await Business.findById(businessId);
-  if (!business) {
-    throw new AppError('Business not found', 404);
-  }
-  if (business.owner.toString() !== userId.toString()) {
-    throw new AppError('You do not own this business', 403);
-  }
-  return business;
-};
+const {
+  ensureBusinessAccess,
+  getAccessibleBusinessIds,
+} = require('../../shared/utils/businessAccess');
 
 exports.listBusinesses = catchAsync(async (req, res) => {
   let filter = {};
 
   if (req.user.userType === 'employer') {
-    // Employers can ONLY see their own businesses
-    filter.owner = req.user._id;
+    const accessibleIds = await getAccessibleBusinessIds(req.user);
+
+    if (!accessibleIds.size) {
+      return res.status(200).json({ status: 'success', results: 0, data: [] });
+    }
+
+    filter._id = { $in: Array.from(accessibleIds) };
   } else if (req.user.userType === 'admin' && req.query.ownerId) {
     // Admins can query any employer’s businesses
     filter.owner = req.query.ownerId;
@@ -50,16 +48,26 @@ exports.createBusiness = catchAsync(async (req, res) => {
 });
 
 exports.updateBusiness = catchAsync(async (req, res) => {
-  const business = await ensureOwner(req.user._id, req.params.businessId);
+  const { business } = await ensureBusinessAccess({
+    user: req.user,
+    businessId: req.params.businessId,
+    requiredPermissions: 'edit_business',
+  });
+
   Object.assign(business, req.body);
   await business.save();
   res.status(200).json({ status: 'success', data: business });
 });
 
 exports.deleteBusiness = catchAsync(async (req, res) => {
-  const business = await ensureOwner(req.user._id, req.params.businessId);
+  const { business, isOwner } = await ensureBusinessAccess({
+    user: req.user,
+    businessId: req.params.businessId,
+    requiredPermissions: 'delete_business',
+  });
+
   const totalBusinesses = await Business.countDocuments({ owner: req.user._id });
-  if (totalBusinesses <= 1) {
+  if (isOwner && totalBusinesses <= 1) {
     throw new AppError('Employers must keep at least one business location', 400);
   }
   await business.deleteOne();
@@ -68,7 +76,11 @@ exports.deleteBusiness = catchAsync(async (req, res) => {
 });
 
 exports.selectBusiness = catchAsync(async (req, res) => {
-  const business = await ensureOwner(req.user._id, req.params.businessId);
+  const { business } = await ensureBusinessAccess({
+    user: req.user,
+    businessId: req.params.businessId,
+    requiredPermissions: 'view_business_profile',
+  });
   req.user.selectedBusiness = business._id;
   await req.user.save();
   res.status(200).json({ status: 'success', data: { selectedBusiness: business } });
@@ -76,12 +88,20 @@ exports.selectBusiness = catchAsync(async (req, res) => {
 
 exports.manageTeamMember = {
   list: catchAsync(async (req, res) => {
-    const business = await ensureOwner(req.user._id, req.params.businessId);
+    const { business } = await ensureBusinessAccess({
+      user: req.user,
+      businessId: req.params.businessId,
+      requiredPermissions: 'view_team_members',
+    });
     const members = await TeamMember.find({ business: business._id }).populate('user', 'firstName lastName email phone');
     res.status(200).json({ status: 'success', data: members });
   }),
   create: catchAsync(async (req, res) => {
-    const business = await ensureOwner(req.user._id, req.params.businessId);
+    const { business } = await ensureBusinessAccess({
+      user: req.user,
+      businessId: req.params.businessId,
+      requiredPermissions: 'invite_team_members',
+    });
     
     console.log('🔄 Creating team member with request body:', req.body);
     
@@ -144,7 +164,11 @@ exports.manageTeamMember = {
     res.status(201).json({ status: 'success', data: member });
   }),
   update: catchAsync(async (req, res) => {
-    const business = await ensureOwner(req.user._id, req.params.businessId);
+    const { business } = await ensureBusinessAccess({
+      user: req.user,
+      businessId: req.params.businessId,
+      requiredPermissions: 'edit_team_members',
+    });
     const member = await TeamMember.findOneAndUpdate(
       { business: business._id, _id: req.params.memberId },
       req.body,
@@ -156,7 +180,11 @@ exports.manageTeamMember = {
     res.status(200).json({ status: 'success', data: member });
   }),
   remove: catchAsync(async (req, res) => {
-    const business = await ensureOwner(req.user._id, req.params.businessId);
+    const { business } = await ensureBusinessAccess({
+      user: req.user,
+      businessId: req.params.businessId,
+      requiredPermissions: 'remove_team_members',
+    });
     const deleted = await TeamMember.findOneAndDelete({
       business: business._id,
       _id: req.params.memberId

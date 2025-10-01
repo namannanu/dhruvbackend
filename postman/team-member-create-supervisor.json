@@ -1,0 +1,10 @@
+{
+  "name": "Bob Wilson",
+  "email": "bob.wilson@example.com",
+  "role": "supervisor",
+  "permissions": [
+    "view_jobs",
+    "view_applications",
+    "manage_schedules"
+  ]
+}

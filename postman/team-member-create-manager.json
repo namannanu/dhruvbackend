@@ -1,0 +1,12 @@
+{
+  "name": "Jane Doe",
+  "email": "jane.doe@example.com",
+  "role": "manager",
+  "permissions": [
+    "post_jobs",
+    "view_applications",
+    "manage_schedules",
+    "view_team_members",
+    "view_analytics"
+  ]
+}

@@ -8,6 +8,10 @@ const WorkerEmployment = require('../workers/workerEmployment.model');
 const catchAsync = require('../../shared/utils/catchAsync');
 const AppError = require('../../shared/utils/appError');
 const { haversine } = require('../../shared/utils/distance');
+const {
+  ensureBusinessAccess,
+  getAccessibleBusinessIds,
+} = require('../../shared/utils/businessAccess');
 
 const JOB_FREE_QUOTA = 20000;///////               change to 2
 
@@ -31,11 +35,24 @@ exports.listJobs = catchAsync(async (req, res) => {
     filter.status = 'active';
     filter.employer = { $ne: req.user._id }; // Exclude jobs posted by the worker themselves
   } else if (req.user.userType === 'employer') {
-    // For employers, show their own jobs by default, or all if specifically requested
-    if (req.query.employerId) {
+    // For employers and team members, limit jobs to accessible businesses
+    const accessibleBusinesses = await getAccessibleBusinessIds(req.user);
+
+    if (!accessibleBusinesses.size) {
+      return res.status(200).json({ status: 'success', results: 0, data: [] });
+    }
+
+    if (req.query.businessId) {
+      if (!accessibleBusinesses.has(req.query.businessId)) {
+        return res.status(200).json({ status: 'success', results: 0, data: [] });
+      }
+      filter.business = req.query.businessId;
+    } else {
+      filter.business = { $in: Array.from(accessibleBusinesses) };
+    }
+
+    if (req.query.employerId && req.query.employerId !== req.user._id.toString()) {
       filter.employer = req.query.employerId;
-    } else if (!req.query.all) {
-      filter.employer = req.user._id; // Show only their own jobs
     }
   }
   
@@ -94,41 +111,47 @@ exports.createJob = catchAsync(async (req, res, next) => {
     return next(new AppError('Only employers can create jobs', 403));
   }
 
-  if (!req.user.premium && req.user.freeJobsPosted >= JOB_FREE_QUOTA) {
-    return next(
-      new AppError('Free job posting quota reached. Please upgrade to continue.', 402)
-    );
-  }
-
   const businessId = req.body.business || req.user.selectedBusiness;
   if (!businessId) {
     return next(new AppError('Business must be specified for job postings', 400));
   }
 
-  const business = await Business.findById(businessId);
-  if (!business || business.owner.toString() !== req.user._id.toString()) {
-    return next(new AppError('Invalid business selection', 400));
+  const { business } = await ensureBusinessAccess({
+    user: req.user,
+    businessId,
+    requiredPermissions: 'create_jobs',
+  });
+
+  const ownerUser = await User.findById(business.owner);
+  if (!ownerUser) {
+    return next(new AppError('Business owner not found for job creation', 400));
+  }
+
+  if (!ownerUser.premium && ownerUser.freeJobsPosted >= JOB_FREE_QUOTA) {
+    return next(
+      new AppError('Free job posting quota reached. Please upgrade to continue.', 402)
+    );
   }
 
   const job = await Job.create({
     ...req.body,
-    employer: req.user._id,
-    business: businessId,
-    premiumRequired: !req.user.premium && req.user.freeJobsPosted >= 3
+    employer: business.owner,
+    business: business._id,
+    premiumRequired: !ownerUser.premium && ownerUser.freeJobsPosted >= 3
   });
 
   business.stats.jobsPosted += 1;
   await business.save();
 
-  const employerProfile = await EmployerProfile.findOne({ user: req.user._id });
+  const employerProfile = await EmployerProfile.findOne({ user: business.owner });
   if (employerProfile) {
     employerProfile.totalJobsPosted += 1;
     await employerProfile.save();
   }
 
-  if (!req.user.premium) {
-    req.user.freeJobsPosted += 1;
-    await req.user.save();
+  if (!ownerUser.premium) {
+    ownerUser.freeJobsPosted += 1;
+    await ownerUser.save();
   }
 
   res.status(201).json({ status: 'success', data: job });
@@ -144,17 +167,44 @@ exports.createJobsBulk = catchAsync(async (req, res, next) => {
   }
 
   const cost = jobsPayload.length * 50;
-  const createdJobs = await Job.insertMany(
-    jobsPayload.map((job) => ({
-      ...job,
-      employer: req.user._id,
-      status: job.status || 'active'
-    }))
-  );
+  const preparedJobs = [];
 
-  await EmployerProfile.updateOne(
-    { user: req.user._id },
-    { $inc: { totalJobsPosted: createdJobs.length } }
+  for (const job of jobsPayload) {
+    const businessId = job.business || req.user.selectedBusiness;
+    if (!businessId) {
+      return next(new AppError('Each job must specify a business', 400));
+    }
+
+    const { business } = await ensureBusinessAccess({
+      user: req.user,
+      businessId,
+      requiredPermissions: 'create_jobs',
+    });
+
+    preparedJobs.push({
+      ...job,
+      employer: business.owner,
+      business: business._id,
+      status: job.status || 'active',
+    });
+  }
+
+  const createdJobs = await Job.insertMany(preparedJobs);
+
+  const ownerIncrements = createdJobs.reduce((acc, job) => {
+    const ownerId = job.employer?.toString();
+    if (!ownerId) return acc;
+    acc[ownerId] = (acc[ownerId] || 0) + 1;
+    return acc;
+  }, {});
+
+  await Promise.all(
+    Object.entries(ownerIncrements).map(([ownerId, count]) =>
+      EmployerProfile.updateOne(
+        { user: ownerId },
+        { $inc: { totalJobsPosted: count } }
+      )
+    )
   );
 
   res.status(201).json({ status: 'success', data: { jobs: createdJobs, totalCost: cost } });
@@ -165,9 +215,11 @@ exports.updateJob = catchAsync(async (req, res, next) => {
   if (!job) {
     return next(new AppError('Job not found', 404));
   }
-  if (job.employer.toString() !== req.user._id.toString()) {
-    return next(new AppError('You can only update your own jobs', 403));
-  }
+  await ensureBusinessAccess({
+    user: req.user,
+    businessId: job.business,
+    requiredPermissions: 'edit_jobs',
+  });
   Object.assign(job, req.body);
   await job.save();
   res.status(200).json({ status: 'success', data: job });
@@ -178,9 +230,11 @@ exports.updateJobStatus = catchAsync(async (req, res, next) => {
   if (!job) {
     return next(new AppError('Job not found', 404));
   }
-  if (job.employer.toString() !== req.user._id.toString()) {
-    return next(new AppError('You can only update your own jobs', 403));
-  }
+  await ensureBusinessAccess({
+    user: req.user,
+    businessId: job.business,
+    requiredPermissions: 'edit_jobs',
+  });
   job.status = req.body.status;
   await job.save();
   res.status(200).json({ status: 'success', data: job });
@@ -191,9 +245,16 @@ exports.listApplicationsForJob = catchAsync(async (req, res, next) => {
   if (!job) {
     return next(new AppError('Job not found', 404));
   }
-  if (req.user.userType !== 'employer' || job.employer.toString() !== req.user._id.toString()) {
+  if (req.user.userType !== 'employer') {
     return next(new AppError('Not authorized to view applications for this job', 403));
   }
+
+  await ensureBusinessAccess({
+    user: req.user,
+    businessId: job.business,
+    requiredPermissions: 'view_applications',
+  });
+
   const applications = await Application.find({ job: job._id })
     .populate('worker')
     .sort({ createdAt: -1 });

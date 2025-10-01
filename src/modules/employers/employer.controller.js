@@ -8,18 +8,75 @@ const WorkerEmployment = require('../workers/workerEmployment.model');
 const WorkerProfile = require('../workers/workerProfile.model');
 const catchAsync = require('../../shared/utils/catchAsync');
 const AppError = require('../../shared/utils/appError');
+const {
+  ensureBusinessAccess,
+  getAccessibleBusinessIds,
+} = require('../../shared/utils/businessAccess');
 
-const ensureEmployer = (req, employerId) => {
+const ensureEmployer = async (req, employerId) => {
   if (req.user.userType !== 'employer') {
     throw new AppError('Only employers can perform this action', 403);
   }
-  if (employerId && req.user._id.toString() !== employerId.toString()) {
+
+  if (!employerId || req.user._id.toString() === employerId.toString()) {
+    return req.user._id.toString();
+  }
+
+  const accessible = await getAccessibleBusinessIds(req.user);
+  if (!accessible.size) {
     throw new AppError('You can only access your own employer data', 403);
   }
+
+  const business = await Business.findOne({
+    _id: { $in: Array.from(accessible) },
+    owner: employerId,
+  }).select('_id');
+
+  if (!business) {
+    throw new AppError('You can only access your own employer data', 403);
+  }
+
+  return employerId.toString();
+};
+
+const resolveEmployerContext = async (req, { requiredPermissions } = {}) => {
+  const bodyBusinessId =
+    req.body && typeof req.body === 'object' ? req.body.businessId : undefined;
+
+  const businessId =
+    req.businessId ||
+    req.params.businessId ||
+    req.query.businessId ||
+    bodyBusinessId ||
+    req.user.selectedBusiness;
+
+  if (businessId) {
+    const access = await ensureBusinessAccess({
+      user: req.user,
+      businessId,
+      requiredPermissions,
+    });
+
+    return {
+      business: access.business,
+      employerId: access.business.owner.toString(),
+      isOwner: access.isOwner,
+    };
+  }
+
+  const employerId = await ensureEmployer(
+    req,
+    req.params.employerId || req.user._id.toString()
+  );
+
+  return { business: null, employerId, isOwner: req.user._id.toString() === employerId };
 };
 
 exports.getEmployerProfile = catchAsync(async (req, res, next) => {
-  const employerId = req.params.employerId || req.user._id;
+  const { employerId } = await resolveEmployerContext(req, {
+    requiredPermissions: 'view_business_profile',
+  });
+
   const profile = await EmployerProfile.findOne({ user: employerId }).populate('defaultBusiness');
   if (!profile) {
     return next(new AppError('Employer profile not found', 404));
@@ -28,7 +85,9 @@ exports.getEmployerProfile = catchAsync(async (req, res, next) => {
 });
 
 exports.updateEmployerProfile = catchAsync(async (req, res, next) => {
-  ensureEmployer(req, req.params.employerId || req.user._id);
+  const { employerId } = await resolveEmployerContext(req, {
+    requiredPermissions: 'edit_business_profile',
+  });
   const updates = ['companyName', 'description', 'phone'];
   const payload = updates.reduce((acc, key) => {
     if (req.body[key] !== undefined) {
@@ -37,7 +96,7 @@ exports.updateEmployerProfile = catchAsync(async (req, res, next) => {
     return acc;
   }, {});
   const profile = await EmployerProfile.findOneAndUpdate(
-    { user: req.user._id },
+    { user: employerId },
     payload,
     { new: true }
   );
@@ -45,18 +104,30 @@ exports.updateEmployerProfile = catchAsync(async (req, res, next) => {
 });
 
 exports.getDashboard = catchAsync(async (req, res, next) => {
-  ensureEmployer(req, req.params.employerId || req.user._id);
-  const employerId = req.params.employerId || req.user._id;
+  const { business, employerId } = await resolveEmployerContext(req, {
+    requiredPermissions: 'view_dashboard',
+  });
+
+  const jobFilter = business
+    ? { business: business._id }
+    : { employer: employerId };
+
+  const businessFilter = business ? { _id: business._id } : { owner: employerId };
+  const attendanceFilter = business
+    ? { business: business._id }
+    : { employer: employerId };
 
   const [jobs, applications, businesses, attendance] = await Promise.all([
-    Job.find({ employer: employerId }).sort({ createdAt: -1 }).limit(10),
+    Job.find(jobFilter).sort({ createdAt: -1 }).limit(10),
     Application.find()
       .populate('job')
       .populate('worker')
       .where('job')
-      .in(await Job.find({ employer: employerId }).distinct('_id')),
-    Business.find({ owner: employerId }),
-    AttendanceRecord.find({ employer: employerId }).sort({ scheduledStart: -1 }).limit(10)
+      .in(await Job.find(jobFilter).distinct('_id')),
+    Business.find(businessFilter),
+    AttendanceRecord.find(attendanceFilter)
+      .sort({ scheduledStart: -1 })
+      .limit(10),
   ]);
 
   const totalJobs = jobs.length;
@@ -83,13 +154,16 @@ exports.getDashboard = catchAsync(async (req, res, next) => {
 });
 
 exports.listEmployerApplications = catchAsync(async (req, res, next) => {
-  const employerId = req.params.employerId || req.user._id;
-  ensureEmployer(req, employerId);
+  const { business, employerId } = await resolveEmployerContext(req, {
+    requiredPermissions: 'view_applications',
+  });
 
   const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
 
-  const jobFilter = { employer: employerId };
+  const jobFilter = business
+    ? { business: business._id }
+    : { employer: employerId };
   if (req.query.businessId) {
     jobFilter.business = req.query.businessId;
   }

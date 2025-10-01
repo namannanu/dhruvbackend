@@ -6,6 +6,10 @@ const WorkerEmployment = require('../workers/workerEmployment.model');
 const Application = require('../applications/application.model');
 const AppError = require('../../shared/utils/appError');
 const catchAsync = require('../../shared/utils/catchAsync');
+const {
+  ensureBusinessAccess,
+  getAccessibleBusinessIds,
+} = require('../../shared/utils/businessAccess');
 
 const HOURS_IN_MS = 1000 * 60 * 60;
 
@@ -107,6 +111,36 @@ const buildLocationLabel = (record) => {
     return fromJob;
   }
   return 'Location TBD';
+};
+
+const getRecordBusinessId = (record) => {
+  if (!record) {
+    return null;
+  }
+  if (record.business) {
+    return toIdString(record.business);
+  }
+  if (record.job && record.job.business) {
+    return toIdString(record.job.business);
+  }
+  return null;
+};
+
+const ensureAttendancePermission = async (req, record, requiredPermissions) => {
+  if (req.user.userType !== 'employer') {
+    throw new AppError('Only employers can manage attendance records', 403);
+  }
+
+  const businessId = getRecordBusinessId(record);
+  if (!businessId) {
+    throw new AppError('Attendance record is missing business information', 400);
+  }
+
+  await ensureBusinessAccess({
+    user: req.user,
+    businessId,
+    requiredPermissions,
+  });
 };
 
 const resolveHourlyRate = (record) => {
@@ -285,6 +319,13 @@ exports.scheduleAttendance = catchAsync(async (req, res, next) => {
   if (!job) {
     return next(new AppError('Job not found', 404));
   }
+
+  await ensureBusinessAccess({
+    user: req.user,
+    businessId: job.business,
+    requiredPermissions: 'manage_attendance',
+  });
+
   const worker = await User.findById(req.body.worker);
   if (!worker) {
     return next(new AppError('Worker not found', 404));
@@ -295,7 +336,7 @@ exports.scheduleAttendance = catchAsync(async (req, res, next) => {
   const locationSnapshot = req.body.locationSnapshot || pickJobLocationSnapshot(job);
   const record = await AttendanceRecord.create({
     ...req.body,
-    employer: req.user._id,
+    employer: job.employer,
     business: job.business,
     hourlyRate,
     workerNameSnapshot,
@@ -395,12 +436,12 @@ exports.getManagementView = catchAsync(async (req, res, next) => {
   if (!req.query.date) {
     return next(new AppError('The date query parameter is required', 400));
   }
+  const { businessId } = req.query;
   const range = buildDayRange(req.query.date);
   if (!range) {
     return next(new AppError('Invalid date parameter', 400));
   }
   const filter = {
-    employer: req.user._id,
     scheduledStart: { $gte: range.start, $lte: range.end }
   };
   if (req.query.status && req.query.status !== 'all') {
@@ -414,6 +455,22 @@ exports.getManagementView = catchAsync(async (req, res, next) => {
   }
   if (req.query.businessId) {
     filter.business = req.query.businessId;
+  }
+
+  if (req.user.userType === 'employer') {
+    const accessibleBusinesses = await getAccessibleBusinessIds(req.user);
+
+    if (!accessibleBusinesses.size) {
+      return res.status(200).json({ status: 'success', data: [], results: 0 });
+    }
+
+    if (businessId && !accessibleBusinesses.has(businessId)) {
+      return res.status(200).json({ status: 'success', data: [], results: 0 });
+    }
+
+    if (!filter.business) {
+      filter.business = { $in: Array.from(accessibleBusinesses) };
+    }
   }
   const records = await AttendanceRecord.find(filter)
     .populate([
@@ -438,9 +495,7 @@ exports.markComplete = catchAsync(async (req, res, next) => {
   if (!record) {
     return next(new AppError('Attendance record not found', 404));
   }
-  if (record.employer?.toString() !== req.user._id.toString()) {
-    return next(new AppError('Only the owning employer can update this record', 403));
-  }
+  await ensureAttendancePermission(req, record, 'manage_attendance');
   if (!record.clockInAt) {
     return next(new AppError('Clock in before marking complete', 400));
   }
@@ -492,9 +547,7 @@ exports.updateHours = catchAsync(async (req, res, next) => {
   if (!record) {
     return next(new AppError('Attendance record not found', 404));
   }
-  if (record.employer?.toString() !== req.user._id.toString()) {
-    return next(new AppError('Only the owning employer can update this record', 403));
-  }
+  await ensureAttendancePermission(req, record, 'manage_attendance');
   await record.populate([
     { path: 'job', select: 'title hourlyRate location' },
     { path: 'worker', select: 'firstName lastName email' }
@@ -531,9 +584,7 @@ exports.updateAttendance = catchAsync(async (req, res, next) => {
   if (!record) {
     return next(new AppError('Attendance record not found', 404));
   }
-  if (req.user.userType !== 'employer' || record.employer?.toString() !== req.user._id.toString()) {
-    return next(new AppError('Only the owning employer can update attendance', 403));
-  }
+  await ensureAttendancePermission(req, record, 'manage_attendance');
   Object.assign(record, req.body);
   await record.save();
   res.status(200).json({ status: 'success', data: record });
