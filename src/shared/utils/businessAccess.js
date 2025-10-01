@@ -1,6 +1,9 @@
 const AppError = require('./appError');
 const Business = require('../../modules/businesses/business.model');
 const TeamMember = require('../../modules/businesses/teamMember.model');
+const {
+  ROLE_PERMISSIONS,
+} = require('../middlewares/permissionMiddleware');
 
 const normalizeId = (value) => {
   if (!value) return null;
@@ -61,10 +64,22 @@ async function ensureBusinessAccess({
   }
 
   const permissionsToCheck = normalizePermissions(requiredPermissions);
-  if (permissionsToCheck.length) {
+  const role = (teamMember.role || '').toLowerCase();
+  const hasFullRoleAccess = role === 'owner' || role === 'admin';
+  const rolePermissions = Array.isArray(ROLE_PERMISSIONS?.[role])
+    ? ROLE_PERMISSIONS[role]
+    : [];
+
+  if (permissionsToCheck.length && !hasFullRoleAccess) {
+    const permissionSet = new Set([
+      ...(teamMember.permissions || []),
+      ...rolePermissions,
+    ]);
+
     const missing = permissionsToCheck.filter(
-      (permission) => !teamMember.permissions.includes(permission)
+      (permission) => !permissionSet.has(permission)
     );
+
     if (missing.length) {
       throw new AppError('Insufficient permissions for this business', 403);
     }
