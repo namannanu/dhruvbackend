@@ -20,6 +20,7 @@ const corsOptions = {
     'Accept',
     'Origin',
     'X-Requested-With',
+    'X-Business-Id',
     'Access-Control-Allow-Headers',
     'Access-Control-Request-Method',
     'Access-Control-Request-Headers',
@@ -49,7 +50,7 @@ app.use(cors(corsOptions));
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With, X-Business-Id');
   res.header('Access-Control-Allow-Credentials', 'true');
   
   // Handle preflight
