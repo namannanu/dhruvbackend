@@ -19,7 +19,22 @@ const employerProfileSchema = new mongoose.Schema(
       ref: 'Business'
     }
   },
-  { timestamps: true }
+  { 
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
+  }
 );
+
+// Virtual to access userId through user reference
+employerProfileSchema.virtual('userId', {
+  ref: 'User',
+  localField: 'user',
+  foreignField: '_id',
+  justOne: true,
+  get: function() {
+    return this.user?.userId;
+  }
+});
 
 module.exports = mongoose.model('EmployerProfile', employerProfileSchema);

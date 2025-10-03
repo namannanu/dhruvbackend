@@ -1019,6 +1019,442 @@
           }
         }
       ]
+    },
+    {
+      "name": "Team Management",
+      "description": "Manage team access and permissions for userId-based data management. Grant access to admins/staff to manage your data.",
+      "item": [
+        {
+          "name": "Grant Team Access",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetUserId\": \"{{managerId}}\",\n  \"managedUserId\": \"{{userId}}\",\n  \"role\": \"manager\",\n  \"permissions\": {\n    \"canCreateJobs\": true,\n    \"canEditJobs\": true,\n    \"canViewJobs\": true,\n    \"canHireWorkers\": true,\n    \"canCreateAttendance\": true,\n    \"canViewAttendance\": true\n  },\n  \"restrictions\": {\n    \"startDate\": \"2025-10-01\",\n    \"endDate\": \"2025-12-31\"\n  },\n  \"expiresAt\": \"2025-12-31T23:59:59.000Z\",\n  \"reason\": \"Temporary manager access for Q4 operations\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/team/grant-access",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "team",
+                "grant-access"
+              ]
+            },
+            "description": "Grant team access to another user to manage your data. Allows delegation of job, attendance, and application management."
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"targetUserId\": \"manager123\",\n  \"managedUserId\": \"A1B2C3D4\",\n  \"role\": \"manager\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/team/grant-access",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["team", "grant-access"]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"status\": \"success\",\n  \"message\": \"manager access granted successfully\",\n  \"data\": {\n    \"teamAccess\": {\n      \"_id\": \"team_access_123\",\n      \"managedUserId\": \"A1B2C3D4\",\n      \"role\": \"manager\",\n      \"status\": \"active\",\n      \"permissions\": {\n        \"canCreateJobs\": true,\n        \"canEditJobs\": true,\n        \"canViewJobs\": true,\n        \"canHireWorkers\": true\n      }\n    },\n    \"summary\": {\n      \"grantedTo\": \"Jane Manager\",\n      \"managedUserData\": \"Miguel Johnson (A1B2C3D4)\",\n      \"role\": \"manager\"\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "List My Team Members",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/team/my-team",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "team",
+                "my-team"
+              ]
+            },
+            "description": "List all team members who have access to manage my data."
+          }
+        },
+        {
+          "name": "List My Managed Access",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/team/my-access",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "team",
+                "my-access"
+              ]
+            },
+            "description": "List all userIds I have been granted access to manage."
+          }
+        },
+        {
+          "name": "Check Team Access",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/team/check-access/{{userId}}?permission=canCreateJobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "team",
+                "check-access",
+                "{{userId}}"
+              ],
+              "query": [
+                {
+                  "key": "permission",
+                  "value": "canCreateJobs",
+                  "description": "Specific permission to check"
+                }
+              ]
+            },
+            "description": "Check if I have access to manage data for a specific userId and permission."
+          }
+        },
+        {
+          "name": "Update Team Permissions",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"staff\",\n  \"permissions\": {\n    \"canCreateJobs\": false,\n    \"canEditJobs\": false,\n    \"canViewJobs\": true,\n    \"canViewAttendance\": true\n  },\n  \"expiresAt\": \"2025-11-30T23:59:59.000Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/team/access/{{teamAccessId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "team",
+                "access",
+                "{{teamAccessId}}"
+              ]
+            },
+            "description": "Update permissions and settings for an existing team access grant."
+          }
+        },
+        {
+          "name": "Revoke Team Access",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Project completed, access no longer needed\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/team/access/{{teamAccessId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "team",
+                "access",
+                "{{teamAccessId}}"
+              ]
+            },
+            "description": "Revoke team access for a user."
+          }
+        },
+        {
+          "name": "Get Access Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/team/report/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "team",
+                "report",
+                "{{userId}}"
+              ]
+            },
+            "description": "Get comprehensive access report showing all team members with access to a userId's data."
+          }
+        }
+      ]
+    },
+    {
+      "name": "User Data by UserId (Public)",
+      "description": "Public endpoints to fetch comprehensive user data using randomly generated userId. No authentication required.",
+      "item": [
+        {
+          "name": "Get User Basic Info by UserId",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/userId/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "userId",
+                "{{userId}}"
+              ]
+            },
+            "description": "Get basic user information and profile using the randomly generated userId. No authentication required."
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/users/userId/A1B2C3D4",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["users", "userId", "A1B2C3D4"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"status\": \"success\",\n  \"data\": {\n    \"user\": {\n      \"userId\": \"A1B2C3D4\",\n      \"name\": \"Miguel Johnson\",\n      \"email\": \"miguel@example.com\",\n      \"userType\": \"worker\",\n      \"phone\": \"+1234567890\",\n      \"premium\": false\n    },\n    \"profile\": {\n      \"bio\": \"Experienced dishwasher\",\n      \"skills\": [\"Dishwashing\", \"Kitchen Cleaning\"],\n      \"experience\": \"3 years\",\n      \"rating\": 4.5,\n      \"completedJobs\": 15,\n      \"totalEarnings\": 2500\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get All User Data by UserId",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/userId/{{userId}}/all-data?includeJobs=true&includeApplications=true&includeAttendance=true&includeEmployment=true&startDate=2025-01-01&endDate=2025-12-31",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "userId",
+                "{{userId}}",
+                "all-data"
+              ],
+              "query": [
+                {
+                  "key": "includeJobs",
+                  "value": "true",
+                  "description": "Include jobs data (default: true)"
+                },
+                {
+                  "key": "includeApplications", 
+                  "value": "true",
+                  "description": "Include applications data (default: true)"
+                },
+                {
+                  "key": "includeAttendance",
+                  "value": "true", 
+                  "description": "Include attendance data (default: true)"
+                },
+                {
+                  "key": "includeEmployment",
+                  "value": "true",
+                  "description": "Include employment data (default: true)"
+                },
+                {
+                  "key": "startDate",
+                  "value": "2025-01-01",
+                  "description": "Filter data from this date (YYYY-MM-DD)"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2025-12-31", 
+                  "description": "Filter data until this date (YYYY-MM-DD)"
+                }
+              ]
+            },
+            "description": "Get comprehensive user data including jobs, applications, attendance, and employment records using userId. Supports date filtering and module selection."
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/users/userId/A1B2C3D4/all-data?includeJobs=true&includeApplications=true",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["users", "userId", "A1B2C3D4", "all-data"],
+                  "query": [
+                    {"key": "includeJobs", "value": "true"},
+                    {"key": "includeApplications", "value": "true"}
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"status\": \"success\",\n  \"data\": {\n    \"user\": {\n      \"userId\": \"A1B2C3D4\",\n      \"name\": \"Miguel Johnson\",\n      \"email\": \"miguel@example.com\",\n      \"userType\": \"worker\",\n      \"phone\": \"+1234567890\",\n      \"premium\": false\n    },\n    \"profile\": {\n      \"bio\": \"Experienced dishwasher\",\n      \"skills\": [\"Dishwashing\", \"Kitchen Cleaning\"],\n      \"experience\": \"3 years\",\n      \"rating\": 4.5\n    },\n    \"jobs\": {\n      \"postedJobs\": [],\n      \"hiredJobs\": [\n        {\n          \"_id\": \"job123\",\n          \"title\": \"Dishwasher Position\",\n          \"hourlyRate\": 18,\n          \"status\": \"filled\"\n        }\n      ],\n      \"total\": 1\n    },\n    \"applications\": {\n      \"workerApplications\": [\n        {\n          \"_id\": \"app123\",\n          \"status\": \"hired\",\n          \"job\": {\n            \"title\": \"Dishwasher Position\",\n            \"hourlyRate\": 18\n          }\n        }\n      ],\n      \"employerApplications\": [],\n      \"total\": 1\n    },\n    \"summary\": {\n      \"totalJobs\": 1,\n      \"totalApplications\": 1,\n      \"totalAttendanceRecords\": 5,\n      \"totalEmploymentRecords\": 1\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Jobs by UserId",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/jobs/user/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "jobs",
+                "user",
+                "{{userId}}"
+              ]
+            },
+            "description": "Get all jobs related to a user (both posted and hired jobs) using userId."
+          }
+        },
+        {
+          "name": "Get Applications by UserId",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/user/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "user",
+                "{{userId}}"
+              ]
+            },
+            "description": "Get all applications related to a user (both worker applications and applications to employer's jobs) using userId."
+          }
+        },
+        {
+          "name": "Get Attendance by UserId",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/attendance/user/{{userId}}?startDate=2025-01-01&endDate=2025-12-31&status=completed",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attendance",
+                "user",
+                "{{userId}}"
+              ],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "2025-01-01",
+                  "description": "Filter attendance from this date"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2025-12-31",
+                  "description": "Filter attendance until this date"
+                },
+                {
+                  "key": "status",
+                  "value": "completed",
+                  "description": "Filter by attendance status"
+                }
+              ]
+            },
+            "description": "Get all attendance records related to a user using userId with optional date and status filtering."
+          }
+        }
+      ]
     }
   ],
   "variable": [
@@ -1079,6 +1515,18 @@
       "value": "",
       "type": "string",
       "description": "ObjectId of the employment record you want to query"
+    },
+    {
+      "key": "userId",
+      "value": "A1B2C3D4",
+      "type": "string",
+      "description": "Randomly generated 8-character userId for accessing user data without authentication"
+    },
+    {
+      "key": "sampleLocationData",
+      "value": "{\n  \"formattedAddress\": \"123 Business St, Miami, FL 33101, USA\",\n  \"name\": \"ABC Company Office\",\n  \"placeId\": \"ChIJd8BlQ2BZwokRAFQEcDuMONE\",\n  \"latitude\": 25.7617,\n  \"longitude\": -80.1918,\n  \"allowedRadius\": 150,\n  \"notes\": \"Main office entrance - use parking lot GPS coordinates\",\n  \"isActive\": true,\n  \"timezone\": \"America/New_York\"\n}",
+      "type": "string",
+      "description": "Sample Google Places API location data structure for businesses and jobs with GPS coordinates and geofencing"
     }
   ]
 }

@@ -40,11 +40,49 @@ exports.createBusiness = catchAsync(async (req, res) => {
   if (req.user.userType !== 'employer') {
     throw new AppError('Only employers can create businesses', 403);
   }
-  const business = await Business.create({
+
+  // Process location data if provided
+  let locationData = null;
+  if (req.body.location) {
+    locationData = {
+      ...req.body.location,
+      setBy: req.user._id,
+      setAt: new Date()
+    };
+
+    // Validate required GPS coordinates if provided
+    if (locationData.latitude && locationData.longitude) {
+      if (locationData.latitude < -90 || locationData.latitude > 90) {
+        throw new AppError('Invalid latitude. Must be between -90 and 90', 400);
+      }
+      if (locationData.longitude < -180 || locationData.longitude > 180) {
+        throw new AppError('Invalid longitude. Must be between -180 and 180', 400);
+      }
+    }
+
+    // Validate allowed radius if provided
+    if (locationData.allowedRadius !== undefined) {
+      if (locationData.allowedRadius < 10 || locationData.allowedRadius > 5000) {
+        throw new AppError('Allowed radius must be between 10 and 5000 meters', 400);
+      }
+    }
+  }
+
+  const businessData = {
     ...req.body,
-    owner: req.user._id
+    owner: req.user._id,
+    location: locationData
+  };
+
+  const business = await Business.create(businessData);
+  
+  res.status(201).json({ 
+    status: 'success', 
+    data: business,
+    message: locationData?.latitude && locationData?.longitude 
+      ? 'Business created with GPS location for attendance tracking'
+      : 'Business created successfully'
   });
-  res.status(201).json({ status: 'success', data: business });
 });
 
 exports.updateBusiness = catchAsync(async (req, res) => {
@@ -54,9 +92,46 @@ exports.updateBusiness = catchAsync(async (req, res) => {
     requiredPermissions: 'edit_business',
   });
 
-  Object.assign(business, req.body);
+  // Process location data if being updated
+  let updateData = { ...req.body };
+  
+  if (req.body.location) {
+    const locationData = {
+      ...req.body.location,
+      setBy: req.user._id,
+      setAt: new Date()
+    };
+
+    // Validate GPS coordinates if provided
+    if (locationData.latitude && locationData.longitude) {
+      if (locationData.latitude < -90 || locationData.latitude > 90) {
+        throw new AppError('Invalid latitude. Must be between -90 and 90', 400);
+      }
+      if (locationData.longitude < -180 || locationData.longitude > 180) {
+        throw new AppError('Invalid longitude. Must be between -180 and 180', 400);
+      }
+    }
+
+    // Validate allowed radius if provided
+    if (locationData.allowedRadius !== undefined) {
+      if (locationData.allowedRadius < 10 || locationData.allowedRadius > 5000) {
+        throw new AppError('Allowed radius must be between 10 and 5000 meters', 400);
+      }
+    }
+
+    updateData.location = locationData;
+  }
+
+  Object.assign(business, updateData);
   await business.save();
-  res.status(200).json({ status: 'success', data: business });
+  
+  res.status(200).json({ 
+    status: 'success', 
+    data: business,
+    message: business.location?.latitude && business.location?.longitude 
+      ? 'Business updated with GPS location for attendance tracking'
+      : 'Business updated successfully'
+  });
 });
 
 exports.deleteBusiness = catchAsync(async (req, res) => {

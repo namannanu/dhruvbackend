@@ -6,10 +6,24 @@ const { requirePermissions } = require('../../shared/middlewares/permissionMiddl
 const router = express.Router();
 
 router.use(protect);
-router.get('/', requirePermissions(['view_messages']), controller.listConversations);
-router.post('/', requirePermissions(['send_messages']), controller.createConversation);
-router.get('/:conversationId/messages', requirePermissions(['view_messages']), controller.listMessages);
-router.post('/:conversationId/messages', requirePermissions(['send_messages']), controller.sendMessage);
-router.patch('/:conversationId/read', requirePermissions(['view_messages']), controller.markConversationRead);
+const ensureViewMessages = (req, res, next) => {
+  if (req.user?.userType === 'worker') {
+    return next();
+  }
+  return requirePermissions(['view_messages'])(req, res, next);
+};
+
+const ensureSendMessages = (req, res, next) => {
+  if (req.user?.userType === 'worker') {
+    return next();
+  }
+  return requirePermissions(['send_messages'])(req, res, next);
+};
+
+router.get('/', ensureViewMessages, controller.listConversations);
+router.post('/', ensureSendMessages, controller.createConversation);
+router.get('/:conversationId/messages', ensureViewMessages, controller.listMessages);
+router.post('/:conversationId/messages', ensureSendMessages, controller.sendMessage);
+router.patch('/:conversationId/read', ensureViewMessages, controller.markConversationRead);
 
 module.exports = router;

@@ -35,8 +35,57 @@ const applicationSchema = new mongoose.Schema(
     rejectedAt: Date,
     withdrawnAt: Date
   },
-  { timestamps: true }
+  { 
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
+  }
 );
+
+// Virtual to access worker userId
+applicationSchema.virtual('workerUserId', {
+  ref: 'User',
+  localField: 'worker',
+  foreignField: '_id',
+  justOne: true,
+  get: function() {
+    return this.worker?.userId;
+  }
+});
+
+// Virtual to access employer userId through job
+applicationSchema.virtual('employerUserId', {
+  ref: 'Job',
+  localField: 'job',
+  foreignField: '_id',
+  justOne: true,
+  get: function() {
+    return this.job?.employer?.userId;
+  }
+});
+
+// Static method to find applications by userId (worker or employer)
+applicationSchema.statics.findByUserId = function(userId) {
+  return this.find()
+    .populate({
+      path: 'worker',
+      select: 'userId firstName lastName email'
+    })
+    .populate({
+      path: 'job',
+      select: 'title hourlyRate status',
+      populate: {
+        path: 'employer',
+        select: 'userId firstName lastName email'
+      }
+    })
+    .then(applications => {
+      return applications.filter(app => 
+        app.worker?.userId === userId || 
+        app.job?.employer?.userId === userId
+      );
+    });
+};
 
 applicationSchema.index({ job: 1, worker: 1 }, { unique: true });
 

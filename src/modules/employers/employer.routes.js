@@ -29,6 +29,11 @@ router.get('/me/jobs/:jobId/applications', requirePermissions(['view_application
 // Employment management routes
 router.get('/me/workers', requirePermissions(['view_team_members']), controller.getMyWorkers);
 router.get('/me/workers/:workerId/employment', requirePermissions(['view_team_members']), controller.getWorkerEmploymentHistory);
+router.patch(
+  '/me/workers/:workerId/employment/:employmentId/work-location',
+  requirePermissions(['manage_team_members']),
+  controller.updateEmploymentWorkLocation
+);
 router.get('/me/workers/scheduled-dates', requirePermissions(['view_schedules']), controller.getWorkersScheduledDates);
 router.patch('/me/workers/:workerId/terminate', requirePermissions(['manage_team_members']), controller.terminateWorker);
 

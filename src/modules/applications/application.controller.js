@@ -145,3 +145,88 @@ exports.listApplications = catchAsync(async (req, res) => {
   const applications = await Application.find(filter).populate('job worker');
   res.status(200).json({ status: 'success', data: applications });
 });
+
+// Get all applications by userId (for both worker and employer)
+exports.getApplicationsByUserId = catchAsync(async (req, res) => {
+  const { userId } = req.params;
+  
+  if (!userId) {
+    return res.status(400).json({
+      status: 'error',
+      message: 'UserId parameter is required'
+    });
+  }
+
+  // Find user by userId
+  const user = await User.findOne({ userId }).select('_id firstName lastName email userType');
+  
+  if (!user) {
+    return res.status(404).json({
+      status: 'error',
+      message: 'User not found with the provided userId'
+    });
+  }
+
+  // Find all applications where user is either worker or employer
+  const applications = await Application.find({
+    $or: [
+      { worker: user._id },
+    ]
+  })
+  .populate({
+    path: 'worker',
+    select: 'userId firstName lastName email phone'
+  })
+  .populate({
+    path: 'job',
+    select: 'title description hourlyRate status location schedule',
+    populate: {
+      path: 'employer',
+      select: 'userId firstName lastName email'
+    }
+  })
+  .sort({ createdAt: -1 });
+
+  // Also find applications to jobs posted by the user (if employer)
+  const employerApplications = await Application.find()
+    .populate({
+      path: 'worker',
+      select: 'userId firstName lastName email phone'
+    })
+    .populate({
+      path: 'job',
+      match: { employer: user._id },
+      select: 'title description hourlyRate status location schedule',
+      populate: {
+        path: 'employer',
+        select: 'userId firstName lastName email'
+      }
+    })
+    .then(apps => apps.filter(app => app.job !== null))
+    .sort({ createdAt: -1 });
+
+  // Categorize applications
+  const categorizedApplications = {
+    workerApplications: applications.filter(app => app.worker._id.toString() === user._id.toString()),
+    employerApplications: employerApplications
+  };
+
+  res.status(200).json({
+    status: 'success',
+    results: applications.length + employerApplications.length,
+    data: {
+      user: {
+        userId: user.userId,
+        name: `${user.firstName} ${user.lastName}`,
+        email: user.email,
+        userType: user.userType
+      },
+      applications: categorizedApplications,
+      summary: {
+        totalApplications: applications.length + employerApplications.length,
+        workerApplications: categorizedApplications.workerApplications.length,
+        employerApplications: categorizedApplications.employerApplications.length
+      }
+    }
+  });
+});

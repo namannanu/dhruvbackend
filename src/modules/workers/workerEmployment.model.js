@@ -1,5 +1,41 @@
 const mongoose = require('mongoose');
 
+const reportLocationSchema = new mongoose.Schema(
+  {
+    label: { type: String, trim: true },
+    formattedAddress: { type: String, trim: true },
+    address: { type: String, trim: true },
+    city: { type: String, trim: true },
+    state: { type: String, trim: true },
+    postalCode: { type: String, trim: true },
+    latitude: {
+      type: Number,
+      min: -90,
+      max: 90
+    },
+    longitude: {
+      type: Number,
+      min: -180,
+      max: 180
+    },
+    placeId: { type: String, trim: true },
+    allowedRadius: {
+      type: Number,
+      default: 150,
+      min: 10,
+      max: 5000
+    },
+    notes: { type: String, trim: true },
+    setBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    setAt: { type: Date },
+    timezone: { type: String, trim: true }
+  },
+  { _id: false }
+);
+
 const workerEmploymentSchema = new mongoose.Schema(
   {
     worker: {
@@ -54,10 +90,8 @@ const workerEmploymentSchema = new mongoose.Schema(
       required: true,
       min: 0
     },
-    workLocation: {
-      type: String,
-      required: true
-    },
+    workLocation: String,
+    workLocationDetails: reportLocationSchema,
     startDate: {
       type: Date,
       required: true
@@ -102,6 +136,7 @@ workerEmploymentSchema.index({ worker: 1, employmentStatus: 1 });
 workerEmploymentSchema.index({ employer: 1, employmentStatus: 1 });
 workerEmploymentSchema.index({ hireDate: 1, endDate: 1 });
 workerEmploymentSchema.index({ business: 1, employmentStatus: 1 });
+workerEmploymentSchema.index({ 'workLocationDetails.latitude': 1, 'workLocationDetails.longitude': 1 });
 
 // Virtual for employment duration
 workerEmploymentSchema.virtual('employmentDuration').get(function () {
@@ -119,6 +154,28 @@ workerEmploymentSchema.virtual('statusDisplay').get(function () {
     completed: 'Contract Completed'
   };
   return statusMap[this.employmentStatus] || this.employmentStatus;
+});
+
+// Virtual to access worker userId
+workerEmploymentSchema.virtual('workerUserId', {
+  ref: 'User',
+  localField: 'worker',
+  foreignField: '_id',
+  justOne: true,
+  get: function() {
+    return this.worker?.userId;
+  }
+});
+
+// Virtual to access employer userId
+workerEmploymentSchema.virtual('employerUserId', {
+  ref: 'User',
+  localField: 'employer',
+  foreignField: '_id',
+  justOne: true,
+  get: function() {
+    return this.employer?.userId;
+  }
 });
 
 // Instance method to end employment
@@ -217,5 +274,20 @@ workerEmploymentSchema.pre('remove', async function (next) {
   
   next();
 });
+
+// Static method to find employment records by userId (worker or employer)
+workerEmploymentSchema.statics.findByUserId = function(userId) {
+  return this.find()
+    .populate('worker', 'userId firstName lastName email')
+    .populate('employer', 'userId firstName lastName email')
+    .populate('business', 'name address')
+    .populate('job', 'title description hourlyRate')
+    .then(records => {
+      return records.filter(record => 
+        record.worker?.userId === userId || 
+        record.employer?.userId === userId
+      );
+    });
+};
 
 module.exports = mongoose.model('WorkerEmployment', workerEmploymentSchema);

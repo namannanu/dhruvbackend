@@ -77,7 +77,22 @@ const workerProfileSchema = new mongoose.Schema(
       default: []
     }
   },
-  { timestamps: true }
+  { 
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
+  }
 );
+
+// Virtual to access userId through user reference
+workerProfileSchema.virtual('userId', {
+  ref: 'User',
+  localField: 'user',
+  foreignField: '_id',
+  justOne: true,
+  get: function() {
+    return this.user?.userId;
+  }
+});
 
 module.exports = mongoose.model('WorkerProfile', workerProfileSchema);

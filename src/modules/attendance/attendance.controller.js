@@ -10,6 +10,10 @@ const {
   ensureBusinessAccess,
   getAccessibleBusinessIds,
 } = require('../../shared/utils/businessAccess');
+const {
+  buildAttendanceJobLocation,
+  buildLocationLabel: sharedBuildLocationLabel
+} = require('../../shared/utils/location');
 
 const HOURS_IN_MS = 1000 * 60 * 60;
 
@@ -87,7 +91,17 @@ const buildWorkerName = (worker, snapshot) => {
   return 'Unknown Worker';
 };
 
-const pickJobLocationSnapshot = (job) => {
+const pickJobLocationSnapshot = (job, fallbackLocation) => {
+  if (fallbackLocation) {
+    const directLabel = sharedBuildLocationLabel(fallbackLocation);
+    if (directLabel) {
+      return directLabel;
+    }
+    if (fallbackLocation.address) {
+      return fallbackLocation.address;
+    }
+  }
+
   if (!job || !job.location) {
     return null;
   }
@@ -102,9 +116,18 @@ const pickJobLocationSnapshot = (job) => {
   return null;
 };
 
-const buildLocationLabel = (record) => {
+const deriveRecordLocationLabel = (record) => {
   if (record.locationSnapshot) {
     return record.locationSnapshot;
+  }
+  if (record.jobLocation) {
+    const label = sharedBuildLocationLabel(record.jobLocation);
+    if (label) {
+      return label;
+    }
+    if (record.jobLocation.address) {
+      return record.jobLocation.address;
+    }
   }
   const fromJob = pickJobLocationSnapshot(record.job);
   if (fromJob) {
@@ -165,7 +188,7 @@ const mapRecordToManagementView = (record) => {
     workerName: buildWorkerName(record.worker, record.workerNameSnapshot),
     jobId: toIdString(record.job),
     jobTitle: record.jobTitleSnapshot || record.job?.title || 'Untitled Role',
-    location: buildLocationLabel(record),
+    location: deriveRecordLocationLabel(record),
     date: toDateString(scheduledStart),
     clockIn: toTimeString(record.clockInAt),
     clockOut: toTimeString(record.clockOutAt),
@@ -330,11 +353,48 @@ exports.scheduleAttendance = catchAsync(async (req, res, next) => {
   if (!worker) {
     return next(new AppError('Worker not found', 404));
   }
+
+  const employment = await WorkerEmployment.findOne({
+    worker: worker._id,
+    job: job._id,
+    employmentStatus: 'active'
+  });
+
+  const employmentLocationDetails = employment?.workLocationDetails || undefined;
+  const employmentLocationLabel = employment?.workLocation || sharedBuildLocationLabel(employmentLocationDetails);
+  const jobLocationFromEmployment = employmentLocationDetails
+    ? buildAttendanceJobLocation(employmentLocationDetails)
+    : null;
+
+  let jobLocationFromJob = null;
+  if (job.location && job.location.latitude != null && job.location.longitude != null) {
+    jobLocationFromJob = buildAttendanceJobLocation({
+      latitude: job.location.latitude,
+      longitude: job.location.longitude,
+      formattedAddress: sharedBuildLocationLabel({
+        formattedAddress: job.location.formattedAddress,
+        address: job.location.address,
+        city: job.location.city,
+        state: job.location.state,
+        postalCode: job.location.postalCode,
+        label: job.title
+      }),
+      label: job.title,
+      allowedRadius: job.location.allowedRadius
+    });
+  }
+
   const hourlyRate = typeof req.body.hourlyRate === 'number' ? req.body.hourlyRate : job.hourlyRate;
   const workerNameSnapshot = req.body.workerNameSnapshot || buildWorkerName(worker, null);
   const jobTitleSnapshot = req.body.jobTitleSnapshot || job.title;
-  const locationSnapshot = req.body.locationSnapshot || pickJobLocationSnapshot(job);
-  const record = await AttendanceRecord.create({
+  const chosenJobLocation = req.body.jobLocation || jobLocationFromEmployment || jobLocationFromJob;
+  const locationSnapshot =
+    req.body.locationSnapshot ||
+    employmentLocationLabel ||
+    (chosenJobLocation && sharedBuildLocationLabel(chosenJobLocation)) ||
+    pickJobLocationSnapshot(job, jobLocationFromJob);
+
+  const payload = {
     ...req.body,
     employer: job.employer,
     business: job.business,
@@ -342,7 +402,13 @@ exports.scheduleAttendance = catchAsync(async (req, res, next) => {
     workerNameSnapshot,
     jobTitleSnapshot,
     locationSnapshot
-  });
+  };
+
+  if (!payload.jobLocation && chosenJobLocation) {
+    payload.jobLocation = chosenJobLocation;
+  }
+
+  const record = await AttendanceRecord.create(payload);
   res.status(201).json({ status: 'success', data: record });
 });
 
@@ -357,31 +423,91 @@ exports.clockIn = catchAsync(async (req, res, next) => {
   if (record.clockInAt) {
     return next(new AppError('Already clocked in', 400));
   }
+
+  if (!record.jobLocation) {
+    const activeEmployment = await WorkerEmployment.findOne({
+      worker: record.worker,
+      job: record.job,
+      employmentStatus: 'active'
+    });
+    if (activeEmployment?.workLocationDetails) {
+      const jobLocation = buildAttendanceJobLocation(activeEmployment.workLocationDetails);
+      if (jobLocation) {
+        record.jobLocation = jobLocation;
+        if (!record.locationSnapshot) {
+          const label = activeEmployment.workLocation || sharedBuildLocationLabel(activeEmployment.workLocationDetails);
+          if (label) {
+            record.locationSnapshot = label;
+          }
+        }
+      }
+    }
+  }
+
+  // Extract location data from request body
+  const { latitude, longitude, accuracy, address, altitude, heading, speed } = req.body;
+
+  // Location validation
+  let locationValidation = { isValid: true, distance: null, message: 'No location validation required' };
+  
+  if (latitude != null && longitude != null && record.jobLocation) {
+    locationValidation = record.isLocationValid(latitude, longitude);
+    
+    // Strict location enforcement - reject if not within allowed radius
+    if (!locationValidation.isValid) {
+      return next(new AppError(locationValidation.message, 400));
+    }
+  }
+
   await record.populate([
     { path: 'job', select: 'hourlyRate location title' },
     { path: 'worker', select: 'firstName lastName email' }
   ]);
+  
   const now = new Date();
   record.clockInAt = now;
   record.status = 'clocked-in';
+  
   if (now > record.scheduledStart) {
     record.isLate = true;
   }
+  
   if (!record.hourlyRate && record.job?.hourlyRate) {
     record.hourlyRate = record.job.hourlyRate;
   }
+  
   if (!record.workerNameSnapshot && record.worker) {
     record.workerNameSnapshot = buildWorkerName(record.worker, null);
   }
+  
   if (!record.jobTitleSnapshot && record.job) {
     record.jobTitleSnapshot = record.job.title;
   }
+  
   if (!record.locationSnapshot) {
-    const locationFromJob = pickJobLocationSnapshot(record.job);
+    const locationFromJob = pickJobLocationSnapshot(record.job, record.jobLocation);
     if (locationFromJob) {
       record.locationSnapshot = locationFromJob;
     }
   }
+
+  // Store location data
+  if (latitude != null && longitude != null) {
+    record.clockInLocation = {
+      latitude,
+      longitude,
+      accuracy,
+      address,
+      altitude,
+      heading,
+      speed,
+      timestamp: now
+    };
+    record.clockInDistance = locationValidation.distance;
+    record.locationValidated = locationValidation.isValid;
+    record.locationValidationMessage = locationValidation.message;
+  }
+
   await record.save();
   res.status(200).json({ status: 'success', data: record });
 });
@@ -400,11 +526,49 @@ exports.clockOut = catchAsync(async (req, res, next) => {
   if (record.clockOutAt) {
     return next(new AppError('Already clocked out', 400));
   }
+
+  if (!record.jobLocation) {
+    const activeEmployment = await WorkerEmployment.findOne({
+      worker: record.worker,
+      job: record.job,
+      employmentStatus: 'active'
+    });
+    if (activeEmployment?.workLocationDetails) {
+      const jobLocation = buildAttendanceJobLocation(activeEmployment.workLocationDetails);
+      if (jobLocation) {
+        record.jobLocation = jobLocation;
+        if (!record.locationSnapshot) {
+          const label = activeEmployment.workLocation || sharedBuildLocationLabel(activeEmployment.workLocationDetails);
+          if (label) {
+            record.locationSnapshot = label;
+          }
+        }
+      }
+    }
+  }
+
+  // Extract location data from request body
+  const { latitude, longitude, accuracy, address, altitude, heading, speed } = req.body;
+
+  // Location validation for clock-out
+  let locationValidation = { isValid: true, distance: null, message: 'No location validation required' };
+  
+  if (latitude != null && longitude != null && record.jobLocation) {
+    locationValidation = record.isLocationValid(latitude, longitude);
+    
+    // Strict location enforcement - reject if not within allowed radius
+    if (!locationValidation.isValid) {
+      return next(new AppError(locationValidation.message, 400));
+    }
+  }
+
   await record.populate([
     { path: 'job', select: 'hourlyRate location title' },
     { path: 'worker', select: 'firstName lastName email' }
   ]);
-  record.clockOutAt = new Date();
+  
+  const now = new Date();
+  record.clockOutAt = now;
   record.status = 'completed';
   const durationHours = (record.clockOutAt - record.clockInAt) / HOURS_IN_MS;
   record.totalHours = roundToTwo(durationHours);
@@ -413,18 +577,43 @@ exports.clockOut = catchAsync(async (req, res, next) => {
     : resolveHourlyRate(record);
   record.hourlyRate = resolvedRate;
   record.earnings = roundToTwo(record.totalHours * resolvedRate);
+  
   if (!record.workerNameSnapshot && record.worker) {
     record.workerNameSnapshot = buildWorkerName(record.worker, null);
   }
+  
   if (!record.jobTitleSnapshot && record.job) {
     record.jobTitleSnapshot = record.job.title;
   }
+  
   if (!record.locationSnapshot) {
-    const locationFromJob = pickJobLocationSnapshot(record.job);
+    const locationFromJob = pickJobLocationSnapshot(record.job, record.jobLocation);
     if (locationFromJob) {
       record.locationSnapshot = locationFromJob;
     }
   }
+
+  // Store clock-out location data
+  if (latitude != null && longitude != null) {
+    record.clockOutLocation = {
+      latitude,
+      longitude,
+      accuracy,
+      address,
+      altitude,
+      heading,
+      speed,
+      timestamp: now
+    };
+    record.clockOutDistance = locationValidation.distance;
+    
+    // Update overall location validation status
+    if (record.locationValidated !== false) { // Don't override if already failed
+      record.locationValidated = locationValidation.isValid;
+      record.locationValidationMessage = locationValidation.message;
+    }
+  }
+
   await record.save();
   res.status(200).json({ status: 'success', data: record });
 });
@@ -522,7 +711,7 @@ exports.markComplete = catchAsync(async (req, res, next) => {
     record.jobTitleSnapshot = record.job.title;
   }
   if (!record.locationSnapshot) {
-    const locationFromJob = pickJobLocationSnapshot(record.job);
+    const locationFromJob = pickJobLocationSnapshot(record.job, record.jobLocation);
     if (locationFromJob) {
       record.locationSnapshot = locationFromJob;
     }
@@ -567,7 +756,7 @@ exports.updateHours = catchAsync(async (req, res, next) => {
     record.jobTitleSnapshot = record.job.title;
   }
   if (!record.locationSnapshot) {
-    const locationFromJob = pickJobLocationSnapshot(record.job);
+    const locationFromJob = pickJobLocationSnapshot(record.job, record.jobLocation);
     if (locationFromJob) {
       record.locationSnapshot = locationFromJob;
     }
@@ -744,6 +933,7 @@ exports.getWorkerEmploymentTimeline = catchAsync(async (req, res, next) => {
       employmentStatus: emp.employmentStatus,
       hourlyRate: emp.hourlyRate,
       workLocation: emp.workLocation,
+      workLocationDetails: emp.workLocationDetails,
       jobDetails: emp.job,
       employmentDuration: emp.employmentDuration
     })),
@@ -842,5 +1032,114 @@ exports.getWorkersEmployedOnDate = catchAsync(async (req, res, next) => {
     date: toDateString(targetDate),
     results: workersData.length,
     data: workersData
+  });
+});
+
+// Get all attendance records by userId (for both worker and employer)
+exports.getAttendanceByUserId = catchAsync(async (req, res) => {
+  const { userId } = req.params;
+  const { startDate, endDate, status } = req.query;
+  
+  if (!userId) {
+    return res.status(400).json({
+      status: 'error',
+      message: 'UserId parameter is required'
+    });
+  }
+
+  // Find user by userId
+  const user = await User.findOne({ userId }).select('_id firstName lastName email userType');
+  
+  if (!user) {
+    return res.status(404).json({
+      status: 'error',
+      message: 'User not found with the provided userId'
+    });
+  }
+
+  // Build query filter
+  const filter = {
+    $or: [
+      { worker: user._id },
+      { employer: user._id }
+    ]
+  };
+
+  // Add date range filter if provided
+  if (startDate || endDate) {
+    filter.scheduledStart = {};
+    if (startDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      filter.scheduledStart.$gte = start;
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      filter.scheduledStart.$lte = end;
+    }
+  }
+
+  // Add status filter if provided
+  if (status) {
+    filter.status = status;
+  }
+
+  // Find all attendance records
+  const attendanceRecords = await AttendanceRecord.find(filter)
+    .populate('worker', 'userId firstName lastName email')
+    .populate('employer', 'userId firstName lastName email')
+    .populate('job', 'title description hourlyRate')
+    .populate('business', 'name address')
+    .sort({ scheduledStart: -1 });
+
+  // Categorize attendance records
+  const categorizedAttendance = {
+    workerAttendance: attendanceRecords.filter(record => 
+      record.worker._id.toString() === user._id.toString()
+    ),
+    employerAttendance: attendanceRecords.filter(record => 
+      record.employer && record.employer._id.toString() === user._id.toString()
+    )
+  };
+
+  // Calculate summary statistics
+  const workerStats = {
+    totalHours: categorizedAttendance.workerAttendance.reduce((sum, record) => sum + (record.totalHours || 0), 0),
+    totalEarnings: categorizedAttendance.workerAttendance.reduce((sum, record) => sum + (record.earnings || 0), 0),
+    completedShifts: categorizedAttendance.workerAttendance.filter(record => record.status === 'completed').length,
+    missedShifts: categorizedAttendance.workerAttendance.filter(record => record.status === 'missed').length
+  };
+
+  const employerStats = {
+    totalShiftsManaged: categorizedAttendance.employerAttendance.length,
+    completedShifts: categorizedAttendance.employerAttendance.filter(record => record.status === 'completed').length,
+    totalPayouts: categorizedAttendance.employerAttendance.reduce((sum, record) => sum + (record.earnings || 0), 0)
+  };
+
+  res.status(200).json({
+    status: 'success',
+    results: attendanceRecords.length,
+    data: {
+      user: {
+        userId: user.userId,
+        name: `${user.firstName} ${user.lastName}`,
+        email: user.email,
+        userType: user.userType
+      },
+      attendance: categorizedAttendance,
+      summary: {
+        totalRecords: attendanceRecords.length,
+        workerRecords: categorizedAttendance.workerAttendance.length,
+        employerRecords: categorizedAttendance.employerAttendance.length,
+        workerStats,
+        employerStats
+      },
+      filters: {
+        startDate: startDate || null,
+        endDate: endDate || null,
+        status: status || null
+      }
+    }
   });
 });

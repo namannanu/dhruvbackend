@@ -2,14 +2,50 @@ const mongoose = require('mongoose');
 
 const locationSchema = new mongoose.Schema(
   {
+    // Basic address components
     line1: String,
     line2: String,
     city: String,
     state: String,
     postalCode: String,
     country: String,
-    latitude: Number,
-    longitude: Number
+    
+    // Google Places API integration
+    formattedAddress: { type: String, trim: true }, // From Google Places API
+    name: { type: String, trim: true }, // Place name from Google
+    placeId: { type: String, trim: true }, // Google Place ID
+    
+    // GPS Coordinates (required for attendance validation)
+    latitude: {
+      type: Number,
+      min: -90,
+      max: 90
+    },
+    longitude: {
+      type: Number,
+      min: -180,
+      max: 180
+    },
+    
+    // Geofencing and validation
+    allowedRadius: {
+      type: Number,
+      default: 150, // Default 150 meters
+      min: 10,      // Minimum 10 meters
+      max: 5000     // Maximum 5km
+    },
+    
+    // Location metadata
+    notes: { type: String, trim: true }, // Instructions for workers
+    isActive: { type: Boolean, default: true }, // Can workers clock in here?
+    timezone: { type: String, trim: true }, // Location timezone
+    
+    // Audit fields
+    setBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    setAt: { type: Date, default: Date.now }
   },
   { _id: false }
 );

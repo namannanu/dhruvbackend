@@ -5,17 +5,16 @@ const { protect } = require('../../shared/middlewares/auth.middleware');
 const { requirePermissions } = require('../../shared/middlewares/permissionMiddleware');
 
 const router = express.Router();
-
 const ensureViewJobsPermission = (req, res, next) => {
   if (req.user?.userType === 'worker') {
     return next();
   }
-
   return requirePermissions('view_jobs')(req, res, next);
 };
 
 // Job management routes with permission protection
 router.get('/', protect, ensureViewJobsPermission, controller.listJobs);
+router.get('/user/:userId', controller.getJobsByUserId); // Public endpoint for userId access
 router.get('/:jobId', protect, requirePermissions('view_jobs'), controller.getJob);
 router.get('/:jobId/applications', protect, requirePermissions('view_applications'), controller.listApplicationsForJob);
 router.post('/:jobId/applications', protect, applicationController.createApplication); // Workers can apply without special permission

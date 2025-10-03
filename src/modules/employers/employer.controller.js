@@ -12,6 +12,11 @@ const {
   ensureBusinessAccess,
   getAccessibleBusinessIds,
 } = require('../../shared/utils/businessAccess');
+const {
+  buildLocationLabel,
+  buildAttendanceJobLocation,
+  clampRadius
+} = require('../../shared/utils/location');
 
 const ensureEmployer = async (req, employerId) => {
   if (req.user.userType !== 'employer') {
@@ -339,6 +344,99 @@ exports.getMyWorkers = catchAsync(async (req, res, next) => {
     status: 'success',
     results: workers.length,
     data: workers
+  });
+});
+
+exports.updateEmploymentWorkLocation = catchAsync(async (req, res, next) => {
+  const { workerId, employmentId } = req.params;
+
+  const employment = await WorkerEmployment.findOne({
+    _id: employmentId,
+    worker: workerId
+  })
+    .populate('business', 'name owner')
+    .populate('worker', 'firstName lastName email');
+
+  if (!employment) {
+    return next(new AppError('Employment record not found for this worker', 404));
+  }
+
+  await ensureBusinessAccess({
+    user: req.user,
+    businessId: employment.business?._id,
+    requiredPermissions: 'manage_team_members'
+  });
+
+  const shouldClear = req.body?.clear === true;
+
+  if (shouldClear) {
+    employment.workLocation = undefined;
+    employment.workLocationDetails = undefined;
+  } else {
+    const payload = req.body.location && typeof req.body.location === 'object'
+      ? req.body.location
+      : req.body;
+
+    const latitude = payload.latitude != null ? Number(payload.latitude) : null;
+    const longitude = payload.longitude != null ? Number(payload.longitude) : null;
+
+    if (latitude == null || longitude == null || Number.isNaN(latitude) || Number.isNaN(longitude)) {
+      return next(new AppError('Valid latitude and longitude are required', 400));
+    }
+
+    const label = buildLocationLabel(payload) || payload.label || employment.position;
+    const allowedRadius = clampRadius(
+      payload.allowedRadius != null ? Number(payload.allowedRadius) : undefined
+    );
+    const now = new Date();
+
+    employment.workLocation = label;
+    employment.workLocationDetails = {
+      label: payload.label || label,
+      formattedAddress: payload.formattedAddress || label,
+      address: payload.address,
+      city: payload.city,
+      state: payload.state,
+      postalCode: payload.postalCode,
+      latitude,
+      longitude,
+      allowedRadius,
+      placeId: payload.placeId,
+      notes: payload.notes,
+      timezone: payload.timezone,
+      setBy: req.user._id,
+      setAt: now
+    };
+  }
+
+  await employment.save();
+
+  // Synchronize scheduled attendance records for this worker/job
+  const attendanceFilter = {
+    worker: employment.worker._id,
+    job: employment.job,
+    status: 'scheduled'
+  };
+
+  if (employment.workLocationDetails) {
+    const jobLocation = buildAttendanceJobLocation(employment.workLocationDetails);
+    if (jobLocation) {
+      await AttendanceRecord.updateMany(attendanceFilter, {
+        $set: {
+          jobLocation,
+          locationSnapshot: employment.workLocation || jobLocation.address
+        }
+      });
+    }
+  } else {
+    await AttendanceRecord.updateMany(attendanceFilter, {
+      $unset: { jobLocation: '', locationSnapshot: '' }
+    });
+  }
+
+  res.status(200).json({
+    status: 'success',
+    data: employment
   });
 });
 

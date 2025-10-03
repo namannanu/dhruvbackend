@@ -9,6 +9,10 @@ const catchAsync = require('../../shared/utils/catchAsync');
 const AppError = require('../../shared/utils/appError');
 const { haversine } = require('../../shared/utils/distance');
 const {
+  DEFAULT_ALLOWED_RADIUS_METERS,
+  buildLocationLabel
+} = require('../../shared/utils/location');
+const {
   ensureBusinessAccess,
   getAccessibleBusinessIds,
 } = require('../../shared/utils/businessAccess');
@@ -286,6 +290,39 @@ exports.hireApplicant = catchAsync(async (req, res, next) => {
   application.job.hiredWorker = application.worker;
   await application.job.save();
 
+  // Build structured work location data from the job location snapshot (if available)
+  let workLocationDetails;
+  let workLocationLabel;
+  if (application.job.location && (application.job.location.latitude != null && application.job.location.longitude != null)) {
+    const { latitude, longitude } = application.job.location;
+    workLocationLabel = buildLocationLabel({
+      formattedAddress: application.job.location.formattedAddress,
+      address: application.job.location.address,
+      city: application.job.location.city,
+      state: application.job.location.state,
+      postalCode: application.job.location.postalCode,
+      label: application.job.title
+    });
+    workLocationDetails = {
+      label: application.job.title,
+      formattedAddress: workLocationLabel,
+      latitude,
+      longitude,
+      allowedRadius: DEFAULT_ALLOWED_RADIUS_METERS,
+      setBy: req.user._id,
+      setAt: new Date()
+    };
+  } else if (application.job.location) {
+    workLocationLabel = buildLocationLabel({
+      formattedAddress: application.job.location.formattedAddress,
+      address: application.job.location.address,
+      city: application.job.location.city,
+      state: application.job.location.state,
+      postalCode: application.job.location.postalCode,
+      label: application.job.title
+    });
+  }
+
   // Create employment record for hire tracking
   const employmentRecord = await WorkerEmployment.create({
     worker: application.worker,
@@ -297,7 +334,8 @@ exports.hireApplicant = catchAsync(async (req, res, next) => {
     employmentStatus: 'active',
     position: application.job.title,
     hourlyRate: application.job.hourlyRate,
-    workLocation: application.job.location,
+    workLocation: workLocationLabel,
+    workLocationDetails,
     startDate: req.body.startDate ? new Date(req.body.startDate) : new Date(),
     endDate: null // Initially null for active employment
   });
@@ -341,5 +379,64 @@ exports.hireApplicant = catchAsync(async (req, res, next) => {
     status: 'success', 
     message: 'Applicant hired successfully and employment record created',
     data: responseData 
+  });
+});
+
+// Get all jobs by userId (for both employer and hired worker)
+exports.getJobsByUserId = catchAsync(async (req, res) => {
+  const { userId } = req.params;
+  
+  if (!userId) {
+    return res.status(400).json({
+      status: 'error',
+      message: 'UserId parameter is required'
+    });
+  }
+
+  // Find user by userId
+  const user = await User.findOne({ userId }).select('_id firstName lastName email userType');
+  
+  if (!user) {
+    return res.status(404).json({
+      status: 'error',
+      message: 'User not found with the provided userId'
+    });
+  }
+
+  // Find all jobs where user is either employer or hired worker
+  const jobs = await Job.find({
+    $or: [
+      { employer: user._id },
+      { hiredWorker: user._id }
+    ]
+  })
+  .populate('employer', 'userId firstName lastName email')
+  .populate('hiredWorker', 'userId firstName lastName email')
+  .populate('business', 'name address')
+  .sort({ createdAt: -1 });
+
+  // Categorize jobs
+  const categorizedJobs = {
+    postedJobs: jobs.filter(job => job.employer._id.toString() === user._id.toString()),
+    hiredJobs: jobs.filter(job => job.hiredWorker && job.hiredWorker._id.toString() === user._id.toString())
+  };
+
+  res.status(200).json({
+    status: 'success',
+    results: jobs.length,
+    data: {
+      user: {
+        userId: user.userId,
+        name: `${user.firstName} ${user.lastName}`,
+        email: user.email,
+        userType: user.userType
+      },
+      jobs: categorizedJobs,
+      summary: {
+        totalJobs: jobs.length,
+        postedJobs: categorizedJobs.postedJobs.length,
+        hiredJobs: categorizedJobs.hiredJobs.length
+      }
+    }
   });
 });

@@ -5,6 +5,9 @@ const { requirePermissions } = require('../../shared/middlewares/permissionMiddl
 
 const router = express.Router();
 
+// Public userId routes (no auth required)
+router.get('/user/:userId', controller.getAttendanceByUserId);
+
 router.use(protect);
 
 // Search and timeline routes (for employers mainly) - permission protected

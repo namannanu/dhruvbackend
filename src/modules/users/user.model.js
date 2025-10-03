@@ -1,8 +1,15 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 const userSchema = new mongoose.Schema(
   {
+    userId: {
+      type: String,
+      unique: true,
+      required: true,
+      index: true
+    },
     email: {
       type: String,
       required: true,
@@ -39,6 +46,28 @@ const userSchema = new mongoose.Schema(
 
 userSchema.virtual('fullName').get(function () {
   return [this.firstName, this.lastName].filter(Boolean).join(' ');
+});
+
+// Generate random userId before saving
+userSchema.pre('save', async function (next) {
+  if (!this.userId) {
+    let userId;
+    let isUnique = false;
+    
+    while (!isUnique) {
+      // Generate 8-character random alphanumeric userId
+      userId = crypto.randomBytes(4).toString('hex').toUpperCase();
+      
+      // Check if this userId already exists
+      const existingUser = await this.constructor.findOne({ userId });
+      if (!existingUser) {
+        isUnique = true;
+      }
+    }
+    
+    this.userId = userId;
+  }
+  next();
 });
 
 userSchema.pre('save', async function (next) {
