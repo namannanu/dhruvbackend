@@ -69,12 +69,12 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"phone\": \"+1234567890\",\n  \"password\": \"securePassword123\",\n  \"role\": \"employer\"\n}"
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"phone\": \"+1234567890\",\n  \"password\": \"securePassword123\",\n  \"userType\": \"employer\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/auth/register",
+              "raw": "{{baseUrl}}/auth/signup",
               "host": ["{{baseUrl}}"],
-              "path": ["auth", "register"]
+              "path": ["auth", "signup"]
             }
           },
           "event": [
@@ -84,12 +84,13 @@
                 "exec": [
                   "if (pm.response.code === 201) {",
                   "    const response = pm.response.json();",
-                  "    pm.environment.set('authToken', response.token);",
-                  "    pm.environment.set('userId', response.user.userId);",
-                  "    pm.test('Registration successful', () => {",
-                  "        pm.expect(response.user.userId).to.be.a('string');",
-                  "        pm.expect(response.user.userId).to.have.lengthOf(8);",
-                  "    });",
+                  "    if (response.data && response.data.user) {",
+                  "        pm.environment.set('userId', response.data.user.userId);",
+                  "        pm.test('Registration successful', () => {",
+                  "            pm.expect(response.data.user.userId).to.be.a('string');",
+                  "            pm.expect(response.data.user.userId).to.have.lengthOf(8);",
+                  "        });",
+                  "    }",
                   "}"
                 ]
               }
@@ -123,8 +124,15 @@
                 "exec": [
                   "if (pm.response.code === 200) {",
                   "    const response = pm.response.json();",
-                  "    pm.environment.set('authToken', response.token);",
-                  "    pm.environment.set('userId', response.user.userId);",
+                  "    if (response.token) {",
+                  "        pm.environment.set('authToken', response.token);",
+                  "    }",
+                  "    if (response.data && response.data.user) {",
+                  "        pm.environment.set('userId', response.data.user.userId);",
+                  "    }",
+                  "    pm.test('Login successful', () => {",
+                  "        pm.expect(response.token).to.be.a('string');",
+                  "    });",
                   "}"
                 ]
               }

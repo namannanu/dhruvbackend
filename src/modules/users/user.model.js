@@ -7,8 +7,12 @@ const userSchema = new mongoose.Schema(
     userId: {
       type: String,
       unique: true,
-      required: true,
-      index: true
+      index: true,
+      default: function() {
+        // Generate 8-character alphanumeric userId
+        return Math.random().toString(36).substring(2, 8).toUpperCase() + 
+               Math.random().toString(36).substring(2, 4).toUpperCase();
+      }
     },
     email: {
       type: String,
@@ -56,7 +60,8 @@ userSchema.pre('save', async function (next) {
     
     while (!isUnique) {
       // Generate 8-character random alphanumeric userId
-      userId = crypto.randomBytes(4).toString('hex').toUpperCase();
+      userId = Math.random().toString(36).substring(2, 8).toUpperCase() + 
+               Math.random().toString(36).substring(2, 4).toUpperCase();
       
       // Check if this userId already exists
       const existingUser = await this.constructor.findOne({ userId });
