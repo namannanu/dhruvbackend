@@ -52,8 +52,7 @@ const resolveEmployerContext = async (req, { requiredPermissions } = {}) => {
     req.businessId ||
     req.params.businessId ||
     req.query.businessId ||
-    bodyBusinessId ||
-    req.user.selectedBusiness;
+    bodyBusinessId;
 
   if (businessId) {
     const access = await ensureBusinessAccess({
@@ -82,7 +81,7 @@ exports.getEmployerProfile = catchAsync(async (req, res, next) => {
     requiredPermissions: 'view_business_profile',
   });
 
-  const profile = await EmployerProfile.findOne({ user: employerId }).populate('defaultBusiness');
+  const profile = await EmployerProfile.findOne({ user: employerId });
   if (!profile) {
     return next(new AppError('Employer profile not found', 404));
   }

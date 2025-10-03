@@ -156,8 +156,6 @@ exports.selectBusiness = catchAsync(async (req, res) => {
     businessId: req.params.businessId,
     requiredPermissions: 'view_business_profile',
   });
-  req.user.selectedBusiness = business._id;
-  await req.user.save();
   res.status(200).json({ status: 'success', data: { selectedBusiness: business } });
 });
 
@@ -180,7 +178,7 @@ exports.manageTeamMember = {
     
     console.log('🔄 Creating team member with request body:', req.body);
     
-    const { email, name, role, permissions } = req.body;
+    const { email, firstname, lastname, role, permissions } = req.body;
     
     if (!email) {
       throw new AppError('Email is required', 400);
@@ -193,11 +191,27 @@ exports.manageTeamMember = {
     
     if (!user) {
       console.log('👤 User not found, creating new user');
+      
+      // Determine first and last names from various input formats
+      let firstName, lastName;
+      
+      if (firstname && lastname) {
+        firstName = firstname;
+        lastName = lastname;
+      } else if (name) {
+        const nameParts = name.split(' ');
+        firstName = nameParts[0];
+        lastName = nameParts.slice(1).join(' ');
+      } else {
+        firstName = email.split('@')[0];
+        lastName = '';
+      }
+      
       // Create a placeholder user for the invitation
       user = await User.create({
         email: email.toLowerCase(),
-        firstName: name ? name.split(' ')[0] : email.split('@')[0],
-        lastName: name ? name.split(' ').slice(1).join(' ') : '',
+        firstName,
+        lastName,
         userType: 'employer', // Default type for team members
         password: 'temp_password_' + Math.random().toString(36).substring(7), // Temporary password
         // Note: User should be prompted to set a real password when they first log in
@@ -219,10 +233,13 @@ exports.manageTeamMember = {
     
     console.log('🔄 Creating team member record');
     
+    // Determine display name for team member
+    const displayName = name || (firstname && lastname ? `${firstname} ${lastname}` : `${user.firstName} ${user.lastName}`).trim();
+    
     const member = await TeamMember.create({
       business: business._id,
       user: user._id,
-      name: name || `${user.firstName} ${user.lastName}`.trim(),
+      name: displayName,
       email: email.toLowerCase(),
       role: role || 'staff',
       permissions: permissions || [],

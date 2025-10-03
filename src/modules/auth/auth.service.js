@@ -27,18 +27,8 @@ const buildUserResponse = async (user) => {
     return { user: base, workerProfile: profile };
   }
 
-  const profile = await EmployerProfile.findOne({ user: user._id }).populate('defaultBusiness');
+  const profile = await EmployerProfile.findOne({ user: user._id });
   return { user: base, employerProfile: profile };
-};
-
-const createDefaultBusiness = async ({ employerId, companyName }) => {
-  const business = await Business.create({
-    owner: employerId,
-    name: `${companyName} Main Location`,
-    description: 'Default location created at signup',
-    isActive: true
-  });
-  return business;
 };
 
 exports.signup = async (payload) => {
@@ -56,8 +46,8 @@ exports.signup = async (payload) => {
     email: email.toLowerCase(),
     password: payload.password,
     userType,
-    firstName: payload.firstName || payload.name || '',
-    lastName: payload.lastName || '',
+    firstName: payload.firstName || payload.firstname || payload.name || '',
+    lastName: payload.lastName || payload.lastname || '',
     phone: payload.phone || null
   });
 
@@ -70,22 +60,12 @@ exports.signup = async (payload) => {
       languages: payload.languages || []
     });
   } else {
-    const companyName = payload.companyName || `${user.firstName || 'Employer'} Company`;
-    const profile = await EmployerProfile.create({
+    await EmployerProfile.create({
       user: user._id,
-      companyName,
+      companyName: payload.companyName || `${user.firstName || 'Employer'} Company`,
       description: payload.description || '',
       phone: payload.phone || null
     });
-
-    const defaultBusiness = await createDefaultBusiness({
-      employerId: user._id,
-      companyName
-    });
-    profile.defaultBusiness = defaultBusiness._id;
-    await profile.save();
-    user.selectedBusiness = defaultBusiness._id;
-    await user.save();
   }
 
   return buildUserResponse(user);

@@ -350,9 +350,7 @@ async function getBusinessIdFromRequest(req) {
     }
 
     // 5. Use user's selected business
-    if (req.user && req.user.selectedBusiness) {
-      return req.user.selectedBusiness.toString();
-    }
+    // Business ID should be provided in request parameters or body
 
     // 6. If user is an employer, find their primary business
     if (req.user && req.user.userType === 'employer') {
@@ -489,6 +487,55 @@ function validatePermissions(permissions) {
   );
 }
 
+/**
+ * Maps team access boolean permissions to business permission strings
+ * @param {Object} teamAccess - Object containing boolean permission flags
+ * @returns {Array} Array of business permission strings
+ */
+const mapTeamAccessToBusinessPermissions = (teamAccess) => {
+  const permissions = [];
+  
+  // Job permissions
+  if (teamAccess.canCreateJobs) permissions.push('create_jobs');
+  if (teamAccess.canEditJobs) permissions.push('edit_jobs');
+  if (teamAccess.canDeleteJobs) permissions.push('delete_jobs');
+  if (teamAccess.canViewJobs) permissions.push('view_jobs');
+  
+  // Application permissions
+  if (teamAccess.canViewApplications) permissions.push('view_applications');
+  if (teamAccess.canManageApplications) permissions.push('manage_applications');
+  
+  // Shift permissions
+  if (teamAccess.canCreateShifts) permissions.push('create_shifts');
+  if (teamAccess.canEditShifts) permissions.push('edit_shifts');
+  if (teamAccess.canDeleteShifts) permissions.push('delete_shifts');
+  if (teamAccess.canViewShifts) permissions.push('view_shifts');
+  
+  // Worker permissions
+  if (teamAccess.canViewWorkers) permissions.push('view_workers');
+  if (teamAccess.canManageWorkers) permissions.push('manage_workers');
+  
+  // Team permissions
+  if (teamAccess.canViewTeam) permissions.push('view_team_members');
+  if (teamAccess.canManageTeam) permissions.push('manage_team_members');
+  
+  // Business permissions
+  if (teamAccess.canEditBusiness) permissions.push('edit_business');
+  if (teamAccess.canViewBusiness) permissions.push('view_business');
+  
+  // Financial permissions
+  if (teamAccess.canViewPayments) permissions.push('view_payments');
+  if (teamAccess.canManagePayments) permissions.push('manage_payments');
+  if (teamAccess.canViewBudgets) permissions.push('view_budgets');
+  if (teamAccess.canManageBudgets) permissions.push('manage_budgets');
+  
+  // Attendance permissions
+  if (teamAccess.canViewAttendance) permissions.push('view_attendance');
+  if (teamAccess.canManageAttendance) permissions.push('manage_attendance');
+  
+  return permissions;
+};
+
 module.exports = {
   ALL_PERMISSIONS,
   ROLE_PERMISSIONS,
@@ -503,4 +550,5 @@ module.exports = {
   checkUserPermission,
   getRolePermissions,
   validatePermissions,
+  mapTeamAccessToBusinessPermissions,
 };

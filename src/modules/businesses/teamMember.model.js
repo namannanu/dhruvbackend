@@ -12,7 +12,8 @@ const teamMemberSchema = new mongoose.Schema(
       ref: 'User',
       required: true
     },
-    name: { type: String, required: true, trim: true },
+    firstName: { type: String, required: true, trim: true },
+    lastName: { type: String, required: true, trim: true },
     email: { type: String, required: true, trim: true },
     role: {
       type: String,
@@ -62,7 +63,9 @@ const teamMemberSchema = new mongoose.Schema(
             
             // Team Management
             'invite_team_members',
+            'view_team_members',
             'edit_team_members',
+            'manage_team_members',
             'remove_team_members',
             'manage_permissions',
             

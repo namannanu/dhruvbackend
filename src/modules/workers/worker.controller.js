@@ -221,6 +221,14 @@ exports.updateWorkerProfile = catchAsync(async (req, res, next) => {
     req.body.lastName = nameParts.slice(1).join(' ') || '';
   }
 
+  // Handle lowercase firstname and lastname fields
+  if (req.body.firstname) {
+    req.body.firstName = req.body.firstname;
+  }
+  if (req.body.lastname) {
+    req.body.lastName = req.body.lastname;
+  }
+
   allowedUserFields.forEach((field) => {
     if (field in req.body) {
       req.user[field] = req.body[field];

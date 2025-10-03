@@ -28,7 +28,7 @@ exports.processJobPayment = catchAsync(async (req, res, next) => {
   const job = await Job.create({
     ...req.body.job,
     employer: req.user._id,
-    business: req.body.job.business || req.user.selectedBusiness,
+    business: req.body.job.business,
     premiumRequired: false,
     status: 'active'
   });

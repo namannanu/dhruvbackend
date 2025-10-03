@@ -38,10 +38,6 @@ const userSchema = new mongoose.Schema(
     premium: { type: Boolean, default: false },
     freeJobsPosted: { type: Number, default: 0 },
     freeApplicationsUsed: { type: Number, default: 0 },
-    selectedBusiness: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Business'
-    },
     lastLoginAt: Date,
     passwordChangedAt: Date
   },

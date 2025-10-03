@@ -115,7 +115,7 @@ exports.createJob = catchAsync(async (req, res, next) => {
     return next(new AppError('Only employers can create jobs', 403));
   }
 
-  const businessId = req.body.business || req.user.selectedBusiness;
+  const businessId = req.body.business;
   if (!businessId) {
     return next(new AppError('Business must be specified for job postings', 400));
   }
@@ -174,7 +174,7 @@ exports.createJobsBulk = catchAsync(async (req, res, next) => {
   const preparedJobs = [];
 
   for (const job of jobsPayload) {
-    const businessId = job.business || req.user.selectedBusiness;
+    const businessId = job.business;
     if (!businessId) {
       return next(new AppError('Each job must specify a business', 400));
     }

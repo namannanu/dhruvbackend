@@ -13,11 +13,7 @@ const employerProfileSchema = new mongoose.Schema(
     phone: { type: String, trim: true },
     rating: { type: Number, default: 0 },
     totalJobsPosted: { type: Number, default: 0 },
-    totalHires: { type: Number, default: 0 },
-    defaultBusiness: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Business'
-    }
+    totalHires: { type: Number, default: 0 }
   },
   { 
     timestamps: true,

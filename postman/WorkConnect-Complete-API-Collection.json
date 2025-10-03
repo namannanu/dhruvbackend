@@ -69,7 +69,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"phone\": \"+1234567890\",\n  \"password\": \"securePassword123\",\n  \"userType\": \"employer\"\n}"
+              "raw": "{\n  \"firstname\": \"John\",\n  \"lastname\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"phone\": \"+1234567890\",\n  \"password\": \"securePassword123\",\n  \"userType\": \"employer\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/auth/signup",
