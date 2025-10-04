@@ -5,45 +5,25 @@ const AppError = require('../../shared/utils/appError');
 
 // Grant team access to a user for managing another user's data
 exports.grantAccess = catchAsync(async (req, res) => {
-  const { targetUserId, managedUserId, role, permissions, restrictions, expiresAt, reason } = req.body;
+  const { targetUserEmail, role, permissions, restrictions, expiresAt, reason } = req.body;
   
-  if (!targetUserId || !managedUserId || !role) {
-    throw new AppError('targetUserId, managedUserId, and role are required', 400);
+  if (!targetUserEmail || !role) {
+    throw new AppError('targetUserEmail and role are required', 400);
   }
   
-  // Verify the target user exists
-  const targetUser = await User.findById(targetUserId);
+  // The current user (employee) is granting access to their data
+  const managedUserId = req.user.userId; // Current user's userId
+  const managedUser = req.user; // Current user
+  
+  // Find the target user (team member) by email
+  const targetUser = await User.findOne({ email: targetUserEmail.toLowerCase() });
   if (!targetUser) {
-    throw new AppError('Target user not found', 404);
-  }
-  
-  // Verify the managed user exists and get their userId
-  const managedUser = await User.findOne({ userId: managedUserId });
-  if (!managedUser) {
-    throw new AppError('Managed user not found with provided userId', 404);
-  }
-  
-  // Check if the current user has permission to grant access to this managed user's data
-  // Either they are the owner or they have canGrantAccess permission
-  const isOwner = managedUser._id.toString() === req.user._id.toString();
-  let hasGrantPermission = false;
-  
-  if (!isOwner) {
-    const currentUserAccess = await TeamAccess.checkAccess(
-      req.user._id, 
-      managedUserId, 
-      'canGrantAccess'
-    );
-    hasGrantPermission = currentUserAccess.hasAccess;
-  }
-  
-  if (!isOwner && !hasGrantPermission) {
-    throw new AppError('You do not have permission to grant access to this user data', 403);
+    throw new AppError('Target user not found with provided email', 404);
   }
   
   // Check if access already exists
   const existingAccess = await TeamAccess.findOne({
-    user: targetUserId,
+    user: targetUser._id,
     managedUserId: managedUserId,
     status: { $in: ['active', 'suspended'] }
   });
@@ -54,7 +34,7 @@ exports.grantAccess = catchAsync(async (req, res) => {
   
   // Create team access
   const teamAccess = await TeamAccess.create({
-    user: targetUserId,
+    user: targetUser._id,
     managedUserId: managedUserId,
     originalUser: managedUser._id,
     grantedBy: req.user._id,
@@ -77,11 +57,13 @@ exports.grantAccess = catchAsync(async (req, res) => {
     data: {
       teamAccess,
       summary: {
-        grantedTo: `${targetUser.firstName} ${targetUser.lastName}`,
+        grantedTo: `${targetUser.firstName} ${targetUser.lastName} (${targetUser.email})`,
         managedUserData: `${managedUser.firstName} ${managedUser.lastName} (${managedUserId})`,
         role: role,
         permissions: teamAccess.permissionSummary,
-        expiresAt: teamAccess.expiresAt
+        expiresAt: teamAccess.expiresAt,
+        // Team member can use this userId to access employee's data
+        employeeUserId: managedUserId
       }
     }
   });
