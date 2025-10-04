@@ -156,11 +156,25 @@ teamMemberSchema.virtual('permissionSummary').get(function() {
 
 // Static method to check if user has permission to access data for a userId
 teamMemberSchema.statics.checkAccess = async function(userId, managedUserId, requiredPermission) {
+  console.log('🔎 TeamAccess.checkAccess called with:', {
+    userId: userId,
+    managedUserId: managedUserId,
+    requiredPermission: requiredPermission
+  });
+  
   const access = await this.findOne({
     user: userId,
     managedUserId: managedUserId,
     status: 'active'
   }).populate('user', 'firstName lastName email');
+  
+  console.log('🔍 Found access record:', access ? {
+    id: access._id,
+    user: access.user,
+    managedUserId: access.managedUserId,
+    role: access.role,
+    permissions: access.permissions
+  } : 'No access record found');
   
   if (!access) {
     return {
