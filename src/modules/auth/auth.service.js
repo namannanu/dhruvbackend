@@ -11,9 +11,12 @@ const ensureJwtSecret = () => {
   }
 };
 
-const signToken = (userId) => {
+const signToken = (user) => {
   ensureJwtSecret();
-  return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
+  return jwt.sign({ 
+    id: user._id || user.id,
+    userId: user.userId 
+  }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d'
   });
 };
@@ -86,7 +89,7 @@ exports.login = async ({ email, password }) => {
 };
 
 exports.issueAuthResponse = async (res, data, statusCode = 200) => {
-  const token = signToken(data.user._id);
+  const token = signToken(data.user);
   
   // Set Access-Control-Allow-Credentials header
   res.header('Access-Control-Allow-Credentials', 'true');

@@ -386,6 +386,19 @@ function requirePermissions(permissions, options = {}) {
         return next(new AppError('Authentication required', 401));
       }
 
+      // Check if this is the main employee (token userId matches user's userId)
+      // If token has userId and it matches the authenticated user's userId, grant all permissions
+      if (req.user.tokenUserId && req.user.tokenUserId === req.user.userId) {
+        console.log(`✅ Main employee access granted for userId: ${req.user.userId}`);
+        // Main employee has all permissions - skip permission checks
+        req.userPermissions = ['all_permissions']; // Indicate full access
+        req.businessId = await getBusinessIdFromRequest(req);
+        return next();
+      }
+
+      // For team members or when no userId in token, check permissions normally
+      console.log(`🔍 Checking team permissions for user: ${req.user.id}`);
+
       // Get business ID from request
       const businessId = await getBusinessIdFromRequest(req);
 

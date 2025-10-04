@@ -25,6 +25,7 @@ exports.protect = catchAsync(async (req, res, next) => {
     
     console.log('🔍 JWT Debug:', {
       decodedId: decoded.id,
+      decodedUserId: decoded.userId,
       decodedIat: decoded.iat,
       tokenValid: true
     });
@@ -36,6 +37,9 @@ exports.protect = catchAsync(async (req, res, next) => {
     console.log('🔍 User Lookup:', {
       userFound: !!currentUser,
       userId: currentUser?._id,
+      userActualUserId: currentUser?.userId,
+      tokenUserId: decoded.userId,
+      isMainEmployee: currentUser?.userId === decoded.userId,
       userType: currentUser?.userType,
       userEmail: currentUser?.email
     });
@@ -52,7 +56,9 @@ exports.protect = catchAsync(async (req, res, next) => {
     currentUser.lastActiveAt = new Date();
     await currentUser.save({ validateBeforeSave: false });
 
+    // Add both the user data and token userId for permission checking
     req.user = currentUser;
+    req.user.tokenUserId = decoded.userId; // userId from the token
     next();
   } catch (error) {
     if (error.name === 'JsonWebTokenError') {
