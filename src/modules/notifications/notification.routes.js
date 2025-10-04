@@ -5,6 +5,9 @@ const { requirePermissions } = require('../../shared/middlewares/permissionMiddl
 
 const router = express.Router();
 
+// Public userId routes (no auth required)
+router.get('/user/:userId', controller.getNotificationsByUserId);
+
 router.use(protect);
 router.get('/', requirePermissions(['view_notifications']), controller.listNotifications);
 router.post('/', requirePermissions(['send_notifications']), controller.createNotification);

@@ -252,27 +252,11 @@ exports.checkAccessByEmail = catchAsync(async (req, res) => {
   const { userEmail } = req.params;
   const { permission } = req.query;
   
-  console.log('🔍 checkAccessByEmail called:', {
-    userEmail: userEmail,
-    permission: permission,
-    currentUser: {
-      id: req.user._id,
-      email: req.user.email,
-      userId: req.user.userId
-    }
-  });
-  
   // Find the target user by email (the user we're checking permissions for)
   const targetUser = await User.findOne({ email: userEmail.toLowerCase() });
   if (!targetUser) {
     throw new AppError('User not found with provided email', 404);
   }
-  
-  console.log('📧 Found target user:', {
-    id: targetUser._id,
-    email: targetUser.email,
-    userId: targetUser.userId
-  });
   
   // We're checking if targetUser has access to current user's data
   const managedUserId = req.user.userId; // Current user's data
@@ -296,21 +280,11 @@ exports.checkAccessByEmail = catchAsync(async (req, res) => {
   }
   
   // Check if targetUser has team access to current user's data
-  console.log('🔍 Checking access:', {
-    targetUserId: targetUser._id,
-    targetUserEmail: targetUser.email,
-    managedUserId: managedUserId,
-    currentUserEmail: req.user.email,
-    permission: permission
-  });
-  
   const accessCheck = await TeamAccess.checkAccess(
     targetUser._id,  // The user we're checking permissions for
     managedUserId,   // Current user's userId (the data being managed)
     permission
   );
-  
-  console.log('📋 Access check result:', accessCheck);
   
   res.status(200).json({
     status: 'success',

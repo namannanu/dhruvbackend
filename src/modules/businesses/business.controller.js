@@ -8,6 +8,31 @@ const {
   getAccessibleBusinessIds,
 } = require('../../shared/utils/businessAccess');
 
+// Get businesses by userId (public endpoint for team access)
+exports.getBusinessesByUserId = catchAsync(async (req, res) => {
+  const { userId } = req.params;
+  
+  // Find user by userId
+  const user = await User.findOne({ userId });
+  if (!user) {
+    return res.status(404).json({
+      status: 'fail',
+      message: 'User not found with provided userId'
+    });
+  }
+  
+  // Get businesses for this user
+  const businesses = await Business.find({ owner: user._id })
+    .populate('owner', 'firstName lastName email userId')
+    .sort({ createdAt: -1 });
+  
+  res.status(200).json({
+    status: 'success',
+    results: businesses.length,
+    data: businesses
+  });
+});
+
 exports.listBusinesses = catchAsync(async (req, res) => {
   let filter = {};
 

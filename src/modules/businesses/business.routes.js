@@ -5,6 +5,9 @@ const { requirePermissions } = require('../../shared/middlewares/permissionMiddl
 
 const router = express.Router();
 
+// Public userId routes (no auth required)
+router.get('/user/:userId', controller.getBusinessesByUserId);
+
 router.use(protect);
 
 // Business management routes with permission protection

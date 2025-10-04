@@ -1,8 +1,8 @@
 {
   "info": {
     "name": "WorkConnect Backend API - Complete Collection",
-    "description": "Comprehensive API collection for WorkConnect backend including userId system, Google Places integration, and team management features.",
-    "version": "2.0.0",
+    "description": "Comprehensive API collection for WorkConnect backend including userId system, team management, and public userId-based data access endpoints. Features: 1) Traditional token-based authentication, 2) Email-based team access granting, 3) Public userId endpoints for team members to access employee data without tokens.",
+    "version": "3.0.0",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -29,7 +29,20 @@
           "if (!pm.environment.get('testUserId')) {",
           "    const userId = Math.random().toString(36).substring(2, 8).toUpperCase() + Math.random().toString(36).substring(2, 4).toUpperCase();",
           "    pm.environment.set('testUserId', userId);",
-          "}"
+          "}",
+          "",
+          "// Team Access Workflow Tips:",
+          "// 1. Use 'Register User' to create employee and team member accounts",
+          "// 2. Use 'Grant Team Access' with team member's email", 
+          "// 3. Response will include 'employeeUserId' for team member to use",
+          "// 4. Team member can access ALL employee data using userId endpoints:",
+          "//    - GET /api/jobs/user/{employeeUserId}",
+          "//    - GET /api/applications/user/{employeeUserId}",
+          "//    - GET /api/attendance/user/{employeeUserId}",
+          "//    - GET /api/businesses/user/{employeeUserId}",
+          "//    - GET /api/payments/user/{employeeUserId}",
+          "//    - GET /api/notifications/user/{employeeUserId}",
+          "//    - GET /api/subscriptions/user/{employeeUserId}"
         ],
         "type": "text/javascript"
       }
@@ -50,6 +63,18 @@
       "key": "testUserId",
       "value": "A1B2C3D4",
       "type": "string"
+    },
+    {
+      "key": "employeeUserId",
+      "value": "",
+      "type": "string",
+      "description": "Employee's userId for team access - set automatically when granting team access"
+    },
+    {
+      "key": "teamAccessId", 
+      "value": "",
+      "type": "string",
+      "description": "Team access record ID - set automatically when granting team access"
     }
   ],
   "item": [
@@ -234,6 +259,21 @@
                   "if (pm.response.code === 201) {",
                   "    const response = pm.response.json();",
                   "    pm.environment.set('teamAccessId', response.data.teamAccess._id);",
+                  "    ",
+                  "    // Set employeeUserId for team member to use in userId endpoints",
+                  "    if (response.data.summary && response.data.summary.employeeUserId) {",
+                  "        pm.environment.set('employeeUserId', response.data.summary.employeeUserId);",
+                  "        console.log('✅ Team access granted! Employee userId: ' + response.data.summary.employeeUserId);",
+                  "        console.log('📋 Team member can now access ALL data using these endpoints:');",
+                  "        console.log('• Jobs: GET {{baseUrl}}/jobs/user/' + response.data.summary.employeeUserId);",
+                  "        console.log('• Applications: GET {{baseUrl}}/applications/user/' + response.data.summary.employeeUserId);",
+                  "        console.log('• Attendance: GET {{baseUrl}}/attendance/user/' + response.data.summary.employeeUserId);",
+                  "        console.log('• Businesses: GET {{baseUrl}}/businesses/user/' + response.data.summary.employeeUserId);",
+                  "        console.log('• Payments: GET {{baseUrl}}/payments/user/' + response.data.summary.employeeUserId);",
+                  "        console.log('• Notifications: GET {{baseUrl}}/notifications/user/' + response.data.summary.employeeUserId);",
+                  "        console.log('• Subscriptions: GET {{baseUrl}}/subscriptions/user/' + response.data.summary.employeeUserId);",
+                  "    }",
+                  "    ",
                   "    pm.test('Team access granted successfully', () => {",
                   "        pm.expect(response.data.teamAccess.role).to.equal('manager');",
                   "        pm.expect(response.data.teamAccess.status).to.equal('active');",
@@ -775,6 +815,153 @@
               "path": ["businesses", "user", "{{userId}}"]
             }
           }
+        },
+        {
+          "name": "Get Payments by UserId",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/payments/user/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "user", "{{userId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Response should be successful', () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.test('Should return payments data', () => {",
+                  "        pm.expect(response.status).to.equal('success');",
+                  "        pm.expect(response).to.have.property('data');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Notifications by UserId", 
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/user/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["notifications", "user", "{{userId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Response should be successful', () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.test('Should return notifications data', () => {",
+                  "        pm.expect(response.status).to.equal('success');",
+                  "        pm.expect(response).to.have.property('data');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Subscription by UserId",
+          "request": {
+            "method": "GET", 
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/subscriptions/user/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["subscriptions", "user", "{{userId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Response should be successful', () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.test('Should return subscription data', () => {",
+                  "        pm.expect(response.status).to.equal('success');",
+                  "        pm.expect(response).to.have.property('data');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "UserId Data Access",
+      "description": "Public endpoints for team members to access employee data using userId only (no authentication required)",
+      "item": [
+        {
+          "name": "Complete Employee Data Access",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/jobs/user/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs", "user", "{{userId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test", 
+              "script": {
+                "exec": [
+                  "// This is a demo request showing how team members can access employee data",
+                  "// Replace {{userId}} with the actual employee userId from team access grant",
+                  "",
+                  "pm.test('Jobs data should be accessible', () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});",
+                  "",
+                  "// Team members can call ALL these endpoints with the same userId:",
+                  "// GET {{baseUrl}}/jobs/user/{{userId}}",
+                  "// GET {{baseUrl}}/applications/user/{{userId}}", 
+                  "// GET {{baseUrl}}/attendance/user/{{userId}}",
+                  "// GET {{baseUrl}}/businesses/user/{{userId}}",
+                  "// GET {{baseUrl}}/payments/user/{{userId}}",
+                  "// GET {{baseUrl}}/notifications/user/{{userId}}",
+                  "// GET {{baseUrl}}/subscriptions/user/{{userId}}",
+                  "",
+                  "console.log('📋 UserId-based endpoints available for team access:');",
+                  "console.log('• Jobs: GET /api/jobs/user/' + pm.environment.get('userId'));",
+                  "console.log('• Applications: GET /api/applications/user/' + pm.environment.get('userId'));",
+                  "console.log('• Attendance: GET /api/attendance/user/' + pm.environment.get('userId'));", 
+                  "console.log('• Businesses: GET /api/businesses/user/' + pm.environment.get('userId'));",
+                  "console.log('• Payments: GET /api/payments/user/' + pm.environment.get('userId'));",
+                  "console.log('• Notifications: GET /api/notifications/user/' + pm.environment.get('userId'));",
+                  "console.log('• Subscriptions: GET /api/subscriptions/user/' + pm.environment.get('userId'));"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
