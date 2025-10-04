@@ -47,9 +47,13 @@
 
 **Endpoint:** `GET /api/team/check-access-by-email/{userEmail}?permission=canCreateJobs`
 
-**Example:** `GET /api/team/check-access-by-email/employee@example.com?permission=canCreateJobs`
+**Purpose:** Check if a specific user (by email) has permission to access the current user's data
 
-**Response:**
+**Example:** `GET /api/team/check-access-by-email/j@gmail.com?permission=canCreateJobs`
+
+**What it checks:** Does "j@gmail.com" have permission to create jobs for the current user's data?
+
+**Response (if access granted):**
 ```json
 {
   "status": "success",
@@ -59,9 +63,25 @@
     "role": "manager",
     "permission": "canCreateJobs",
     "targetUser": {
-      "userId": "ABC12345",
-      "email": "employee@example.com",
-      "name": "Employee Name"
+      "userId": "BLW1MNSM",
+      "email": "j@gmail.com",
+      "name": "John Doe"
+    }
+  }
+}
+```
+
+**Response (if no access):**
+```json
+{
+  "status": "success",
+  "data": {
+    "hasAccess": false,
+    "reason": "No team access granted for this user",
+    "targetUser": {
+      "userId": "BLW1MNSM",
+      "email": "j@gmail.com",
+      "name": "John Doe"
     }
   }
 }

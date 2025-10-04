@@ -247,26 +247,27 @@ exports.checkAccess = catchAsync(async (req, res) => {
   });
 });
 
-// Check if current user has access to manage data for a specific user by email
+// Check if a specific user (by email) has access to manage current user's data
 exports.checkAccessByEmail = catchAsync(async (req, res) => {
   const { userEmail } = req.params;
   const { permission } = req.query;
   
-  // Find the target user by email
+  // Find the target user by email (the user we're checking permissions for)
   const targetUser = await User.findOne({ email: userEmail.toLowerCase() });
   if (!targetUser) {
     throw new AppError('User not found with provided email', 404);
   }
   
-  const managedUserId = targetUser.userId;
+  // We're checking if targetUser has access to current user's data
+  const managedUserId = req.user.userId; // Current user's data
   
-  // Check if user is trying to access their own data
-  if (req.user.userId === managedUserId) {
+  // Check if target user is the same as current user (checking own access)
+  if (targetUser.userId === req.user.userId) {
     return res.status(200).json({
       status: 'success',
       data: {
         hasAccess: true,
-        reason: 'Owner access',
+        reason: 'Owner access - same user',
         role: 'owner',
         permissions: 'all',
         targetUser: {
@@ -278,10 +279,10 @@ exports.checkAccessByEmail = catchAsync(async (req, res) => {
     });
   }
   
-  // Check team access
+  // Check if targetUser has team access to current user's data
   const accessCheck = await TeamAccess.checkAccess(
-    req.user._id, 
-    managedUserId, 
+    targetUser._id,  // The user we're checking permissions for
+    managedUserId,   // Current user's userId (the data being managed)
     permission
   );
   
