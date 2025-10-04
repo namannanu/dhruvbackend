@@ -949,6 +949,8 @@
                   "// GET {{baseUrl}}/payments/user/{{userId}}",
                   "// GET {{baseUrl}}/notifications/user/{{userId}}",
                   "// GET {{baseUrl}}/subscriptions/user/{{userId}}",
+                  "// GET {{baseUrl}}/users/userId/{{userId}}",
+                  "// GET {{baseUrl}}/users/userId/{{userId}}/all-data",
                   "",
                   "console.log('📋 UserId-based endpoints available for team access:');",
                   "console.log('• Jobs: GET /api/jobs/user/' + pm.environment.get('userId'));",
@@ -957,7 +959,75 @@
                   "console.log('• Businesses: GET /api/businesses/user/' + pm.environment.get('userId'));",
                   "console.log('• Payments: GET /api/payments/user/' + pm.environment.get('userId'));",
                   "console.log('• Notifications: GET /api/notifications/user/' + pm.environment.get('userId'));",
-                  "console.log('• Subscriptions: GET /api/subscriptions/user/' + pm.environment.get('userId'));"
+                  "console.log('• Subscriptions: GET /api/subscriptions/user/' + pm.environment.get('userId'));",
+                  "console.log('• User Profile: GET /api/users/userId/' + pm.environment.get('userId'));",
+                  "console.log('• User Complete Data: GET /api/users/userId/' + pm.environment.get('userId') + '/all-data');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get User Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/userId/{{employeeUserId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "userId", "{{employeeUserId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('User profile should be accessible', () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('👤 User Profile:', response.data.user);",
+                  "    if (response.data.profile) {",
+                  "        console.log('📋 Profile Details:', response.data.profile);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get User Complete Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/userId/{{employeeUserId}}/all-data",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "userId", "{{employeeUserId}}", "all-data"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('User complete data should be accessible', () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('🎯 Complete User Data Retrieved:');",
+                  "    console.log('👤 User:', response.data.user);",
+                  "    console.log('💼 Jobs:', response.data.jobs?.length || 0);",
+                  "    console.log('📝 Applications:', response.data.applications?.length || 0);",
+                  "    console.log('⏰ Attendance Records:', response.data.attendance?.length || 0);",
+                  "    console.log('🏢 Employment:', response.data.employment?.length || 0);",
+                  "}"
                 ]
               }
             }

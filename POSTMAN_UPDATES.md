@@ -36,6 +36,8 @@
 | Payments | `GET /api/payments/user/{{employeeUserId}}` | ❌ No |
 | Notifications | `GET /api/notifications/user/{{employeeUserId}}` | ❌ No |
 | Subscriptions | `GET /api/subscriptions/user/{{employeeUserId}}` | ❌ No |
+| Users Profile | `GET /api/users/userId/{{employeeUserId}}` | ❌ No |
+| Users Complete | `GET /api/users/userId/{{employeeUserId}}/all-data` | ❌ No |
 
 ## 🔄 Team Access Testing Workflow
 
@@ -68,7 +70,9 @@ const endpoints = [
   `/api/businesses/user/${employeeUserId}`,
   `/api/payments/user/${employeeUserId}`,
   `/api/notifications/user/${employeeUserId}`,
-  `/api/subscriptions/user/${employeeUserId}`
+  `/api/subscriptions/user/${employeeUserId}`,
+  `/api/users/userId/${employeeUserId}`,
+  `/api/users/userId/${employeeUserId}/all-data`
 ];
 
 // Fetch all data in parallel
