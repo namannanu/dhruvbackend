@@ -43,7 +43,31 @@
 }
 ```
 
-### 2. List My Managed Access (Team member sees which employee data they can access)
+### 2. Check Team Access by Email (NEW)
+
+**Endpoint:** `GET /api/team/check-access-by-email/{userEmail}?permission=canCreateJobs`
+
+**Example:** `GET /api/team/check-access-by-email/employee@example.com?permission=canCreateJobs`
+
+**Response:**
+```json
+{
+  "status": "success",
+  "data": {
+    "hasAccess": true,
+    "reason": "Team access granted",
+    "role": "manager",
+    "permission": "canCreateJobs",
+    "targetUser": {
+      "userId": "ABC12345",
+      "email": "employee@example.com",
+      "name": "Employee Name"
+    }
+  }
+}
+```
+
+### 3. List My Managed Access (Team member sees which employee data they can access)
 
 **Endpoint:** `GET /api/team/my-access`
 
@@ -70,7 +94,7 @@
 }
 ```
 
-### 3. Using the Employee UserId
+### 4. Using the Employee UserId
 
 Once team member gets the `managedUserId` (employee's userId), they can use existing endpoints:
 
@@ -79,18 +103,9 @@ Once team member gets the `managedUserId` (employee's userId), they can use exis
 - `GET /api/attendance/user/ABC12345` - Get employee's attendance
 - etc.
 
-## Updated Postman Request Format
+## Updated Postman Request Formats
 
-### Old Format (Complex):
-```json
-{
-  "targetUserId": "{{managerId}}",  // Team member's userId (hard to get)
-  "managedUserId": "{{userId}}",    // Employee's userId
-  "role": "manager"
-}
-```
-
-### New Format (Simple):
+### Grant Access (Simplified):
 ```json
 {
   "targetUserEmail": "teammember@email.com",  // Just email!
@@ -103,10 +118,35 @@ Once team member gets the `managedUserId` (employee's userId), they can use exis
 }
 ```
 
+### Check Access (Email-based):
+```
+GET {{baseUrl}}/team/check-access-by-email/employee@example.com?permission=canCreateJobs
+```
+
+Instead of:
+```
+GET {{baseUrl}}/team/check-access/{{userId}}?permission=canCreateJobs
+```
+
+## Available Endpoints
+
+### Employee Actions:
+- `POST /api/team/grant-access` - Grant access using email
+- `GET /api/team/my-team` - See who has access to my data
+
+### Team Member Actions:
+- `GET /api/team/my-access` - See which employee data I can access
+- `GET /api/team/check-access-by-email/{email}?permission={perm}` - Check specific permissions
+
+### Both:
+- `PATCH /api/team/access/{teamAccessId}` - Update permissions
+- `DELETE /api/team/access/{teamAccessId}` - Revoke access
+
 ## Workflow Summary
 
 1. **Employee** grants access using team member's **email only**
-2. **Team member** calls `/api/team/my-access` to get employee's **userId**
-3. **Team member** uses that **userId** in existing API endpoints to access employee's data
+2. **Team member** can check access using employee's **email** (no userId needed)
+3. **Team member** calls `/api/team/my-access` to get employee's **userId**
+4. **Team member** uses that **userId** in existing API endpoints to access employee's data
 
-This creates a replica-like experience where team members can access employee data using the established userId-based endpoints.
+This creates a replica-like experience where team members can access employee data using the established userId-based endpoints, but the setup process is simplified to use emails only.

@@ -247,6 +247,57 @@ exports.checkAccess = catchAsync(async (req, res) => {
   });
 });
 
+// Check if current user has access to manage data for a specific user by email
+exports.checkAccessByEmail = catchAsync(async (req, res) => {
+  const { userEmail } = req.params;
+  const { permission } = req.query;
+  
+  // Find the target user by email
+  const targetUser = await User.findOne({ email: userEmail.toLowerCase() });
+  if (!targetUser) {
+    throw new AppError('User not found with provided email', 404);
+  }
+  
+  const managedUserId = targetUser.userId;
+  
+  // Check if user is trying to access their own data
+  if (req.user.userId === managedUserId) {
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        hasAccess: true,
+        reason: 'Owner access',
+        role: 'owner',
+        permissions: 'all',
+        targetUser: {
+          userId: targetUser.userId,
+          email: targetUser.email,
+          name: `${targetUser.firstName} ${targetUser.lastName}`
+        }
+      }
+    });
+  }
+  
+  // Check team access
+  const accessCheck = await TeamAccess.checkAccess(
+    req.user._id, 
+    managedUserId, 
+    permission
+  );
+  
+  res.status(200).json({
+    status: 'success',
+    data: {
+      ...accessCheck,
+      targetUser: {
+        userId: targetUser.userId,
+        email: targetUser.email,
+        name: `${targetUser.firstName} ${targetUser.lastName}`
+      }
+    }
+  });
+});
+
 // Get comprehensive access report for a userId
 exports.getAccessReport = catchAsync(async (req, res) => {
   const { managedUserId } = req.params;

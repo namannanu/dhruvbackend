@@ -303,9 +303,9 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/team/check-access/{{userId}}?permission=canCreateJobs",
+              "raw": "{{baseUrl}}/team/check-access-by-email/employee@example.com?permission=canCreateJobs",
               "host": ["{{baseUrl}}"],
-              "path": ["team", "check-access", "{{userId}}"],
+              "path": ["team", "check-access-by-email", "employee@example.com"],
               "query": [
                 {
                   "key": "permission",
