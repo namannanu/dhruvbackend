@@ -1,0 +1,1081 @@
+{
+  "info": {
+    "_postman_id": "team-access-api-tests",
+    "name": "Team Access API Tests",
+    "description": "Complete API testing suite for team member access with different permission levels",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://dhruvbackend.vercel.app/api",
+      "type": "string"
+    },
+    {
+      "key": "ownerToken",
+      "value": "JWT_TOKEN_OF_BUSINESS_OWNER",
+      "type": "string"
+    },
+    {
+      "key": "managerToken",
+      "value": "JWT_TOKEN_OF_MANAGER",
+      "type": "string"
+    },
+    {
+      "key": "supervisorToken",
+      "value": "JWT_TOKEN_OF_SUPERVISOR",
+      "type": "string"
+    },
+    {
+      "key": "assistantToken",
+      "value": "JWT_TOKEN_OF_ASSISTANT",
+      "type": "string"
+    },
+    {
+      "key": "employeeEmail",
+      "value": "employee@company.com",
+      "type": "string"
+    },
+    {
+      "key": "jobId",
+      "value": "REPLACE_WITH_ACTUAL_JOB_ID",
+      "type": "string"
+    },
+    {
+      "key": "attendanceId",
+      "value": "REPLACE_WITH_ACTUAL_ATTENDANCE_ID",
+      "type": "string"
+    },
+    {
+      "key": "applicationId",
+      "value": "REPLACE_WITH_ACTUAL_APPLICATION_ID",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Setup - Grant Team Access",
+      "description": "Run these first as business owner to set up team access",
+      "item": [
+        {
+          "name": "Grant Manager Access",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userEmail\": \"manager@company.com\",\n  \"accessLevel\": \"full_access\",\n  \"reason\": \"Manager needs full access\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/team/grant-access",
+              "host": ["{{baseUrl}}"],
+              "path": ["team", "grant-access"]
+            }
+          }
+        },
+        {
+          "name": "Grant Supervisor Access",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userEmail\": \"supervisor@company.com\",\n  \"accessLevel\": \"manage_operations\",\n  \"permissions\": {\n    \"canViewJobs\": true,\n    \"canEditJobs\": true,\n    \"canCreateJobs\": false,\n    \"canViewAttendance\": true,\n    \"canEditAttendance\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/team/grant-access",
+              "host": ["{{baseUrl}}"],
+              "path": ["team", "grant-access"]
+            }
+          }
+        },
+        {
+          "name": "Grant Assistant Access",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userEmail\": \"assistant@company.com\",\n  \"accessLevel\": \"view_only\",\n  \"permissions\": {\n    \"canViewJobs\": true,\n    \"canViewAttendance\": true,\n    \"canViewApplications\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/team/grant-access",
+              "host": ["{{baseUrl}}"],
+              "path": ["team", "grant-access"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Manager Tests (Full Access)",
+      "description": "Test as manager@company.com with full access - all should work",
+      "item": [
+        {
+          "name": "List Jobs as Manager",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/jobs",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs"]
+            }
+          }
+        },
+        {
+          "name": "Create Job as Manager",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Software Engineer\",\n  \"description\": \"Backend developer position\",\n  \"location\": \"Remote\",\n  \"salary\": {\n    \"min\": 80000,\n    \"max\": 120000\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs"]
+            }
+          }
+        },
+        {
+          "name": "Update Job as Manager",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Senior Software Engineer\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs/{{jobId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs", "{{jobId}}"]
+            }
+          }
+        },
+        {
+          "name": "View Attendance as Manager",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/attendance",
+              "host": ["{{baseUrl}}"],
+              "path": ["attendance"]
+            }
+          }
+        },
+        {
+          "name": "Create Attendance as Manager",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"2025-10-05\",\n  \"checkIn\": \"09:00:00\",\n  \"checkOut\": \"17:00:00\",\n  \"status\": \"present\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/attendance",
+              "host": ["{{baseUrl}}"],
+              "path": ["attendance"]
+            }
+          }
+        },
+        {
+          "name": "List Businesses as Manager",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/businesses",
+              "host": ["{{baseUrl}}"],
+              "path": ["businesses"]
+            }
+          }
+        },
+        {
+          "name": "Create Business as Manager",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Company via Manager\",\n  \"type\": \"Technology\",\n  \"description\": \"Business created through team access\",\n  \"phone\": \"+1-555-0123\",\n  \"email\": \"contact@testcompany.com\",\n  \"location\": {\n    \"line1\": \"123 Tech Street\",\n    \"city\": \"San Francisco\",\n    \"state\": \"CA\",\n    \"postalCode\": \"94105\",\n    \"country\": \"USA\",\n    \"latitude\": 37.7749,\n    \"longitude\": -122.4194,\n    \"allowedRadius\": 200\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/businesses",
+              "host": ["{{baseUrl}}"],
+              "path": ["businesses"]
+            }
+          }
+        },
+        {
+          "name": "Update Business as Manager",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Test Company\",\n  \"description\": \"Updated by manager through team access\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/businesses/{{businessId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["businesses", "{{businessId}}"]
+            }
+          }
+        },
+        {
+          "name": "List Shifts as Manager",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/shifts",
+              "host": ["{{baseUrl}}"],
+              "path": ["shifts"]
+            }
+          }
+        },
+        {
+          "name": "Create Shift as Manager",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Morning Shift\",\n  \"startTime\": \"09:00\",\n  \"endTime\": \"17:00\",\n  \"date\": \"2025-10-06\",\n  \"workersNeeded\": 5,\n  \"location\": \"Main Office\",\n  \"description\": \"Regular morning shift\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/shifts",
+              "host": ["{{baseUrl}}"],
+              "path": ["shifts"]
+            }
+          }
+        },
+        {
+          "name": "Update Shift as Manager",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Morning Shift\",\n  \"workersNeeded\": 7,\n  \"description\": \"Updated by manager\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/shifts/{{shiftId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["shifts", "{{shiftId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Supervisor Tests (Limited Access)",
+      "description": "Test as supervisor@company.com with limited access",
+      "item": [
+        {
+          "name": "View Jobs as Supervisor (Should Work)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{supervisorToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/jobs",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs"]
+            }
+          }
+        },
+        {
+          "name": "Edit Job as Supervisor (Should Work)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{supervisorToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Updated by supervisor\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs/{{jobId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs", "{{jobId}}"]
+            }
+          }
+        },
+        {
+          "name": "Create Job as Supervisor (Should Fail)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{supervisorToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Should Fail\",\n  \"description\": \"No create permission\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs"]
+            }
+          }
+        },
+        {
+          "name": "View Attendance as Supervisor",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{supervisorToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/attendance",
+              "host": ["{{baseUrl}}"],
+              "path": ["attendance"]
+            }
+          }
+        },
+        {
+          "name": "List Businesses as Supervisor",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{supervisorToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/businesses",
+              "host": ["{{baseUrl}}"],
+              "path": ["businesses"]
+            }
+          }
+        },
+        {
+          "name": "Create Business as Supervisor (May Fail)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{supervisorToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Unauthorized Business Creation\",\n  \"type\": \"Technology\",\n  \"description\": \"This should fail if no create business permission\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/businesses",
+              "host": ["{{baseUrl}}"],
+              "path": ["businesses"]
+            }
+          }
+        },
+        {
+          "name": "Manage Attendance as Supervisor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{supervisorToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"2025-10-05\",\n  \"checkIn\": \"08:30:00\",\n  \"checkOut\": \"16:30:00\",\n  \"status\": \"present\",\n  \"notes\": \"Managed by supervisor\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/attendance",
+              "host": ["{{baseUrl}}"],
+              "path": ["attendance"]
+            }
+          }
+        },
+        {
+          "name": "List Shifts as Supervisor",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{supervisorToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/shifts",
+              "host": ["{{baseUrl}}"],
+              "path": ["shifts"]
+            }
+          }
+        },
+        {
+          "name": "Update Shift as Supervisor",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{supervisorToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"workersNeeded\": 6,\n  \"notes\": \"Updated by supervisor\",\n  \"description\": \"Shift modified by operations supervisor\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/shifts/{{shiftId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["shifts", "{{shiftId}}"]
+            }
+          }
+        },
+        {
+          "name": "Manage Attendance as Supervisor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{supervisorToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"workerId\": \"{{workerId}}\",\n  \"date\": \"2025-10-05\",\n  \"clockIn\": \"08:30\",\n  \"clockOut\": \"16:30\",\n  \"status\": \"present\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/attendance",
+              "host": ["{{baseUrl}}"],
+              "path": ["attendance"]
+            }
+          }
+        },
+        {
+          "name": "List Shifts as Supervisor",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{supervisorToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/shifts",
+              "host": ["{{baseUrl}}"],
+              "path": ["shifts"]
+            }
+          }
+        },
+        {
+          "name": "Update Shift as Supervisor",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{supervisorToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"workersNeeded\": 6,\n  \"notes\": \"Updated by supervisor\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/shifts/{{shiftId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["shifts", "{{shiftId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Assistant Tests (View Only)",
+      "description": "Test as assistant@company.com with view-only access",
+      "item": [
+        {
+          "name": "View Jobs as Assistant (Should Work)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{assistantToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/jobs",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs"]
+            }
+          }
+        },
+        {
+          "name": "Create Job as Assistant (Should Fail)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{assistantToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Should Fail\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs"]
+            }
+          }
+        },
+        {
+          "name": "Edit Job as Assistant (Should Fail)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{assistantToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Should Fail\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs/{{jobId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["jobs", "{{jobId}}"]
+            }
+          }
+        },
+        {
+          "name": "View Attendance as Assistant",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{assistantToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/attendance",
+              "host": ["{{baseUrl}}"],
+              "path": ["attendance"]
+            }
+          }
+        },
+        {
+          "name": "View Shifts as Assistant",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{assistantToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/shifts",
+              "host": ["{{baseUrl}}"],
+              "path": ["shifts"]
+            }
+          }
+        },
+        {
+          "name": "Create Attendance as Assistant (Should Fail)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{assistantToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"2025-10-05\",\n  \"status\": \"present\",\n  \"notes\": \"Should fail - view only access\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/attendance",
+              "host": ["{{baseUrl}}"],
+              "path": ["attendance"]
+            }
+          }
+        },
+        {
+          "name": "Update Shift as Assistant (Should Fail)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{assistantToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Should fail - no edit permission\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/shifts/{{shiftId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["shifts", "{{shiftId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Team Management (Email-Based URLs)",
+      "description": "Test team access management endpoints with new email-based URLs",
+      "item": [
+        {
+          "name": "Check Access",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/team/check-access-by-email/{{employeeEmail}}?permission=canViewJobs",
+              "host": ["{{baseUrl}}"],
+              "path": ["team", "check-access-by-email", "{{employeeEmail}}"],
+              "query": [
+                {
+                  "key": "permission",
+                  "value": "canViewJobs"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List My Access",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/team/my-access",
+              "host": ["{{baseUrl}}"],
+              "path": ["team", "my-access"]
+            }
+          }
+        },
+        {
+          "name": "Update Permissions (Email-Based)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accessLevel\": \"limited_access\",\n  \"permissions\": {\n    \"canCreateJobs\": false,\n    \"canEditJobs\": true,\n    \"canViewJobs\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/team/access/supervisor@company.com",
+              "host": ["{{baseUrl}}"],
+              "path": ["team", "access", "supervisor@company.com"]
+            }
+          }
+        },
+        {
+          "name": "Revoke Access (Email-Based)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Access no longer needed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/team/access/assistant@company.com",
+              "host": ["{{baseUrl}}"],
+              "path": ["team", "access", "assistant@company.com"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

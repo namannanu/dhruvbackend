@@ -1,0 +1,402 @@
+{
+  "name": "Team Access API Tests",
+  "description": "Complete API testing suite for team member access with different permission levels",
+  "version": "1.0.0",
+  "base_url": "{{baseUrl}}",
+  
+  "environment": {
+    "baseUrl": "https://dhruvbackend.vercel.app/api",
+    "ownerToken": "JWT_TOKEN_OF_BUSINESS_OWNER",
+    "managerToken": "JWT_TOKEN_OF_MANAGER",
+    "supervisorToken": "JWT_TOKEN_OF_SUPERVISOR", 
+    "assistantToken": "JWT_TOKEN_OF_ASSISTANT",
+    "employeeEmail": "employee@company.com",
+    "jobId": "REPLACE_WITH_ACTUAL_JOB_ID",
+    "attendanceId": "REPLACE_WITH_ACTUAL_ATTENDANCE_ID",
+    "applicationId": "REPLACE_WITH_ACTUAL_APPLICATION_ID"
+  },
+
+  "tests": {
+    "setup": {
+      "description": "Run these first as business owner to set up team access",
+      "grant_manager_access": {
+        "method": "POST",
+        "url": "{{baseUrl}}/team/grant-access",
+        "headers": {
+          "Authorization": "Bearer {{ownerToken}}",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "userEmail": "manager@company.com",
+          "accessLevel": "full_access",
+          "reason": "Manager needs full access"
+        }
+      },
+      "grant_supervisor_access": {
+        "method": "POST", 
+        "url": "{{baseUrl}}/team/grant-access",
+        "headers": {
+          "Authorization": "Bearer {{ownerToken}}",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "userEmail": "supervisor@company.com",
+          "accessLevel": "manage_operations",
+          "permissions": {
+            "canViewJobs": true,
+            "canEditJobs": true,
+            "canCreateJobs": false,
+            "canViewAttendance": true,
+            "canEditAttendance": true
+          }
+        }
+      },
+      "grant_assistant_access": {
+        "method": "POST",
+        "url": "{{baseUrl}}/team/grant-access", 
+        "headers": {
+          "Authorization": "Bearer {{ownerToken}}",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "userEmail": "assistant@company.com",
+          "accessLevel": "view_only",
+          "permissions": {
+            "canViewJobs": true,
+            "canViewAttendance": true,
+            "canViewApplications": true
+          }
+        }
+      }
+    },
+
+    "manager_full_access": {
+      "description": "Test as manager@company.com with full access - all should work",
+      "token": "{{managerToken}}",
+      
+      "jobs": {
+        "list_jobs": {
+          "method": "GET",
+          "url": "{{baseUrl}}/jobs",
+          "headers": {
+            "Authorization": "Bearer {{managerToken}}"
+          },
+          "expect": "200 OK"
+        },
+        "create_job": {
+          "method": "POST",
+          "url": "{{baseUrl}}/jobs",
+          "headers": {
+            "Authorization": "Bearer {{managerToken}}",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "title": "Software Engineer",
+            "description": "Backend developer position",
+            "location": "Remote",
+            "salary": {
+              "min": 80000,
+              "max": 120000
+            }
+          },
+          "expect": "201 Created"
+        },
+        "update_job": {
+          "method": "PATCH",
+          "url": "{{baseUrl}}/jobs/{{jobId}}",
+          "headers": {
+            "Authorization": "Bearer {{managerToken}}",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "title": "Senior Software Engineer"
+          },
+          "expect": "200 OK"
+        },
+        "delete_job": {
+          "method": "DELETE",
+          "url": "{{baseUrl}}/jobs/{{jobId}}",
+          "headers": {
+            "Authorization": "Bearer {{managerToken}}"
+          },
+          "expect": "200 OK"
+        }
+      },
+
+      "attendance": {
+        "view_attendance": {
+          "method": "GET",
+          "url": "{{baseUrl}}/attendance",
+          "headers": {
+            "Authorization": "Bearer {{managerToken}}"
+          },
+          "expect": "200 OK"
+        },
+        "create_attendance": {
+          "method": "POST",
+          "url": "{{baseUrl}}/attendance",
+          "headers": {
+            "Authorization": "Bearer {{managerToken}}",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "date": "2025-10-05",
+            "checkIn": "09:00:00",
+            "checkOut": "17:00:00",
+            "status": "present"
+          },
+          "expect": "201 Created"
+        }
+      },
+
+      "applications": {
+        "view_applications": {
+          "method": "GET",
+          "url": "{{baseUrl}}/applications",
+          "headers": {
+            "Authorization": "Bearer {{managerToken}}"
+          },
+          "expect": "200 OK"
+        },
+        "manage_application": {
+          "method": "PATCH",
+          "url": "{{baseUrl}}/applications/{{applicationId}}",
+          "headers": {
+            "Authorization": "Bearer {{managerToken}}",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "status": "shortlisted"
+          },
+          "expect": "200 OK"
+        }
+      }
+    },
+
+    "supervisor_limited_access": {
+      "description": "Test as supervisor@company.com with limited access",
+      "token": "{{supervisorToken}}",
+      
+      "allowed_operations": {
+        "view_jobs": {
+          "method": "GET",
+          "url": "{{baseUrl}}/jobs",
+          "headers": {
+            "Authorization": "Bearer {{supervisorToken}}"
+          },
+          "expect": "200 OK - Has view permission"
+        },
+        "edit_job": {
+          "method": "PATCH",
+          "url": "{{baseUrl}}/jobs/{{jobId}}",
+          "headers": {
+            "Authorization": "Bearer {{supervisorToken}}",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "description": "Updated by supervisor"
+          },
+          "expect": "200 OK - Has edit permission"
+        },
+        "view_attendance": {
+          "method": "GET",
+          "url": "{{baseUrl}}/attendance",
+          "headers": {
+            "Authorization": "Bearer {{supervisorToken}}"
+          },
+          "expect": "200 OK - Has view permission"
+        },
+        "edit_attendance": {
+          "method": "PATCH",
+          "url": "{{baseUrl}}/attendance/{{attendanceId}}",
+          "headers": {
+            "Authorization": "Bearer {{supervisorToken}}",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "status": "approved"
+          },
+          "expect": "200 OK - Has edit permission"
+        }
+      },
+
+      "forbidden_operations": {
+        "create_job": {
+          "method": "POST",
+          "url": "{{baseUrl}}/jobs",
+          "headers": {
+            "Authorization": "Bearer {{supervisorToken}}",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "title": "Should Fail",
+            "description": "No create permission"
+          },
+          "expect": "403 Forbidden - No create permission"
+        },
+        "delete_job": {
+          "method": "DELETE",
+          "url": "{{baseUrl}}/jobs/{{jobId}}",
+          "headers": {
+            "Authorization": "Bearer {{supervisorToken}}"
+          },
+          "expect": "403 Forbidden - No delete permission"
+        }
+      }
+    },
+
+    "assistant_view_only": {
+      "description": "Test as assistant@company.com with view-only access",
+      "token": "{{assistantToken}}",
+      
+      "allowed_operations": {
+        "view_jobs": {
+          "method": "GET",
+          "url": "{{baseUrl}}/jobs",
+          "headers": {
+            "Authorization": "Bearer {{assistantToken}}"
+          },
+          "expect": "200 OK - Has view permission"
+        },
+        "view_attendance": {
+          "method": "GET",
+          "url": "{{baseUrl}}/attendance",
+          "headers": {
+            "Authorization": "Bearer {{assistantToken}}"
+          },
+          "expect": "200 OK - Has view permission"
+        },
+        "view_applications": {
+          "method": "GET",
+          "url": "{{baseUrl}}/applications",
+          "headers": {
+            "Authorization": "Bearer {{assistantToken}}"
+          },
+          "expect": "200 OK - Has view permission"
+        }
+      },
+
+      "forbidden_operations": {
+        "create_job": {
+          "method": "POST",
+          "url": "{{baseUrl}}/jobs",
+          "headers": {
+            "Authorization": "Bearer {{assistantToken}}",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "title": "Should Fail"
+          },
+          "expect": "403 Forbidden - View only access"
+        },
+        "edit_job": {
+          "method": "PATCH",
+          "url": "{{baseUrl}}/jobs/{{jobId}}",
+          "headers": {
+            "Authorization": "Bearer {{assistantToken}}",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "title": "Should Fail"
+          },
+          "expect": "403 Forbidden - View only access"
+        },
+        "edit_attendance": {
+          "method": "PATCH",
+          "url": "{{baseUrl}}/attendance/{{attendanceId}}",
+          "headers": {
+            "Authorization": "Bearer {{assistantToken}}",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "status": "approved"
+          },
+          "expect": "403 Forbidden - View only access"
+        }
+      }
+    },
+
+    "team_management": {
+      "description": "Test team access management endpoints (email-based URLs)",
+      
+      "check_access": {
+        "method": "GET",
+        "url": "{{baseUrl}}/team/check-access-by-email/{{employeeEmail}}",
+        "headers": {
+          "Authorization": "Bearer {{managerToken}}"
+        },
+        "query": "?permission=canViewJobs",
+        "expect": "200 OK - Access check result"
+      },
+      
+      "list_my_access": {
+        "method": "GET",
+        "url": "{{baseUrl}}/team/my-access",
+        "headers": {
+          "Authorization": "Bearer {{managerToken}}"
+        },
+        "expect": "200 OK - List of employees I can manage"
+      },
+      
+      "update_permissions": {
+        "method": "PATCH",
+        "url": "{{baseUrl}}/team/access/supervisor@company.com",
+        "headers": {
+          "Authorization": "Bearer {{ownerToken}}",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "accessLevel": "limited_access",
+          "permissions": {
+            "canCreateJobs": false,
+            "canEditJobs": true,
+            "canViewJobs": true
+          }
+        },
+        "expect": "200 OK - Permissions updated"
+      },
+      
+      "revoke_access": {
+        "method": "DELETE",
+        "url": "{{baseUrl}}/team/access/assistant@company.com",
+        "headers": {
+          "Authorization": "Bearer {{ownerToken}}",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "reason": "Access no longer needed"
+        },
+        "expect": "200 OK - Access revoked"
+      }
+    }
+  },
+
+  "quick_reference": {
+    "access_levels": {
+      "full_access": "Can do everything (create, read, update, delete)",
+      "manage_operations": "Can view and edit, limited create permissions",
+      "limited_access": "Custom permission set",
+      "view_only": "Can only read data"
+    },
+    
+    "permission_matrix": {
+      "manager": "✅ All operations",
+      "supervisor": "✅ View/Edit, ❌ Create/Delete",
+      "assistant": "✅ View only, ❌ All write operations"
+    },
+    
+    "new_email_based_urls": [
+      "PATCH /team/access/{userEmail} - Update permissions",
+      "DELETE /team/access/{userEmail} - Revoke access",
+      "GET /team/check-access-by-email/{userEmail} - Check access"
+    ]
+  },
+
+  "testing_order": [
+    "1. Run setup requests as business owner",
+    "2. Test manager_full_access - all should succeed", 
+    "3. Test supervisor_limited_access - some should fail",
+    "4. Test assistant_view_only - write operations should fail",
+    "5. Test team_management operations"
+  ]
+}
