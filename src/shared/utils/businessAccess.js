@@ -58,19 +58,50 @@ async function ensureBusinessAccess({
 
   // If no traditional team member found, check TeamAccess records
   if (!teamMember) {
+    // Debug logging
+    console.log('No TeamMember found, checking TeamAccess for:', {
+      userId,
+      userEmail: user.email,
+      businessId: business._id
+    });
+    
     const teamAccess = await TeamAccess.findOne({
-      $or: [
-        { employeeId: userId },
-        { userEmail: user.email }
-      ],
-      status: { $in: ['active', 'pending'] },
-      $or: [
-        { businessContext: business._id },
-        { accessScope: 'all_owner_businesses' }
+      $and: [
+        {
+          $or: [
+            { employeeId: userId },
+            { userEmail: user.email }
+          ]
+        },
+        {
+          status: { $in: ['active', 'pending'] }
+        },
+        {
+          $or: [
+            { 'businessContext.businessId': business._id },
+            { 'businessContext.allBusinesses': true },
+            { accessScope: 'all_owner_businesses' }
+          ]
+        }
       ]
     });
 
+    console.log('TeamAccess query result:', teamAccess ? 'Found' : 'Not found');
+    
     if (!teamAccess) {
+      // Let's also try a simpler query to see if any TeamAccess records exist for this user
+      const anyTeamAccess = await TeamAccess.find({
+        $or: [
+          { employeeId: userId },
+          { userEmail: user.email }
+        ]
+      }).limit(5);
+      
+      console.log('Any TeamAccess records for user:', anyTeamAccess.length, 'found');
+      if (anyTeamAccess.length > 0) {
+        console.log('Sample TeamAccess record:', JSON.stringify(anyTeamAccess[0], null, 2));
+      }
+      
       throw new AppError('You are not a team member of this business', 403);
     }
 
