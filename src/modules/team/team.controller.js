@@ -122,7 +122,12 @@ exports.grantAccess = catchAsync(async (req, res, next) => {
   }
 
   const normalizedEmail = normalizeEmail(userEmail);
-  const employeeUser = await resolveUser({ identifier: employeeId, email: normalizedEmail });
+  
+  // Resolve employee user using either employeeId or userEmail
+  const employeeUser = await resolveUser({ 
+    identifier: employeeId || normalizedEmail, 
+    email: normalizedEmail 
+  });
 
   if (!employeeUser) {
     return next(new AppError('Employee user not found. Ensure the user has an account first.', 404));
