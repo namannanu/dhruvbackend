@@ -95,6 +95,12 @@ async function ensureBusinessAccess({
         businessContext: teamAccess.businessContext,
         managedUser: teamAccess.managedUser?._id || teamAccess.managedUserId
       });
+      console.log('Full TeamAccess object keys:', Object.keys(teamAccess.toObject ? teamAccess.toObject() : teamAccess));
+      console.log('Raw permissions on TeamAccess:', {
+        canCreateJobs: teamAccess.canCreateJobs,
+        permissions: teamAccess.permissions,
+        effectivePermissions: teamAccess.effectivePermissions
+      });
     }
     
     if (!teamAccess) {
@@ -117,28 +123,27 @@ async function ensureBusinessAccess({
     // Check if TeamAccess has the required permissions
     const permissionsToCheck = normalizePermissions(requiredPermissions);
     console.log('Permissions to check:', permissionsToCheck);
-    console.log('TeamAccess permissions:', {
-      canCreateJobs: teamAccess.canCreateJobs,
-      canEditJobs: teamAccess.canEditJobs,
-      canDeleteJobs: teamAccess.canDeleteJobs,
-      canViewJobs: teamAccess.canViewJobs
-    });
+    
+    // Get permissions from the most likely sources
+    const permissions = teamAccess.effectivePermissions || teamAccess.permissions || teamAccess;
+    console.log('Using permissions from:', permissions);
+    console.log('Available permission fields:', Object.keys(permissions).filter(k => k.startsWith('can')));
     
     if (permissionsToCheck.length) {
       const hasRequiredPermissions = permissionsToCheck.every(permission => {
         let hasPermission;
         switch (permission) {
-          case 'create_jobs': hasPermission = teamAccess.canCreateJobs; break;
-          case 'edit_jobs': hasPermission = teamAccess.canEditJobs; break;
-          case 'delete_jobs': hasPermission = teamAccess.canDeleteJobs; break;
-          case 'view_jobs': hasPermission = teamAccess.canViewJobs; break;
-          case 'create_business': hasPermission = teamAccess.canCreateBusiness; break;
-          case 'edit_business': hasPermission = teamAccess.canEditBusiness; break;
-          case 'delete_business': hasPermission = teamAccess.canDeleteBusiness; break;
-          case 'view_business': hasPermission = teamAccess.canViewBusiness; break;
+          case 'create_jobs': hasPermission = permissions.canCreateJobs; break;
+          case 'edit_jobs': hasPermission = permissions.canEditJobs; break;
+          case 'delete_jobs': hasPermission = permissions.canDeleteJobs; break;
+          case 'view_jobs': hasPermission = permissions.canViewJobs; break;
+          case 'create_business': hasPermission = permissions.canCreateBusiness; break;
+          case 'edit_business': hasPermission = permissions.canEditBusiness; break;
+          case 'delete_business': hasPermission = permissions.canDeleteBusiness; break;
+          case 'view_business': hasPermission = permissions.canViewBusiness; break;
           default: hasPermission = false;
         }
-        console.log(`Permission check: ${permission} = ${hasPermission}`);
+        console.log(`Permission check: ${permission} = ${hasPermission} (raw value: ${permissions['can' + permission.split('_').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('')]})`);
         return hasPermission;
       });
 
