@@ -19,8 +19,11 @@ router.get('/my-access', teamController.listManagedAccess);
 // Update team member permissions
 router.patch('/access/:teamAccessId', teamController.updatePermissions);
 
-// Revoke team access
+// Revoke team access (by teamAccessId)
 router.delete('/access/:teamAccessId', teamController.revokeAccess);
+
+// Revoke team access by email (easier method)
+router.delete('/revoke-access/:userEmail', teamController.revokeAccessByEmail);
 
 // Check if I have access to manage data for a specific employee (by ObjectId)
 router.get('/check-access/:employeeId', teamController.checkAccess);

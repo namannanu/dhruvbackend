@@ -105,6 +105,13 @@ const teamMemberSchema = new mongoose.Schema(
     notes: String,
     reason: String, // Why access was granted
     
+    // Revocation tracking
+    revokedAt: Date,
+    revokedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    
     // Expiration (optional)
     expiresAt: Date,
     

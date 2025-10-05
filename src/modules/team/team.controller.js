@@ -184,10 +184,20 @@ exports.revokeAccess = catchAsync(async (req, res) => {
   const { teamAccessId } = req.params;
   const { reason } = req.body;
   
+  console.log('🔍 Attempting to revoke access for teamAccessId:', teamAccessId);
+  
   const teamAccess = await TeamAccess.findById(teamAccessId);
   if (!teamAccess) {
+    console.log('❌ No team access found with ID:', teamAccessId);
     throw new AppError('Team access not found', 404);
   }
+  
+  console.log('✅ Found team access:', {
+    id: teamAccess._id,
+    userEmail: teamAccess.userEmail,
+    employeeId: teamAccess.employeeId,
+    currentStatus: teamAccess.status
+  });
   
   // Check if current user can revoke this access
   const managedUser = await User.findById(teamAccess.employeeId);
@@ -207,16 +217,86 @@ exports.revokeAccess = catchAsync(async (req, res) => {
     throw new AppError('You do not have permission to revoke this team access', 403);
   }
   
+  // Update status to revoked
+  const previousStatus = teamAccess.status;
   teamAccess.status = 'revoked';
   teamAccess.notes = reason || 'Access revoked';
+  teamAccess.revokedAt = new Date();
+  teamAccess.revokedBy = req.user._id;
+  
   await teamAccess.save();
+  console.log('✅ Team access revoked:', {
+    previousStatus,
+    newStatus: teamAccess.status,
+    revokedAt: teamAccess.revokedAt
+  });
   
   await teamAccess.populate('user', 'firstName lastName email');
   
   res.status(200).json({
     status: 'success',
-    message: `Team access revoked for ${teamAccess.user.firstName} ${teamAccess.user.lastName}`,
-    data: teamAccess
+    message: `Team access revoked for ${teamAccess.user?.firstName || 'user'} ${teamAccess.user?.lastName || ''}`,
+    data: {
+      teamAccess,
+      revocationDetails: {
+        previousStatus,
+        revokedAt: teamAccess.revokedAt,
+        revokedBy: req.user.email,
+        reason: teamAccess.notes
+      }
+    }
+  });
+});
+
+// Revoke team access by email (easier method)
+exports.revokeAccessByEmail = catchAsync(async (req, res) => {
+  const { userEmail } = req.params;
+  const { reason } = req.body;
+  
+  console.log('🔍 Attempting to revoke access for userEmail:', userEmail, 'employeeId:', req.user._id);
+  
+  // Find the team access record
+  const teamAccess = await TeamAccess.findOne({
+    userEmail: userEmail.toLowerCase(),
+    employeeId: req.user._id,
+    status: { $in: ['active', 'suspended'] }
+  });
+  
+  if (!teamAccess) {
+    console.log('❌ No active team access found for:', { userEmail, employeeId: req.user._id });
+    throw new AppError('No active team access found for this user', 404);
+  }
+  
+  console.log('✅ Found team access to revoke:', {
+    id: teamAccess._id,
+    userEmail: teamAccess.userEmail,
+    currentStatus: teamAccess.status
+  });
+  
+  // Update status to revoked
+  const previousStatus = teamAccess.status;
+  teamAccess.status = 'revoked';
+  teamAccess.notes = reason || 'Access revoked';
+  teamAccess.revokedAt = new Date();
+  teamAccess.revokedBy = req.user._id;
+  
+  await teamAccess.save();
+  console.log('✅ Team access revoked successfully');
+  
+  await teamAccess.populate('user', 'firstName lastName email');
+  
+  res.status(200).json({
+    status: 'success',
+    message: `Team access revoked for ${teamAccess.user?.firstName || 'user'} ${teamAccess.user?.lastName || ''}`,
+    data: {
+      teamAccess,
+      revocationDetails: {
+        previousStatus,
+        revokedAt: teamAccess.revokedAt,
+        revokedBy: req.user.email,
+        reason: teamAccess.notes
+      }
+    }
   });
 });
 
