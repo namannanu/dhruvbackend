@@ -438,8 +438,17 @@ exports.hireApplicant = catchAsync(async (req, res, next) => {
   if (!application) {
     return next(new AppError('Application not found', 404));
   }
-  if (application.job.employer.toString() !== req.user._id.toString()) {
-    return next(new AppError('You can only hire for your own jobs', 403));
+
+  // Check if user has access to hire for this job's business
+  // Use ensureBusinessAccess to support both job owners and team members with hiring permissions
+  try {
+    await ensureBusinessAccess({
+      user: req.user,
+      businessId: application.job.business,
+      requiredPermissions: 'hire_workers',
+    });
+  } catch (error) {
+    return next(new AppError('You can only hire for jobs you have access to manage', 403));
   }
 
   // Update application status
