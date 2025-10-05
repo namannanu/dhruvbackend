@@ -6,13 +6,13 @@ const { protect } = require('../../shared/middlewares/auth.middleware');
 const router = express.Router();
 
 // Public userId routes (no auth required)
-router.get('/userId/:userId', userdataController.getUserByUserId);
-router.get('/userId/:userId/all-data', userdataController.getAllUserDataByUserId);
+router.get('/id/:id', userdataController.getUserByUserId);
+router.get('/id/:id/all-data', userdataController.getAllUserDataByUserId);
 
 router.use(protect);
 router.get('/', controller.listUsers);
 router.get('/me', controller.getMe);
 router.patch('/me', controller.updateMe);
-router.get('/:userId', controller.getUser);
+router.get('/:id', controller.getUser);
 
 module.exports = router;

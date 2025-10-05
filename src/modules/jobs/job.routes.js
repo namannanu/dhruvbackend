@@ -14,7 +14,7 @@ const ensureViewJobsPermission = (req, res, next) => {
 
 // Job management routes with permission protection
 router.get('/', protect, ensureViewJobsPermission, controller.listJobs);
-router.get('/user/:userId', controller.getJobsByUserId); // Public endpoint for userId access
+router.get('/user/:id', controller.getJobsByUserId); // Public endpoint for id access
 router.get('/:jobId', protect, requirePermissions('view_jobs'), controller.getJob);
 router.get('/:jobId/applications', protect, requirePermissions('view_applications'), controller.listApplicationsForJob);
 router.post('/:jobId/applications', protect, applicationController.createApplication); // Workers can apply without special permission

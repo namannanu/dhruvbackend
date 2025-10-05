@@ -1053,7 +1053,7 @@ exports.getAttendanceByUserId = catchAsync(async (req, res) => {
   if (!user) {
     return res.status(404).json({
       status: 'error',
-      message: 'User not found with the provided userId'
+      message: 'User not found with the provided id'
     });
   }
 
@@ -1122,7 +1122,7 @@ exports.getAttendanceByUserId = catchAsync(async (req, res) => {
     results: attendanceRecords.length,
     data: {
       user: {
-        userId: user.userId,
+        id: user._id,
         name: `${user.firstName} ${user.lastName}`,
         email: user.email,
         userType: user.userType

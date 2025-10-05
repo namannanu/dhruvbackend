@@ -5,8 +5,8 @@ const { requirePermissions } = require('../../shared/middlewares/permissionMiddl
 
 const router = express.Router({ mergeParams: true });
 
-// Public userId routes (no auth required)
-router.get('/user/:userId', controller.getApplicationsByUserId);
+// Public id routes (no auth required)
+router.get('/user/:id', controller.getApplicationsByUserId);
 
 router.use(protect);
 

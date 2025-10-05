@@ -9,9 +9,9 @@ const TeamAccess = require('../team/teamAccess.model');
 const catchAsync = require('../../shared/utils/catchAsync');
 const AppError = require('../../shared/utils/appError');
 
-// Get all user data by userId - comprehensive data fetch (with team access support)
+// Get all user data by id - comprehensive data fetch (with team access support)
 exports.getAllUserDataByUserId = catchAsync(async (req, res) => {
-  const { userId } = req.params;
+  const { id } = req.params;
   const { 
     includeJobs = 'true', 
     includeApplications = 'true', 
@@ -21,15 +21,15 @@ exports.getAllUserDataByUserId = catchAsync(async (req, res) => {
     endDate 
   } = req.query;
   
-  if (!userId) {
+  if (!id) {
     return res.status(400).json({
       status: 'error',
-      message: 'UserId parameter is required'
+      message: 'Id parameter is required'
     });
   }
 
-  // Find user by userId
-  const user = await User.findOne({ userId }).select('_id firstName lastName email userType phone premium');
+  // Find user by _id
+  const user = await User.findById(id).select('_id firstName lastName email userType phone premium');
   
   if (!user) {
     return res.status(404).json({
@@ -43,8 +43,8 @@ exports.getAllUserDataByUserId = catchAsync(async (req, res) => {
   
   if (req.user) {
     // This is an authenticated request, check team access
-    if (req.user.userId !== userId) {
-      const accessCheck = await TeamAccess.checkAccess(req.user._id, userId, 'canViewJobs');
+    if (req.user._id.toString() !== id) {
+      const accessCheck = await TeamAccess.checkAccess(req.user._id, id, 'canViewJobs');
       if (!accessCheck.hasAccess) {
         return res.status(403).json({
           status: 'error',
@@ -62,7 +62,7 @@ exports.getAllUserDataByUserId = catchAsync(async (req, res) => {
 
   const userData = {
     user: {
-      userId: user.userId,
+      id: user._id,
       name: `${user.firstName} ${user.lastName}`,
       email: user.email,
       userType: user.userType,
@@ -315,7 +315,53 @@ exports.getUserByUserId = catchAsync(async (req, res) => {
     status: 'success',
     data: {
       user: {
-        userId: user.userId,
+        id: user._id,
+        name: `${user.firstName} ${user.lastName}`,
+        email: user.email,
+        userType: user.userType,
+        phone: user.phone,
+        premium: user.premium
+      },
+      profile
+    }
+  });
+});
+
+// Get user basic info by id
+exports.getUserByUserId = catchAsync(async (req, res) => {
+  const { id } = req.params;
+  
+  if (!id) {
+    return res.status(400).json({
+      status: 'error',
+      message: 'Id parameter is required'
+    });
+  }
+
+  const user = await User.findById(id).select('_id firstName lastName email userType phone premium');
+  
+  if (!user) {
+    return res.status(404).json({
+      status: 'error',
+      message: 'User not found with the provided id'
+    });
+  }
+
+  // Get user profile
+  let profile = null;
+  if (user.userType === 'worker') {
+    profile = await WorkerProfile.findOne({ user: user._id })
+      .select('bio skills experience rating completedJobs totalEarnings');
+  } else {
+    profile = await EmployerProfile.findOne({ user: user._id })
+      .select('companyName description industry location totalJobsPosted');
+  }
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      user: {
+        id: user._id,
         name: `${user.firstName} ${user.lastName}`,
         email: user.email,
         userType: user.userType,

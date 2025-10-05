@@ -382,24 +382,22 @@ exports.hireApplicant = catchAsync(async (req, res, next) => {
   });
 });
 
-// Get all jobs by userId (for both employer and hired worker)
+// Get all jobs by id (for both employer and hired worker)
 exports.getJobsByUserId = catchAsync(async (req, res) => {
-  const { userId } = req.params;
-  
-  if (!userId) {
+  const { id } = req.params;
+
+  if (!id) {
     return res.status(400).json({
       status: 'error',
-      message: 'UserId parameter is required'
+      message: 'Id parameter is required'
     });
   }
 
-  // Find user by userId
-  const user = await User.findOne({ userId }).select('_id firstName lastName email userType');
-  
-  if (!user) {
+  // Find user by _id
+  const user = await User.findById(id).select('_id firstName lastName email userType');  if (!user) {
     return res.status(404).json({
       status: 'error',
-      message: 'User not found with the provided userId'
+      message: 'User not found with the provided id'
     });
   }
 
@@ -426,7 +424,7 @@ exports.getJobsByUserId = catchAsync(async (req, res) => {
     results: jobs.length,
     data: {
       user: {
-        userId: user.userId,
+        id: user._id,
         name: `${user.firstName} ${user.lastName}`,
         email: user.email,
         userType: user.userType
