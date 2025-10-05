@@ -59,6 +59,13 @@ const teamMemberSchema = new mongoose.Schema(
       canApproveAttendance: { type: Boolean, default: false },
       canViewAttendance: { type: Boolean, default: true },
       
+      // Business management
+      canCreateBusiness: { type: Boolean, default: false },
+      canEditBusiness: { type: Boolean, default: false },
+      canDeleteBusiness: { type: Boolean, default: false },
+      canViewBusiness: { type: Boolean, default: true },
+      canManageBusiness: { type: Boolean, default: false },
+      
       // Application management
       canViewApplications: { type: Boolean, default: true },
       canManageApplications: { type: Boolean, default: false },
@@ -295,6 +302,11 @@ teamMemberSchema.pre('save', function(next) {
         this.permissions.canEditAttendance = true;
         this.permissions.canApproveAttendance = true;
         this.permissions.canViewAttendance = true;
+        this.permissions.canCreateBusiness = true;
+        this.permissions.canEditBusiness = true;
+        this.permissions.canDeleteBusiness = false; // Even managers can't delete business
+        this.permissions.canViewBusiness = true;
+        this.permissions.canManageBusiness = true;
         this.permissions.canViewApplications = true;
         this.permissions.canManageApplications = true;
         break;
@@ -303,12 +315,14 @@ teamMemberSchema.pre('save', function(next) {
         this.permissions.canViewJobs = true;
         this.permissions.canViewAttendance = true;
         this.permissions.canCreateAttendance = true;
+        this.permissions.canViewBusiness = true;
         this.permissions.canViewApplications = true;
         break;
         
       case 'view_only':
         this.permissions.canViewJobs = true;
         this.permissions.canViewAttendance = true;
+        this.permissions.canViewBusiness = true;
         this.permissions.canViewApplications = true;
         break;
     }

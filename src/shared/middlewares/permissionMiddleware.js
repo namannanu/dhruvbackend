@@ -256,7 +256,40 @@ async function getUserPermissions(userId, businessId) {
       return Object.keys(ALL_PERMISSIONS); // Owner gets all permissions
     }
 
-    // Check if user is a team member of this business
+    // Check TeamAccess permissions (new system)
+    const User = require('../modules/users/user.model');
+    const TeamAccess = require('../modules/team/teamAccess.model');
+    
+    const user = await User.findById(userId);
+    if (user && user.email) {
+      const teamAccess = await TeamAccess.findOne({
+        userEmail: user.email.toLowerCase(),
+        status: 'active'
+      });
+      
+      if (teamAccess && teamAccess.isAccessValid) {
+        console.log(`Found team access with level ${teamAccess.accessLevel} for user ${userId}`);
+        
+        // Convert TeamAccess permissions to string-based permissions
+        const permissions = [];
+        if (teamAccess.permissions.canCreateBusiness) permissions.push('create_business');
+        if (teamAccess.permissions.canEditBusiness) permissions.push('edit_business');
+        if (teamAccess.permissions.canDeleteBusiness) permissions.push('delete_business');
+        if (teamAccess.permissions.canViewBusiness) permissions.push('view_business');
+        if (teamAccess.permissions.canCreateJobs) permissions.push('create_jobs');
+        if (teamAccess.permissions.canEditJobs) permissions.push('edit_jobs');
+        if (teamAccess.permissions.canDeleteJobs) permissions.push('delete_jobs');
+        if (teamAccess.permissions.canViewJobs) permissions.push('view_jobs');
+        if (teamAccess.permissions.canCreateAttendance) permissions.push('create_attendance');
+        if (teamAccess.permissions.canEditAttendance) permissions.push('edit_attendance');
+        if (teamAccess.permissions.canViewAttendance) permissions.push('view_attendance');
+        
+        console.log(`Using TeamAccess permissions for user ${userId}:`, permissions);
+        return permissions;
+      }
+    }
+
+    // Check if user is a team member of this business (legacy system)
     const teamMember = await TeamMember.findOne({
       user: userId,
       business: businessId,
