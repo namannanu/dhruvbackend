@@ -69,7 +69,7 @@ async function ensureBusinessAccess({
         {
           status: { $in: ['active', 'pending'] }
         },
-        {
+        {view_jobs
           $or: [
             { 'businessContext.businessId': business._id },
             { 'businessContext.allBusinesses': true },

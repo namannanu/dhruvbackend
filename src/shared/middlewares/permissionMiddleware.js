@@ -262,6 +262,11 @@ async function getUserPermissions(userId, businessId) {
       
       if (teamAccess && teamAccess.isAccessValid) {
         console.log(`Found team access with level ${teamAccess.accessLevel} for user ${userId}`);
+        console.log('TeamAccess permissions object:', teamAccess.permissions);
+        console.log('Specific view_jobs permission:', {
+          canViewJobs: teamAccess.permissions?.canViewJobs,
+          effectiveCanViewJobs: teamAccess.effectivePermissions?.canViewJobs
+        });
         
         // Check business context and scope
         const permissions = [];
@@ -456,7 +461,25 @@ async function getBusinessIdFromRequest(req) {
       }
     }
 
-    // 4. Check body and query parameters
+    // 4. Check if jobId parameter exists and fetch business from job
+    if (req.params.jobId) {
+      const Job = require('../../modules/jobs/job.model');
+      const job = await Job.findById(req.params.jobId).select('business');
+      if (job && job.business) {
+        return job.business.toString();
+      }
+    }
+
+    // 5. Check if applicationId parameter exists and fetch business from application's job
+    if (req.params.applicationId) {
+      const Application = require('../../modules/applications/application.model');
+      const application = await Application.findById(req.params.applicationId).populate('job', 'business');
+      if (application && application.job && application.job.business) {
+        return application.job.business.toString();
+      }
+    }
+
+    // 6. Check body and query parameters
     if (req.body.businessId) {
       return req.body.businessId;
     }
@@ -465,12 +488,12 @@ async function getBusinessIdFromRequest(req) {
       return req.query.businessId;
     }
 
-    // 5. Check headers
+    // 7. Check headers
     if (req.headers['x-business-id']) {
       return req.headers['x-business-id'];
     }
 
-    // 6. If user is an employer, find their primary business
+    // 8. If user is an employer, find their primary business
     if (req.user && req.user.userType === 'employer') {
       const business = await Business.findOne({ owner: req.user.id || req.user._id });
       if (business) {
