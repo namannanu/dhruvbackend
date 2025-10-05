@@ -107,26 +107,34 @@ async function ensureBusinessAccess({
 
     // Check if TeamAccess has the required permissions
     const permissionsToCheck = normalizePermissions(requiredPermissions);
+    console.log('Permissions to check:', permissionsToCheck);
+    console.log('TeamAccess permissions:', {
+      canCreateJobs: teamAccess.canCreateJobs,
+      canEditJobs: teamAccess.canEditJobs,
+      canDeleteJobs: teamAccess.canDeleteJobs,
+      canViewJobs: teamAccess.canViewJobs
+    });
+    
     if (permissionsToCheck.length) {
-      const hasCreateJobs = permissionsToCheck.includes('create_jobs') && teamAccess.canCreateJobs;
-      const hasEditJobs = permissionsToCheck.includes('edit_jobs') && teamAccess.canEditJobs;
-      const hasDeleteJobs = permissionsToCheck.includes('delete_jobs') && teamAccess.canDeleteJobs;
-      const hasViewJobs = permissionsToCheck.includes('view_jobs') && teamAccess.canViewJobs;
-      
       const hasRequiredPermissions = permissionsToCheck.every(permission => {
+        let hasPermission;
         switch (permission) {
-          case 'create_jobs': return teamAccess.canCreateJobs;
-          case 'edit_jobs': return teamAccess.canEditJobs;
-          case 'delete_jobs': return teamAccess.canDeleteJobs;
-          case 'view_jobs': return teamAccess.canViewJobs;
-          case 'create_business': return teamAccess.canCreateBusiness;
-          case 'edit_business': return teamAccess.canEditBusiness;
-          case 'delete_business': return teamAccess.canDeleteBusiness;
-          case 'view_business': return teamAccess.canViewBusiness;
-          default: return false;
+          case 'create_jobs': hasPermission = teamAccess.canCreateJobs; break;
+          case 'edit_jobs': hasPermission = teamAccess.canEditJobs; break;
+          case 'delete_jobs': hasPermission = teamAccess.canDeleteJobs; break;
+          case 'view_jobs': hasPermission = teamAccess.canViewJobs; break;
+          case 'create_business': hasPermission = teamAccess.canCreateBusiness; break;
+          case 'edit_business': hasPermission = teamAccess.canEditBusiness; break;
+          case 'delete_business': hasPermission = teamAccess.canDeleteBusiness; break;
+          case 'view_business': hasPermission = teamAccess.canViewBusiness; break;
+          default: hasPermission = false;
         }
+        console.log(`Permission check: ${permission} = ${hasPermission}`);
+        return hasPermission;
       });
 
+      console.log('All required permissions satisfied:', hasRequiredPermissions);
+      
       if (!hasRequiredPermissions) {
         throw new AppError('Insufficient permissions for this business operation', 403);
       }
