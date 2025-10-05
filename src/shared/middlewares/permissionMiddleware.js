@@ -321,6 +321,41 @@ async function getUserPermissions(userId, businessId) {
         if (teamAccess.permissions.canEditAttendance) permissions.push('edit_attendance');
         if (teamAccess.permissions.canViewAttendance) permissions.push('view_attendance');
         
+        // Worker permissions - THIS WAS MISSING!
+        if (teamAccess.permissions.canHireWorkers) permissions.push('hire_workers');
+        if (teamAccess.permissions.canFireWorkers) permissions.push('fire_workers');
+        if (teamAccess.permissions.canManageWorkers) permissions.push('manage_workers');
+        if (teamAccess.permissions.canViewWorkers) permissions.push('view_workers');
+        
+        // Application permissions
+        if (teamAccess.permissions.canViewApplications) permissions.push('view_applications');
+        if (teamAccess.permissions.canManageApplications) permissions.push('manage_applications');
+        
+        // Shift permissions
+        if (teamAccess.permissions.canCreateShifts) permissions.push('create_shifts');
+        if (teamAccess.permissions.canEditShifts) permissions.push('edit_shifts');
+        if (teamAccess.permissions.canDeleteShifts) permissions.push('delete_shifts');
+        if (teamAccess.permissions.canViewShifts) permissions.push('view_shifts');
+        
+        // Team permissions
+        if (teamAccess.permissions.canViewTeam) permissions.push('view_team');
+        if (teamAccess.permissions.canManageTeam) permissions.push('manage_team');
+        if (teamAccess.permissions.canGrantAccess) permissions.push('grant_access');
+        
+        // Payment permissions
+        if (teamAccess.permissions.canViewPayments) permissions.push('view_payments');
+        if (teamAccess.permissions.canManagePayments) permissions.push('manage_payments');
+        if (teamAccess.permissions.canProcessPayments) permissions.push('process_payments');
+        
+        // Budget permissions
+        if (teamAccess.permissions.canViewBudgets) permissions.push('view_budgets');
+        if (teamAccess.permissions.canManageBudgets) permissions.push('manage_budgets');
+        
+        // Analytics permissions
+        if (teamAccess.permissions.canViewAnalytics) permissions.push('view_analytics');
+        if (teamAccess.permissions.canViewReports) permissions.push('view_reports');
+        if (teamAccess.permissions.canExportData) permissions.push('export_data');
+        
         console.log(`Using TeamAccess permissions for user ${userId}:`, permissions);
         return permissions;
       }
