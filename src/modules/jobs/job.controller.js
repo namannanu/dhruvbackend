@@ -277,9 +277,10 @@ exports.createJob = catchAsync(async (req, res, next) => {
     return next(new AppError('Only employers can create jobs', 403));
   }
 
-  const businessId = req.body.business;
+  // Accept both 'business' and 'businessId' field names for flexibility
+  const businessId = req.body.business || req.body.businessId;
   if (!businessId) {
-    return next(new AppError('Business must be specified for job postings', 400));
+    return next(new AppError('Business must be specified for job postings (use "business" or "businessId" field)', 400));
   }
 
   const { business } = await ensureBusinessAccess({
@@ -299,8 +300,13 @@ exports.createJob = catchAsync(async (req, res, next) => {
     );
   }
 
+  // Create job data and ensure business field is set correctly
+  const jobData = { ...req.body };
+  // Remove businessId if it exists to avoid confusion
+  delete jobData.businessId;
+  
   const job = await Job.create({
-    ...req.body,
+    ...jobData,
     employer: business.owner,
     business: business._id,
     premiumRequired: !ownerUser.premium && ownerUser.freeJobsPosted >= 3
