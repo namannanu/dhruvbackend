@@ -9,10 +9,12 @@ const ensureViewJobsPermission = (req, res, next) => {
   if (req.user?.userType === 'worker') {
     return next();
   }
-  return requirePermissions('view_jobs')(req, res, next);
+  // For employers, check view_jobs permission without requiring business ID for listing
+  return requirePermissions('view_jobs', { requireBusinessId: false })(req, res, next);
 };
 
 // Job management routes with permission protection
+router.get('/access-context', protect, controller.getJobAccessContext);
 router.get('/', protect, ensureViewJobsPermission, controller.listJobs);
 router.get('/user/:id', controller.getJobsByUserId); // Public endpoint for id access
 router.get('/:jobId', protect, requirePermissions('view_jobs'), controller.getJob);

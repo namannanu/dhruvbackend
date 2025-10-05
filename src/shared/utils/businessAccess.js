@@ -1,6 +1,7 @@
 const AppError = require('./appError');
 const Business = require('../../modules/businesses/business.model');
 const TeamMember = require('../../modules/businesses/teamMember.model');
+const TeamAccess = require('../../modules/team/teamAccess.model');
 const {
   ROLE_PERMISSIONS,
 } = require('../middlewares/permissionMiddleware');
@@ -89,7 +90,7 @@ async function ensureBusinessAccess({
 }
 
 /**
- * Retrieve the set of business IDs the user can access (owned or as active team member).
+ * Retrieve the set of business IDs the user can access (owned, team member, or through TeamAccess).
  */
 async function getAccessibleBusinessIds(user) {
   const userId = normalizeId(user._id || user.id);
@@ -97,21 +98,50 @@ async function getAccessibleBusinessIds(user) {
     return new Set();
   }
 
-  const [ownedBusinesses, teamMemberships] = await Promise.all([
+  const [ownedBusinesses, teamMemberships, teamAccessRecords] = await Promise.all([
     Business.find({ owner: userId }).select('_id'),
     TeamMember.find({ user: userId, active: true }).select('business'),
+    TeamAccess.find({
+      $or: [
+        { employeeId: userId },
+        { userEmail: user.email }
+      ],
+      status: { $in: ['active', 'pending'] }
+    }).populate('managedUser originalUser')
   ]);
 
   const ids = new Set();
+  
+  // Add owned businesses
   ownedBusinesses.forEach((business) => {
     const id = normalizeId(business._id);
     if (id) ids.add(id);
   });
 
+  // Add team memberships (old system)
   teamMemberships.forEach((member) => {
     const id = normalizeId(member.business);
     if (id) ids.add(id);
   });
+
+  // Add TeamAccess businesses (new system)
+  for (const access of teamAccessRecords) {
+    if (access.businessContext?.allBusinesses) {
+      // If user has access to all businesses of the managed user, get all their businesses
+      const managedUserId = access.managedUser?._id || access.originalUser?._id;
+      if (managedUserId) {
+        const managedUserBusinesses = await Business.find({ owner: managedUserId }).select('_id');
+        managedUserBusinesses.forEach((business) => {
+          const id = normalizeId(business._id);
+          if (id) ids.add(id);
+        });
+      }
+    } else if (access.businessContext?.businessId) {
+      // Specific business access
+      const id = normalizeId(access.businessContext.businessId);
+      if (id) ids.add(id);
+    }
+  }
 
   return ids;
 }
