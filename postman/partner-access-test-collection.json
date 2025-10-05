@@ -1,0 +1,275 @@
+{
+  "info": {
+    "name": "Partner Access Test Collection",
+    "description": "Test API operations for user jjjgmail.com accessing p@example.com's business data",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jjjgmail_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api",
+      "type": "string"
+    },
+    {
+      "key": "partnerEmail",
+      "value": "p@example.com",
+      "type": "string"
+    },
+    {
+      "key": "partnerUserId",
+      "value": "68e2603ede0927c265035a3a",
+      "type": "string"
+    },
+    {
+      "key": "jjjgmail_token",
+      "value": "TOKEN_FOR_jjjgmail.com_USER",
+      "type": "string"
+    },
+    {
+      "key": "businessId",
+      "value": "PARTNER_BUSINESS_ID",
+      "type": "string"
+    },
+    {
+      "key": "wrongEmail",
+      "value": "p@gmail.com",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Verify Team Access (Correct Email)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/team/check-access/{{partnerEmail}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["team", "check-access", "{{partnerEmail}}"]
+        },
+        "description": "Check if jjjgmail.com has access to p@example.com's resources (CORRECT: p@example.com)"
+      }
+    },
+    {
+      "name": "1b. My Team Access (Alternative Check)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/team/my-access",
+          "host": ["{{baseUrl}}"],
+          "path": ["team", "my-access"]
+        },
+        "description": "View what access jjjgmail.com has been granted (shows all access records)"
+      }
+    },
+    {
+      "name": "1c. Check Wrong Email (Should Fail)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/team/check-access/{{wrongEmail}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["team", "check-access", "{{wrongEmail}}"]
+        },
+        "description": "Check access for p@gmail.com (WRONG EMAIL - should return no access found)"
+      }
+    },
+    {
+      "name": "2. List Partner's Businesses",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/businesses",
+          "host": ["{{baseUrl}}"],
+          "path": ["businesses"]
+        },
+        "description": "List all businesses that jjjgmail.com can access (should include partner's businesses)"
+      }
+    },
+    {
+      "name": "3. Create Business (Test Business Creation Permission)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"businessName\": \"Test Business via Partner Access\",\n  \"businessType\": \"Restaurant\",\n  \"businessDescription\": \"Testing business creation through partner access\",\n  \"businessAddress\": {\n    \"street\": \"123 Test St\",\n    \"city\": \"Test City\",\n    \"state\": \"TS\",\n    \"zipCode\": \"12345\",\n    \"country\": \"Test Country\"\n  },\n  \"contactInformation\": {\n    \"phoneNumber\": \"+1234567890\",\n    \"email\": \"test@business.com\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/businesses",
+          "host": ["{{baseUrl}}"],
+          "path": ["businesses"]
+        },
+        "description": "Test if jjjgmail.com can create businesses with partner access"
+      }
+    },
+    {
+      "name": "4. Update Partner's Business",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"businessDescription\": \"Updated description via partner access\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/businesses/{{businessId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["businesses", "{{businessId}}"]
+        },
+        "description": "Test if jjjgmail.com can update partner's business"
+      }
+    },
+    {
+      "name": "5. List Jobs (View Permission)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/jobs",
+          "host": ["{{baseUrl}}"],
+          "path": ["jobs"]
+        },
+        "description": "Test if jjjgmail.com can view jobs"
+      }
+    },
+    {
+      "name": "6. Create Job",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Test Job via Partner Access\",\n  \"description\": \"Testing job creation through partner access\",\n  \"businessId\": \"{{businessId}}\",\n  \"location\": {\n    \"street\": \"123 Job St\",\n    \"city\": \"Job City\",\n    \"state\": \"JS\",\n    \"zipCode\": \"54321\"\n  },\n  \"employmentType\": \"part_time\",\n  \"payRate\": {\n    \"amount\": 15.00,\n    \"currency\": \"USD\",\n    \"payPeriod\": \"hourly\"\n  },\n  \"requirements\": [\"Basic skills\", \"Reliability\"],\n  \"benefits\": [\"Flexible schedule\"],\n  \"isActive\": true\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/jobs",
+          "host": ["{{baseUrl}}"],
+          "path": ["jobs"]
+        },
+        "description": "Test if jjjgmail.com can create jobs with partner access"
+      }
+    },
+    {
+      "name": "7. View Attendance Management",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/attendance/management",
+          "host": ["{{baseUrl}}"],
+          "path": ["attendance", "management"]
+        },
+        "description": "Test if jjjgmail.com can access attendance management view"
+      }
+    },
+    {
+      "name": "8. List All Attendance Records",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/attendance",
+          "host": ["{{baseUrl}}"],
+          "path": ["attendance"]
+        },
+        "description": "Test if jjjgmail.com can view all attendance records"
+      }
+    },
+    {
+      "name": "9. Search Workers by Name",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/attendance/search/workers?name=John",
+          "host": ["{{baseUrl}}"],
+          "path": ["attendance", "search", "workers"],
+          "query": [
+            {
+              "key": "name",
+              "value": "John"
+            }
+          ]
+        },
+        "description": "Test if jjjgmail.com can search workers"
+      }
+    },
+    {
+      "name": "10. View Team Members",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/businesses/{{businessId}}/team-members",
+          "host": ["{{baseUrl}}"],
+          "path": ["businesses", "{{businessId}}", "team-members"]
+        },
+        "description": "Test if jjjgmail.com can view business team members"
+      }
+    },
+    {
+      "name": "11. My Team Access",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/team/my-access",
+          "host": ["{{baseUrl}}"],
+          "path": ["team", "my-access"]
+        },
+        "description": "View what access jjjgmail.com has been granted"
+      }
+    },
+    {
+      "name": "12. Grant Access to Others (Test Permission)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userEmail\": \"testuser@example.com\",\n  \"accessLevel\": \"view_only\",\n  \"accessScope\": \"business_specific\",\n  \"businessContext\": {\n    \"businessId\": \"{{businessId}}\",\n    \"allBusinesses\": false,\n    \"canCreateNewBusiness\": false,\n    \"canGrantAccessToOthers\": false\n  },\n  \"permissions\": {\n    \"canViewBusiness\": true,\n    \"canViewJobs\": true,\n    \"canViewAttendance\": true\n  },\n  \"reason\": \"Testing delegation of access through partner permissions\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/team/grant-access",
+          "host": ["{{baseUrl}}"],
+          "path": ["team", "grant-access"]
+        },
+        "description": "Test if jjjgmail.com can grant access to others (should work with admin role)"
+      }
+    }
+  ]
+}
