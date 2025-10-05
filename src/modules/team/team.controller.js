@@ -187,6 +187,25 @@ exports.grantAccess = catchAsync(async (req, res, next) => {
   let accessRecord = await TeamAccess.findOne(matchQuery);
   const isNewRecord = !accessRecord;
 
+  // Map accessLevel to appropriate role or use custom
+  const validRoles = ['owner', 'admin', 'manager', 'supervisor', 'staff', 'viewer', 'custom'];
+  let resolvedRole = role;
+  
+  if (!resolvedRole) {
+    // Map common access levels to roles
+    const roleMapping = {
+      'full_access': 'admin',
+      'manage_operations': 'manager',
+      'view_only': 'viewer'
+    };
+    resolvedRole = roleMapping[accessLevel] || 'custom';
+  }
+  
+  // Ensure the role is valid
+  if (!validRoles.includes(resolvedRole)) {
+    resolvedRole = 'custom';
+  }
+
   const payload = {
     userEmail: normalizedEmail,
     managedUserId: managedIdentifier,
@@ -194,7 +213,7 @@ exports.grantAccess = catchAsync(async (req, res, next) => {
     targetUserId: managedIdentifier,
     accessLevel,
     accessScope: resolvedScope,
-    role: role || accessLevel,
+    role: resolvedRole,
     permissions: permissionSet
   };
 
