@@ -14,14 +14,11 @@ exports.grantAccess = catchAsync(async (req, res) => {
   // Get employeeId from JWT token (current authenticated user)
   const employeeId = req.user._id;
   
-  // Verify the target user exists by email
+    // Verify the target user exists by email
   const targetUser = await User.findOne({ email: userEmail.toLowerCase() });
   if (!targetUser) {
     throw new AppError('Target user not found with provided email', 404);
   }
-  
-  // Current user is the employee whose data will be managed
-  const managedUser = req.user;
   
   // Current user is the employee whose data will be managed
   const managedUser = req.user;
