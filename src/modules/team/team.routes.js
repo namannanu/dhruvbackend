@@ -22,8 +22,11 @@ router.patch('/access/:teamAccessId', teamController.updatePermissions);
 // Revoke team access
 router.delete('/access/:teamAccessId', teamController.revokeAccess);
 
-// Check if I have access to manage data for a specific employee
+// Check if I have access to manage data for a specific employee (by ObjectId)
 router.get('/check-access/:employeeId', teamController.checkAccess);
+
+// Check if I have access to manage data for a specific employee (by email)
+router.get('/check-access-by-email/:userEmail', teamController.checkAccessByEmail);
 
 // Get comprehensive access report for an employee
 router.get('/report/:employeeId', teamController.getAccessReport);

@@ -220,7 +220,7 @@ exports.revokeAccess = catchAsync(async (req, res) => {
   });
 });
 
-// Check if current user has access to manage data for a specific employee
+// Check if current user has access to manage data for a specific employee (by ObjectId)
 exports.checkAccess = catchAsync(async (req, res) => {
   const { employeeId } = req.params;
   const { permission } = req.query;
@@ -248,6 +248,55 @@ exports.checkAccess = catchAsync(async (req, res) => {
   res.status(200).json({
     status: 'success',
     data: accessCheck
+  });
+});
+
+// Check if current user has access to manage data for a specific employee (by email)
+exports.checkAccessByEmail = catchAsync(async (req, res) => {
+  const { userEmail } = req.params;
+  const { permission } = req.query;
+  
+  // Find the user by email to get their ObjectId
+  const targetUser = await User.findOne({ email: userEmail.toLowerCase() });
+  if (!targetUser) {
+    throw new AppError('User not found with provided email', 404);
+  }
+  
+  // Check if user is trying to access their own data
+  if (req.user.email.toLowerCase() === userEmail.toLowerCase()) {
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        hasAccess: true,
+        reason: 'Owner access',
+        accessLevel: 'owner',
+        permissions: 'all',
+        targetUser: {
+          id: targetUser._id,
+          name: `${targetUser.firstName} ${targetUser.lastName}`,
+          email: targetUser.email
+        }
+      }
+    });
+  }
+  
+  // Check team access
+  const accessCheck = await TeamAccess.checkAccess(
+    req.user.email, 
+    targetUser._id, 
+    permission
+  );
+  
+  res.status(200).json({
+    status: 'success',
+    data: {
+      ...accessCheck,
+      targetUser: {
+        id: targetUser._id,
+        name: `${targetUser.firstName} ${targetUser.lastName}`,
+        email: targetUser.email
+      }
+    }
   });
 });
 
