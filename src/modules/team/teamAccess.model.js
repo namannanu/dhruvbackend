@@ -1,349 +1,443 @@
 const mongoose = require('mongoose');
 
-const teamMemberSchema = new mongoose.Schema(
+const { Schema } = mongoose;
+
+const ACCESS_LEVELS = ['full_access', 'manage_operations', 'view_only'];
+const ACCESS_SCOPES = [
+  'user_specific',
+  'business_specific',
+  'all_owner_businesses',
+  'independent_operator'
+];
+const ACCESS_STATUS = ['invited', 'pending', 'active', 'suspended', 'revoked', 'expired'];
+
+const permissionFields = {
+  canCreateBusiness: { type: Boolean, default: false },
+  canEditBusiness: { type: Boolean, default: false },
+  canDeleteBusiness: { type: Boolean, default: false },
+  canViewBusiness: { type: Boolean, default: false },
+
+  canCreateJobs: { type: Boolean, default: false },
+  canEditJobs: { type: Boolean, default: false },
+  canDeleteJobs: { type: Boolean, default: false },
+  canViewJobs: { type: Boolean, default: false },
+
+  canViewApplications: { type: Boolean, default: false },
+  canManageApplications: { type: Boolean, default: false },
+
+  canCreateShifts: { type: Boolean, default: false },
+  canEditShifts: { type: Boolean, default: false },
+  canDeleteShifts: { type: Boolean, default: false },
+  canViewShifts: { type: Boolean, default: false },
+
+  canViewWorkers: { type: Boolean, default: false },
+  canManageWorkers: { type: Boolean, default: false },
+  canHireWorkers: { type: Boolean, default: false },
+  canFireWorkers: { type: Boolean, default: false },
+
+  canViewTeam: { type: Boolean, default: false },
+  canManageTeam: { type: Boolean, default: false },
+  canGrantAccess: { type: Boolean, default: false },
+
+  canCreateAttendance: { type: Boolean, default: false },
+  canEditAttendance: { type: Boolean, default: false },
+  canViewAttendance: { type: Boolean, default: false },
+  canManageAttendance: { type: Boolean, default: false },
+
+  canViewEmployment: { type: Boolean, default: false },
+  canManageEmployment: { type: Boolean, default: false },
+
+  canViewPayments: { type: Boolean, default: false },
+  canManagePayments: { type: Boolean, default: false },
+  canProcessPayments: { type: Boolean, default: false },
+
+  canViewBudgets: { type: Boolean, default: false },
+  canManageBudgets: { type: Boolean, default: false },
+
+  canViewAnalytics: { type: Boolean, default: false },
+  canViewReports: { type: Boolean, default: false },
+  canExportData: { type: Boolean, default: false }
+};
+
+const permissionKeys = Object.keys(permissionFields);
+
+const permissionsSchema = new Schema(permissionFields, {
+  _id: false,
+  minimize: false
+});
+
+const businessContextSchema = new Schema(
   {
-    // The user being granted access (identified by email)
-    userEmail: {
-      type: String,
-      required: true,
-      lowercase: true,
-      index: true
-    },
-    
-    // Reference to the user document (populated from email)
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    },
-    
-    // The employee ID they can manage (taken from JWT token)
-    employeeId: {
-      type: mongoose.Schema.Types.ObjectId,
-      required: true,
-      index: true
-    },
-    
-    // The original user who owns the data
-    originalUser: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true
-    },
-    
-    // Who granted this access
-    grantedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true
-    },
-    
-    // Access level and permissions
-    accessLevel: {
-      type: String,
-      enum: ['full_access', 'manage_operations', 'limited_access', 'view_only'],
-      required: true
-    },
-    
-    // Specific permissions
-    permissions: {
-      // Job management
-      canCreateJobs: { type: Boolean, default: false },
-      canEditJobs: { type: Boolean, default: false },
-      canDeleteJobs: { type: Boolean, default: false },
-      canViewJobs: { type: Boolean, default: true },
-      canHireWorkers: { type: Boolean, default: false },
-      
-      // Attendance management
-      canCreateAttendance: { type: Boolean, default: false },
-      canEditAttendance: { type: Boolean, default: false },
-      canApproveAttendance: { type: Boolean, default: false },
-      canViewAttendance: { type: Boolean, default: true },
-      
-      // Business management
-      canCreateBusiness: { type: Boolean, default: false },
-      canEditBusiness: { type: Boolean, default: false },
-      canDeleteBusiness: { type: Boolean, default: false },
-      canViewBusiness: { type: Boolean, default: true },
-      canManageBusiness: { type: Boolean, default: false },
-      
-      // Application management
-      canViewApplications: { type: Boolean, default: true },
-      canManageApplications: { type: Boolean, default: false },
-      
-      // Employment management
-      canViewEmployment: { type: Boolean, default: true },
-      canManageEmployment: { type: Boolean, default: false },
-      
-      // Team management
-      canManageTeam: { type: Boolean, default: false },
-      canGrantAccess: { type: Boolean, default: false }
-    },
-    
-    // Access restrictions
-    restrictions: {
-      // Date range access (optional)
-      startDate: Date,
-      endDate: Date,
-      
-      // Specific business access (optional - array of business IDs)
-      businessIds: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Business'
-      }],
-      
-      // IP restrictions (optional)
-      allowedIPs: [String],
-      
-      // Time-based access (optional)
-      allowedHours: {
-        start: String, // "09:00"
-        end: String    // "17:00"
-      }
-    },
-    
-    // Status and metadata
-    status: {
-      type: String,
-      enum: ['active', 'suspended', 'revoked'],
-      default: 'active'
-    },
-    
-    // Access notes and reason
-    notes: String,
-    reason: String, // Why access was granted
-    
-    // Revocation tracking
-    revokedAt: Date,
-    revokedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    },
-    
-    // Update tracking
-    updatedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    },
-    lastUpdatedAt: Date,
-    
-    // Expiration (optional)
-    expiresAt: Date,
-    
-    // Last access tracking
-    lastAccessedAt: Date,
-    accessCount: { type: Number, default: 0 }
+    businessId: { type: Schema.Types.ObjectId, ref: 'Business' },
+    allBusinesses: { type: Boolean, default: false },
+    canCreateNewBusiness: { type: Boolean, default: false },
+    canGrantAccessToOthers: { type: Boolean, default: false }
   },
-  { 
+  { _id: false, minimize: false }
+);
+
+const restrictionsSchema = new Schema(
+  {
+    startDate: Date,
+    endDate: Date
+  },
+  { _id: false, minimize: false }
+);
+
+const ACCESS_LEVEL_DEFAULTS = {
+  full_access: permissionKeys.reduce((acc, key) => {
+    acc[key] = true;
+    return acc;
+  }, {}),
+  manage_operations: {
+    canViewBusiness: true,
+    canEditBusiness: true,
+    canCreateJobs: true,
+    canEditJobs: true,
+    canDeleteJobs: false,
+    canViewJobs: true,
+    canViewApplications: true,
+    canManageApplications: true,
+    canCreateAttendance: true,
+    canEditAttendance: true,
+    canViewAttendance: true,
+    canManageAttendance: true,
+    canViewWorkers: true,
+    canManageWorkers: true,
+    canHireWorkers: true,
+    canFireWorkers: true,
+    canViewTeam: true,
+    canManageTeam: true,
+    canViewPayments: true,
+    canManagePayments: false,
+    canProcessPayments: false,
+    canViewBudgets: true,
+    canManageBudgets: false,
+    canViewEmployment: true,
+    canManageEmployment: true,
+    canViewAnalytics: true,
+    canViewReports: true,
+    canExportData: false,
+    canGrantAccess: false
+  },
+  view_only: {
+    canViewBusiness: true,
+    canViewJobs: true,
+    canViewApplications: true,
+    canViewAttendance: true,
+    canViewWorkers: true,
+    canViewTeam: true,
+    canViewEmployment: true,
+    canViewPayments: false,
+    canViewBudgets: false,
+    canViewAnalytics: true,
+    canViewReports: true
+  }
+};
+
+const normalizeObjectId = (value) => {
+  if (!value) return null;
+  try {
+    return value.toString();
+  } catch (error) {
+    return null;
+  }
+};
+
+const applyAccessLevelDefaults = (accessLevel, overrides = {}) => {
+  const resolvedLevel = ACCESS_LEVEL_DEFAULTS[accessLevel] || {};
+  const merged = {};
+
+  permissionKeys.forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(overrides, key)) {
+      merged[key] = overrides[key];
+      return;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(resolvedLevel, key)) {
+      merged[key] = resolvedLevel[key];
+      return;
+    }
+
+    merged[key] = false;
+  });
+
+  return merged;
+};
+
+const teamAccessSchema = new Schema(
+  {
+    managedUser: { type: Schema.Types.ObjectId, ref: 'User' },
+    managedUserId: { type: String, trim: true, index: true },
+    originalUser: { type: Schema.Types.ObjectId, ref: 'User' },
+    targetUserId: { type: String, trim: true, index: true },
+
+    employeeId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    userEmail: { type: String, required: true, lowercase: true, trim: true, index: true },
+
+    accessLevel: { type: String, enum: ACCESS_LEVELS, default: 'view_only', index: true },
+    accessScope: { type: String, enum: ACCESS_SCOPES, default: 'user_specific' },
+    status: { type: String, enum: ACCESS_STATUS, default: 'active', index: true },
+
+    role: {
+      type: String,
+      enum: ['owner', 'admin', 'manager', 'supervisor', 'staff', 'viewer', 'custom'],
+      default: 'custom'
+    },
+
+    permissions: { type: permissionsSchema, default: () => ({}) },
+    businessContext: { type: businessContextSchema, default: () => ({}) },
+    restrictions: { type: restrictionsSchema, default: () => ({}) },
+
+    metadata: { type: Schema.Types.Mixed },
+
+    grantedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    createdBy: { type: Schema.Types.ObjectId, ref: 'User' },
+
+    reason: { type: String, trim: true },
+    notes: { type: String, trim: true },
+
+    expiresAt: { type: Date },
+    revokedAt: { type: Date },
+    lastUsedAt: { type: Date }
+  },
+  {
     timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
+    minimize: false
   }
 );
 
-// Indexes for efficient queries
-teamMemberSchema.index({ userEmail: 1, status: 1 });
-teamMemberSchema.index({ employeeId: 1, status: 1 });
-teamMemberSchema.index({ originalUser: 1, status: 1 });
-teamMemberSchema.index({ grantedBy: 1 });
-teamMemberSchema.index({ expiresAt: 1 });
+teamAccessSchema.index(
+  {
+    employeeId: 1,
+    status: 1,
+    managedUser: 1
+  }
+);
 
-// Compound index for permission checks
-teamMemberSchema.index({ userEmail: 1, employeeId: 1, status: 1 });
+teamAccessSchema.index(
+  {
+    employeeId: 1,
+    status: 1,
+    managedUserId: 1
+  }
+);
 
-// Virtual to check if access is currently valid
-teamMemberSchema.virtual('isAccessValid').get(function() {
-  if (this.status !== 'active') return false;
-  if (this.expiresAt && this.expiresAt < new Date()) return false;
+teamAccessSchema.index(
+  {
+    employeeId: 1,
+    status: 1,
+    originalUser: 1
+  }
+);
+
+teamAccessSchema.virtual('isAccessValid').get(function () {
+  if (!['active', 'pending'].includes(this.status)) {
+    return false;
+  }
+
+  const now = new Date();
+
+  if (this.expiresAt && this.expiresAt < now) {
+    return false;
+  }
+
+  if (this.restrictions?.startDate && this.restrictions.startDate > now) {
+    return false;
+  }
+
+  if (this.restrictions?.endDate && this.restrictions.endDate < now) {
+    return false;
+  }
+
   return true;
 });
 
-// Virtual to get permission summary
-teamMemberSchema.virtual('permissionSummary').get(function() {
-  const perms = this.permissions;
-  return {
-    level: this.accessLevel,
-    jobAccess: {
-      read: perms.canViewJobs,
-      create: perms.canCreateJobs,
-      edit: perms.canEditJobs,
-      delete: perms.canDeleteJobs,
-      hire: perms.canHireWorkers
-    },
-    attendanceAccess: {
-      read: perms.canViewAttendance,
-      create: perms.canCreateAttendance,
-      edit: perms.canEditAttendance,
-      approve: perms.canApproveAttendance
-    },
-    teamAccess: {
-      manage: perms.canManageTeam,
-      grant: perms.canGrantAccess
-    }
-  };
-});
+teamAccessSchema.methods.getInvalidReason = function () {
+  if (!['active', 'pending'].includes(this.status)) {
+    return `Access is ${this.status}`;
+  }
 
-// Static method to check if user has permission to access data for an employeeId
-teamMemberSchema.statics.checkAccess = async function(userEmail, employeeId, requiredPermission) {
-  const access = await this.findOne({
-    userEmail: userEmail.toLowerCase(),
-    employeeId: employeeId,
-    status: 'active'
-  }).populate('user', 'firstName lastName email');
-  
-  if (!access) {
-    return {
-      hasAccess: false,
-      reason: 'No team access granted for this user'
-    };
+  const now = new Date();
+
+  if (this.expiresAt && this.expiresAt < now) {
+    return 'Access has expired';
   }
-  
-  if (!access.isAccessValid) {
-    return {
-      hasAccess: false,
-      reason: 'Access expired or suspended'
-    };
+
+  if (this.restrictions?.startDate && this.restrictions.startDate > now) {
+    return 'Access not yet active';
   }
-  
-  // Check specific permission
-  if (requiredPermission && !access.permissions[requiredPermission]) {
-    return {
-      hasAccess: false,
-      reason: `Permission denied: ${requiredPermission}`
-    };
+
+  if (this.restrictions?.endDate && this.restrictions.endDate < now) {
+    return 'Access has ended';
   }
-  
-  // Update last access
-  access.lastAccessedAt = new Date();
-  access.accessCount += 1;
-  await access.save();
-  
-  return {
-    hasAccess: true,
-    access,
-    accessLevel: access.accessLevel,
-    permissions: access.permissions
-  };
+
+  return 'Access is not valid';
 };
 
-// Static method to get all managed employeeIds for a user
-teamMemberSchema.statics.getManagedEmployeeIds = async function(userEmail) {
-  const accesses = await this.find({
-    userEmail: userEmail.toLowerCase(),
-    status: 'active'
-  }).select('employeeId accessLevel permissions');
-  
-  return accesses.filter(access => access.isAccessValid).map(access => ({
-    employeeId: access.employeeId,
-    accessLevel: access.accessLevel,
-    permissions: access.permissions
-  }));
-};
-
-// Method to grant specific permission
-teamMemberSchema.methods.grantPermission = function(permission) {
-  if (this.permissions.hasOwnProperty(permission)) {
-    this.permissions[permission] = true;
-    return this.save();
+teamAccessSchema.methods.matchesTargetUser = function (targetUserId) {
+  if (!targetUserId) {
+    return false;
   }
-  throw new Error(`Invalid permission: ${permission}`);
+
+  const normalized = targetUserId.toString().toLowerCase();
+  const candidates = [
+    normalizeObjectId(this.managedUser),
+    this.managedUserId,
+    normalizeObjectId(this.originalUser),
+    this.targetUserId
+  ];
+
+  return candidates.some((value) => {
+    if (!value) return false;
+    return value.toString().toLowerCase() === normalized;
+  });
 };
 
-// Method to revoke specific permission
-teamMemberSchema.methods.revokePermission = function(permission) {
-  if (this.permissions.hasOwnProperty(permission)) {
-    this.permissions[permission] = false;
-    return this.save();
+teamAccessSchema.methods.getEffectivePermissions = function () {
+  return applyAccessLevelDefaults(this.accessLevel, this.permissions || {});
+};
+
+teamAccessSchema.methods.hasPermission = function (permissionKey) {
+  const effective = this.getEffectivePermissions();
+  return Boolean(effective[permissionKey]);
+};
+
+const preparePermissionsForUpdate = (doc) => {
+  if (!doc) {
+    return;
   }
-  throw new Error(`Invalid permission: ${permission}`);
+
+  const accessLevel = doc.accessLevel || 'view_only';
+  doc.permissions = applyAccessLevelDefaults(accessLevel, doc.permissions || {});
 };
 
-// Method to suspend access
-teamMemberSchema.methods.suspend = function(reason) {
-  this.status = 'suspended';
-  this.notes = reason || 'Access suspended';
-  return this.save();
-};
-
-// Method to reactivate access
-teamMemberSchema.methods.reactivate = function() {
-  this.status = 'active';
-  return this.save();
-};
-
-// Pre-save middleware to populate user reference from email
-teamMemberSchema.pre('save', async function(next) {
-  if (this.isModified('userEmail') && this.userEmail) {
-    const User = mongoose.model('User');
-    const user = await User.findOne({ email: this.userEmail.toLowerCase() });
-    if (user) {
-      this.user = user._id;
-    }
-  }
+teamAccessSchema.pre('save', function (next) {
+  preparePermissionsForUpdate(this);
   next();
 });
 
-// Pre-save middleware to handle access level permissions
-teamMemberSchema.pre('save', function(next) {
-  // Set default permissions based on access level
-  if (this.isModified('accessLevel')) {
-    switch (this.accessLevel) {
-      case 'full_access':
-        Object.keys(this.permissions).forEach(perm => {
-          this.permissions[perm] = true;
-        });
-        break;
-        
-      case 'manage_operations':
-        this.permissions.canCreateJobs = true;
-        this.permissions.canEditJobs = true;
-        this.permissions.canViewJobs = true;
-        this.permissions.canHireWorkers = true;
-        this.permissions.canCreateAttendance = true;
-        this.permissions.canEditAttendance = true;
-        this.permissions.canApproveAttendance = true;
-        this.permissions.canViewAttendance = true;
-        this.permissions.canCreateBusiness = true;
-        this.permissions.canEditBusiness = true;
-        this.permissions.canDeleteBusiness = false; // Even managers can't delete business
-        this.permissions.canViewBusiness = true;
-        this.permissions.canManageBusiness = true;
-        this.permissions.canViewApplications = true;
-        this.permissions.canManageApplications = true;
-        break;
-        
-      case 'limited_access':
-        this.permissions.canViewJobs = true;
-        this.permissions.canViewAttendance = true;
-        this.permissions.canCreateAttendance = true;
-        this.permissions.canViewBusiness = true;
-        this.permissions.canViewApplications = true;
-        break;
-        
-      case 'view_only':
-        this.permissions.canViewJobs = true;
-        this.permissions.canViewAttendance = true;
-        this.permissions.canViewBusiness = true;
-        this.permissions.canViewApplications = true;
-        break;
-    }
+teamAccessSchema.pre('findOneAndUpdate', async function (next) {
+  const update = this.getUpdate() || {};
+  const set = update.$set || {};
+  const hasAccessLevelUpdate = Object.prototype.hasOwnProperty.call(update, 'accessLevel') ||
+    Object.prototype.hasOwnProperty.call(set, 'accessLevel');
+  const hasPermissionUpdate = Object.prototype.hasOwnProperty.call(update, 'permissions') ||
+    Object.prototype.hasOwnProperty.call(set, 'permissions');
+
+  if (!hasAccessLevelUpdate && !hasPermissionUpdate) {
+    return next();
   }
+
+  const currentDoc = await this.model.findOne(this.getQuery());
+  if (!currentDoc) {
+    return next();
+  }
+
+  const nextLevel = (set.accessLevel ?? update.accessLevel) || currentDoc.accessLevel || 'view_only';
+  const incomingPermissions = set.permissions ?? update.permissions;
+  const combinedPermissions = {
+    ...(currentDoc.permissions || {}),
+    ...(incomingPermissions || {})
+  };
+  const mergedPermissions = applyAccessLevelDefaults(nextLevel, combinedPermissions);
+
+  if (update.$set) {
+    update.$set.permissions = mergedPermissions;
+    update.$set.accessLevel = nextLevel;
+  } else {
+    update.permissions = mergedPermissions;
+    update.accessLevel = nextLevel;
+  }
+
+  this.setUpdate(update);
   next();
 });
 
-// Static method to check access using JWT token context
-teamMemberSchema.statics.checkAccessFromToken = async function(req, requiredPermission) {
-  if (!req.user || !req.user.email) {
-    return {
-      hasAccess: false,
-      reason: 'No authenticated user found'
-    };
-  }
-  
-  // Get employee ID from JWT token (the authenticated user's ID)
-  const employeeId = req.user._id;
-  const userEmail = req.user.email;
-  
-  return this.checkAccess(userEmail, employeeId, requiredPermission);
+teamAccessSchema.statics.resolvePermissionSet = function (accessLevel, overrides = {}) {
+  return applyAccessLevelDefaults(accessLevel, overrides);
 };
 
-module.exports = mongoose.model('TeamAccess', teamMemberSchema);
+teamAccessSchema.statics.checkAccess = async function (employeeId, targetUserId, requiredPermission = null) {
+  if (!employeeId || !targetUserId) {
+    return {
+      hasAccess: false,
+      reason: 'Employee and target user identifiers are required'
+    };
+  }
+
+  const accessRecords = await this.find({
+    employeeId,
+    status: { $in: ['active', 'pending'] }
+  }).sort({ updatedAt: -1 });
+
+  if (!accessRecords.length) {
+    return {
+      hasAccess: false,
+      reason: 'No team access records found for this employee'
+    };
+  }
+
+  let failedReason = 'Access not granted for this user';
+
+  for (const accessRecord of accessRecords) {
+    if (!accessRecord.matchesTargetUser(targetUserId)) {
+      continue;
+    }
+
+    if (!accessRecord.isAccessValid) {
+      failedReason = accessRecord.getInvalidReason();
+      continue;
+    }
+
+    const effectivePermissions = accessRecord.getEffectivePermissions();
+
+    if (requiredPermission && !effectivePermissions[requiredPermission]) {
+      failedReason = `Missing required permission: ${requiredPermission}`;
+      continue;
+    }
+
+    return {
+      hasAccess: true,
+      reason: null,
+      role: accessRecord.role || accessRecord.accessLevel,
+      permissions: effectivePermissions,
+      accessLevel: accessRecord.accessLevel,
+      access: accessRecord
+    };
+  }
+
+  return {
+    hasAccess: false,
+    reason: failedReason
+  };
+};
+
+teamAccessSchema.statics.getManagedUserIds = async function (employeeId) {
+  if (!employeeId) {
+    return [];
+  }
+
+  const accessRecords = await this.find({
+    employeeId,
+    status: { $in: ['active', 'pending'] }
+  });
+
+  return accessRecords
+    .filter((record) => record.isAccessValid)
+    .map((record) => ({
+      userId:
+        record.managedUserId ||
+        normalizeObjectId(record.managedUser) ||
+        normalizeObjectId(record.originalUser) ||
+        record.targetUserId,
+      accessLevel: record.accessLevel,
+      permissions: record.getEffectivePermissions(),
+      record
+    }))
+    .filter((entry) => Boolean(entry.userId));
+};
+
+const TeamAccess = mongoose.models.TeamAccess || mongoose.model('TeamAccess', teamAccessSchema);
+
+module.exports = TeamAccess;

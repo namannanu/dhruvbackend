@@ -1,0 +1,160 @@
+{
+  "info": {
+    "name": "Multi-Business Partner Access",
+    "description": "Scenario covering partner-to-partner business access delegation with full, limited, and view-only permissions.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api/v1" },
+    { "key": "ownerToken", "value": "JWT_TOKEN_PARTNER1" },
+    { "key": "partnerToken", "value": "JWT_TOKEN_PARTNER2" },
+    { "key": "ownerUserId", "value": "OWNER_USER_ID" },
+    { "key": "businessAId", "value": "BUSINESS_A_MONGODB_ID" },
+    { "key": "partnerEmail", "value": "partner2@example.com" }
+  ],
+  "item": [
+    {
+      "name": "Setup - Partner Delegation",
+      "item": [
+        {
+          "name": "Grant Limited Access to Partner 2 for Business A",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userEmail\": \"{{partnerEmail}}\",\n  \"managedUserId\": \"{{ownerUserId}}\",\n  \"accessLevel\": \"manage_operations\",\n  \"accessScope\": \"business_specific\",\n  \"businessContext\": {\n    \"businessId\": \"{{businessAId}}\",\n    \"allBusinesses\": false,\n    \"canCreateNewBusiness\": false,\n    \"canGrantAccessToOthers\": false\n  },\n  \"permissions\": {\n    \"canViewBusiness\": true,\n    \"canEditBusiness\": true,\n    \"canCreateJobs\": true,\n    \"canEditJobs\": true,\n    \"canViewJobs\": true,\n    \"canViewApplications\": true,\n    \"canManageApplications\": true,\n    \"canViewAttendance\": true,\n    \"canManageAttendance\": true\n  },\n  \"reason\": \"Grant partner limited operational control for Business A\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/team/grant-access",
+              "host": ["{{baseUrl}}"],
+              "path": ["team", "grant-access"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Grant Independent Operator Access to Partner 2",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{partnerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userEmail\": \"{{partnerEmail}}\",\n  \"managedUserId\": \"{{partnerEmail}}\",\n  \"accessLevel\": \"full_access\",\n  \"accessScope\": \"independent_operator\",\n  \"businessContext\": {\n    \"allBusinesses\": true,\n    \"canCreateNewBusiness\": true,\n    \"canGrantAccessToOthers\": true\n  },\n  \"reason\": \"Allow partner to manage their own businesses independently\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/team/grant-access",
+              "host": ["{{baseUrl}}"],
+              "path": ["team", "grant-access"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Partner 2 - Access Validation",
+      "item": [
+        {
+          "name": "Check Access to Partner 1 User Context",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{partnerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/team/check-access/{{ownerUserId}}?permission=canManageApplications",
+              "host": ["{{baseUrl}}"],
+              "path": ["team", "check-access", "{{ownerUserId}}"],
+              "query": [
+                { "key": "permission", "value": "canManageApplications" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Partner 2 Managed Access",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{partnerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/team/my-access",
+              "host": ["{{baseUrl}}"],
+              "path": ["team", "my-access"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Partner 1 - Oversight",
+      "item": [
+        {
+          "name": "List My Delegated Team",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/team/my-team",
+              "host": ["{{baseUrl}}"],
+              "path": ["team", "my-team"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Partner 2 Access Level to Full",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accessLevel\": \"full_access\",\n  \"permissions\": {\n    \"canGrantAccess\": true\n  },\n  \"notes\": \"Escalated partner access to full control\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/team/access/{{partnerEmail}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["team", "access", "{{partnerEmail}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Revoke Partner 2 Access to Business A",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Partnership ended for Business A\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/team/access/{{partnerEmail}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["team", "access", "{{partnerEmail}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,186 @@
+{
+  "info": {
+    "name": "Hybrid Business Team Hierarchy",
+    "description": "Owner -> Employer Employee -> Worker flow demonstrating business-specific team access management.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api/v1" },
+    { "key": "ownerToken", "value": "JWT_TOKEN_OWNER" },
+    { "key": "managerToken", "value": "JWT_TOKEN_MANAGER_EMPLOYEE" },
+    { "key": "viewerToken", "value": "JWT_TOKEN_VIEWER_EMPLOYEE" },
+    { "key": "businessId", "value": "BUSINESS_MONGODB_ID" },
+    { "key": "ownerUserId", "value": "OWNER_USER_ID" },
+    { "key": "workerUserId", "value": "WORKER_USER_ID" },
+    { "key": "managerEmail", "value": "manager@business.com" },
+    { "key": "viewerEmail", "value": "viewer@business.com" }
+  ],
+  "item": [
+    {
+      "name": "Setup - Owner Grants Employee Access",
+      "item": [
+        {
+          "name": "Grant Manager Manage Operations",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userEmail\": \"{{managerEmail}}\",\n  \"managedUserId\": \"{{ownerUserId}}\",\n  \"accessLevel\": \"manage_operations\",\n  \"accessScope\": \"business_specific\",\n  \"businessContext\": {\n    \"businessId\": \"{{businessId}}\",\n    \"allBusinesses\": false,\n    \"canCreateNewBusiness\": false,\n    \"canGrantAccessToOthers\": false\n  },\n  \"permissions\": {\n    \"canCreateJobs\": true,\n    \"canEditJobs\": true,\n    \"canViewJobs\": true,\n    \"canManageApplications\": true,\n    \"canManageAttendance\": true\n  },\n  \"reason\": \"Primary manager for Business operations\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/team/grant-access",
+              "host": ["{{baseUrl}}"],
+              "path": ["team", "grant-access"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Grant Viewer Read-Only Access",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userEmail\": \"{{viewerEmail}}\",\n  \"managedUserId\": \"{{ownerUserId}}\",\n  \"accessLevel\": \"view_only\",\n  \"accessScope\": \"business_specific\",\n  \"businessContext\": {\n    \"businessId\": \"{{businessId}}\",\n    \"allBusinesses\": false\n  },\n  \"permissions\": {\n    \"canViewJobs\": true,\n    \"canViewApplications\": true,\n    \"canViewAttendance\": true\n  },\n  \"reason\": \"Reporting-only employee access\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/team/grant-access",
+              "host": ["{{baseUrl}}"],
+              "path": ["team", "grant-access"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Owner Oversight",
+      "item": [
+        {
+          "name": "List Team Members",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/team/my-team",
+              "host": ["{{baseUrl}}"],
+              "path": ["team", "my-team"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Check Manager Access by Email",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/team/check-access-by-email/{{managerEmail}}?permission=canManageApplications",
+              "host": ["{{baseUrl}}"],
+              "path": ["team", "check-access-by-email", "{{managerEmail}}"],
+              "query": [
+                { "key": "permission", "value": "canManageApplications" }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Manager Operations",
+      "item": [
+        {
+          "name": "Manager Checks Access to Worker Context",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{managerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/team/check-access/{{workerUserId}}?permission=canManageApplications",
+              "host": ["{{baseUrl}}"],
+              "path": ["team", "check-access", "{{workerUserId}}"],
+              "query": [
+                { "key": "permission", "value": "canManageApplications" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Manager Lists Managed Access",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{managerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/team/my-access",
+              "host": ["{{baseUrl}}"],
+              "path": ["team", "my-access"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Adjust & Revoke",
+      "item": [
+        {
+          "name": "Downgrade Manager to View Only",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accessLevel\": \"view_only\",\n  \"permissions\": {\n    \"canViewJobs\": true\n  },\n  \"notes\": \"Temporary downgrade during audit\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/team/access/{{managerEmail}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["team", "access", "{{managerEmail}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Revoke Viewer Access",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Viewer contract ended\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/team/access/{{viewerEmail}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["team", "access", "{{viewerEmail}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

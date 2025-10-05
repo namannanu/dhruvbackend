@@ -1,607 +1,450 @@
+const mongoose = require('mongoose');
 const TeamAccess = require('./teamAccess.model');
 const User = require('../users/user.model');
-const catchAsync = require('../../shared/utils/catchAsync');
+const Business = require('../businesses/business.model');
 const AppError = require('../../shared/utils/appError');
+const catchAsync = require('../../shared/utils/catchAsync');
 
-// Grant team access to a user for managing another user's data
-exports.grantAccess = catchAsync(async (req, res) => {
-  const { userEmail, accessLevel, permissions, restrictions, expiresAt, reason } = req.body;
-  
-  if (!userEmail || !accessLevel) {
-    throw new AppError('userEmail and accessLevel are required', 400);
+const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
+
+const normalizeEmail = (email) => (email ? email.trim().toLowerCase() : undefined);
+
+const resolveUser = async ({ identifier, email }) => {
+  const normalizedEmail = normalizeEmail(email || (identifier?.includes('@') ? identifier : undefined));
+
+  if (identifier && isValidObjectId(identifier)) {
+    const byId = await User.findById(identifier);
+    if (byId) {
+      return byId;
+    }
   }
-  
-  // Get employeeId from JWT token (current authenticated user)
-  const employeeId = req.user._id;
-  
-    // Verify the target user exists by email
-  const targetUser = await User.findOne({ email: userEmail.toLowerCase() });
-  if (!targetUser) {
-    throw new AppError('Target user not found with provided email', 404);
+
+  if (identifier && typeof identifier === 'string') {
+    const byUserId = await User.findOne({ userId: identifier });
+    if (byUserId) {
+      return byUserId;
+    }
   }
-  
-  // Current user is the employee whose data will be managed
-  const managedUser = req.user;
-  
-  // Check if the current user has permission to grant access to their own data
-  // Note: Users can always grant access to their own data
-  const isOwner = true; // Current user is always the owner of their own data
-  
-  // Check if access already exists
-  const existingAccess = await TeamAccess.findOne({
-    userEmail: userEmail.toLowerCase(),
-    employeeId: employeeId,
-    status: { $in: ['active', 'suspended'] }
-  });
-  
-  if (existingAccess) {
-    throw new AppError('Access already granted to this user', 400);
+
+  if (normalizedEmail) {
+    const byEmail = await User.findOne({ email: normalizedEmail });
+    if (byEmail) {
+      return byEmail;
+    }
   }
-  
-  // Create team access
-  const teamAccess = await TeamAccess.create({
-    userEmail: userEmail.toLowerCase(),
-    employeeId: employeeId,
-    originalUser: managedUser._id,
-    grantedBy: req.user._id,
+
+  return null;
+};
+
+const ensureBusinessOwnership = async (businessId, ownerId) => {
+  if (!businessId) {
+    return null;
+  }
+
+  const resolvedId = isValidObjectId(businessId) ? businessId : undefined;
+  const business = await Business.findById(resolvedId || businessId);
+
+  if (!business) {
+    throw new AppError('Business not found', 404);
+  }
+
+  if (ownerId && business.owner?.toString() !== ownerId.toString()) {
+    throw new AppError('You do not have permission to manage this business', 403);
+  }
+
+  return business;
+};
+
+const serializeAccessRecord = (record) => {
+  if (!record) {
+    return null;
+  }
+
+  const plain = record.toObject({ virtuals: true });
+  plain.id = plain._id?.toString();
+  plain._id = plain.id;
+  delete plain.__v;
+  plain.permissions = TeamAccess.resolvePermissionSet(plain.accessLevel, plain.permissions || {});
+  plain.effectivePermissions = plain.permissions;
+  plain.employee = plain.employeeId || null;
+  delete plain.employeeId;
+  if (plain.employee?._id) {
+    plain.employee._id = plain.employee._id.toString();
+  }
+  if (plain.managedUser?._id) {
+    plain.managedUser._id = plain.managedUser._id.toString();
+  }
+  if (plain.originalUser && plain.originalUser._id) {
+    plain.originalUser = plain.originalUser._id.toString();
+  } else if (plain.originalUser && typeof plain.originalUser !== 'string') {
+    plain.originalUser = plain.originalUser.toString();
+  }
+  if (plain.grantedBy && plain.grantedBy._id) {
+    plain.grantedBy = plain.grantedBy._id.toString();
+  }
+  if (plain.createdBy && plain.createdBy._id) {
+    plain.createdBy = plain.createdBy._id.toString();
+  }
+  if (plain.managedUserId && typeof plain.managedUserId !== 'string') {
+    plain.managedUserId = plain.managedUserId.toString();
+  }
+  if (plain.businessContext?.businessId && typeof plain.businessContext.businessId !== 'string') {
+    plain.businessContext.businessId = plain.businessContext.businessId.toString();
+  }
+  if (plain.managedUserId && !plain.targetUserId) {
+    plain.targetUserId = plain.managedUserId;
+  }
+  return plain;
+};
+
+const buildAccessOwnershipFilter = (ownerId) => ({
+  $or: [
+    { originalUser: ownerId },
+    { managedUser: ownerId },
+    { managedUserId: ownerId?.toString() }
+  ]
+});
+
+exports.grantAccess = catchAsync(async (req, res, next) => {
+  const {
+    userEmail,
+    employeeId,
+    managedUserId,
+    managedUserEmail,
+    targetUserId,
+    accessLevel = 'view_only',
+    role,
+    permissions = {},
+    accessScope,
+    businessContext,
+    restrictions,
+    expiresAt,
+    status,
+    reason,
+    notes
+  } = req.body || {};
+
+  if (!userEmail && !employeeId) {
+    return next(new AppError('userEmail or employeeId is required', 400));
+  }
+
+  const normalizedEmail = normalizeEmail(userEmail);
+  const employeeUser = await resolveUser({ identifier: employeeId, email: normalizedEmail });
+
+  if (!employeeUser) {
+    return next(new AppError('Employee user not found. Ensure the user has an account first.', 404));
+  }
+
+  let managedIdentifier = managedUserId || targetUserId || managedUserEmail;
+  let managedUser = await resolveUser({ identifier: managedIdentifier, email: managedUserEmail });
+
+  if (!managedIdentifier && managedUser) {
+    managedIdentifier = managedUser.userId || managedUser._id.toString();
+  }
+
+  if (!managedIdentifier) {
+    managedUser = req.user;
+    managedIdentifier = req.user.userId || req.user._id.toString();
+  }
+
+  const businessDetails = await ensureBusinessOwnership(businessContext?.businessId, req.user._id);
+
+  const resolvedBusinessContext = businessDetails
+    ? {
+        ...businessContext,
+        businessId: businessDetails._id
+      }
+    : businessContext;
+
+  let resolvedScope = accessScope;
+  if (!resolvedScope) {
+    if (resolvedBusinessContext?.businessId) {
+      resolvedScope = 'business_specific';
+    } else if (managedUser && managedUser._id?.toString() === req.user._id.toString()) {
+      resolvedScope = 'all_owner_businesses';
+    } else {
+      resolvedScope = 'user_specific';
+    }
+  }
+
+  const permissionSet = TeamAccess.resolvePermissionSet(accessLevel, permissions);
+
+  const matchQuery = {
+    employeeId: employeeUser._id,
+    targetUserId: managedIdentifier,
+    accessScope: resolvedScope
+  };
+
+  if (resolvedBusinessContext?.businessId) {
+    matchQuery['businessContext.businessId'] = resolvedBusinessContext.businessId;
+  }
+
+  let accessRecord = await TeamAccess.findOne(matchQuery);
+  const isNewRecord = !accessRecord;
+
+  const payload = {
+    employeeId: employeeUser._id,
+    userEmail: normalizedEmail || employeeUser.email,
+    managedUserId: managedIdentifier,
+    originalUser: managedUser?._id || req.user._id,
+    targetUserId: managedIdentifier,
     accessLevel,
-    permissions: permissions || {}, // Will be set by pre-save middleware based on accessLevel
-    restrictions: restrictions || {},
-    expiresAt: expiresAt ? new Date(expiresAt) : null,
-    reason: reason || `${accessLevel.charAt(0).toUpperCase() + accessLevel.slice(1)} access granted`
-  });
-  
-  await teamAccess.populate([
-    { path: 'user', select: 'firstName lastName email' },
-    { path: 'originalUser', select: 'firstName lastName email' },
-    { path: 'grantedBy', select: 'firstName lastName email' }
-  ]);
-  
-  res.status(201).json({
-    status: 'success',
-    message: `${accessLevel} access granted successfully`,
-    data: {
-      teamAccess,
-      summary: {
-        grantedTo: `${targetUser.firstName} ${targetUser.lastName}`,
-        managedUserData: `${managedUser.firstName} ${managedUser.lastName} (${employeeId})`,
-        accessLevel: accessLevel,
-        permissions: teamAccess.permissionSummary,
-        expiresAt: teamAccess.expiresAt
-      }
-    }
-  });
-});
-
-// List all team members who have access to current user's data
-exports.listMyTeamMembers = catchAsync(async (req, res) => {
-  const teamMembers = await TeamAccess.find({
-    employeeId: req.user._id,
-    status: { $in: ['active', 'suspended'] }
-  })
-  .populate('user', 'firstName lastName email')
-  .populate('grantedBy', 'firstName lastName email')
-  .sort({ createdAt: -1 });
-  
-  const activeMembers = teamMembers.filter(member => member.isAccessValid);
-  const inactiveMembers = teamMembers.filter(member => !member.isAccessValid);
-  
-  res.status(200).json({
-    status: 'success',
-    results: teamMembers.length,
-    data: {
-      activeMembers,
-      inactiveMembers,
-      summary: {
-        totalMembers: teamMembers.length,
-        activeCount: activeMembers.length,
-        inactiveCount: inactiveMembers.length
-      }
-    }
-  });
-});
-
-// List all employees current user can manage
-exports.listManagedAccess = catchAsync(async (req, res) => {
-  const managedAccess = await TeamAccess.find({
-    userEmail: req.user.email.toLowerCase(),
-    status: 'active'
-  })
-  .populate('originalUser', 'firstName lastName email')
-  .populate('grantedBy', 'firstName lastName email')
-  .sort({ createdAt: -1 });
-  
-  const validAccess = managedAccess.filter(access => access.isAccessValid);
-  
-  res.status(200).json({
-    status: 'success',
-    results: validAccess.length,
-    data: {
-      managedAccess: validAccess.map(access => ({
-        employeeId: access.employeeId,
-        originalUser: access.originalUser,
-        role: access.role,
-        permissions: access.permissionSummary,
-        grantedBy: access.grantedBy,
-        grantedAt: access.createdAt,
-        lastAccessed: access.lastAccessedAt,
-        accessCount: access.accessCount,
-        expiresAt: access.expiresAt
-      }))
-    }
-  });
-});
-
-// Update team member permissions
-exports.updatePermissions = catchAsync(async (req, res) => {
-  const { teamAccessId } = req.params;
-  const { accessLevel, permissions, restrictions, expiresAt } = req.body;
-  
-  console.log('🔍 Attempting to update permissions for teamAccessId:', teamAccessId);
-  console.log('📝 Update data received:', { accessLevel, permissions, restrictions, expiresAt });
-  
-  const teamAccess = await TeamAccess.findById(teamAccessId);
-  if (!teamAccess) {
-    console.log('❌ No team access found with ID:', teamAccessId);
-    throw new AppError('Team access not found', 404);
-  }
-  
-  console.log('✅ Found team access:', {
-    id: teamAccess._id,
-    userEmail: teamAccess.userEmail,
-    currentAccessLevel: teamAccess.accessLevel,
-    currentPermissions: teamAccess.permissions,
-    currentStatus: teamAccess.status
-  });
-  
-  // Check if current user can modify this access
-  const managedUser = await User.findById(teamAccess.employeeId);
-  const isOwner = managedUser._id.toString() === req.user._id.toString();
-  let hasManagePermission = false;
-  
-  if (!isOwner) {
-    const currentUserAccess = await TeamAccess.checkAccess(
-      req.user.email, 
-      teamAccess.employeeId, 
-      'canManageTeam'
-    );
-    hasManagePermission = currentUserAccess.hasAccess;
-  }
-  
-  if (!isOwner && !hasManagePermission) {
-    throw new AppError('You do not have permission to modify this team access', 403);
-  }
-  
-  // Store original values for comparison
-  const originalValues = {
-    accessLevel: teamAccess.accessLevel,
-    permissions: { ...teamAccess.permissions },
-    restrictions: { ...teamAccess.restrictions },
-    expiresAt: teamAccess.expiresAt
+    accessScope: resolvedScope,
+    role: role || accessLevel,
+    permissions: permissionSet
   };
-  
-  // Update the access
-  if (accessLevel) {
-    console.log('🔄 Updating accessLevel from', teamAccess.accessLevel, 'to', accessLevel);
-    teamAccess.accessLevel = accessLevel;
+
+  if (managedUser?._id) {
+    payload.managedUser = managedUser._id;
   }
-  
-  if (permissions) {
-    console.log('🔄 Updating permissions:', permissions);
-    Object.assign(teamAccess.permissions, permissions);
+
+  if (resolvedBusinessContext !== undefined) {
+    payload.businessContext = resolvedBusinessContext;
   }
-  
-  if (restrictions) {
-    console.log('🔄 Updating restrictions:', restrictions);
-    Object.assign(teamAccess.restrictions, restrictions);
+
+  if (restrictions !== undefined) {
+    payload.restrictions = restrictions;
   }
-  
+
   if (expiresAt !== undefined) {
-    const newExpiresAt = expiresAt ? new Date(expiresAt) : null;
-    console.log('🔄 Updating expiresAt from', teamAccess.expiresAt, 'to', newExpiresAt);
-    teamAccess.expiresAt = newExpiresAt;
+    payload.expiresAt = expiresAt ? new Date(expiresAt) : null;
   }
-  
-  // Track who updated and when
-  teamAccess.updatedBy = req.user._id;
-  teamAccess.lastUpdatedAt = new Date();
-  
-  console.log('💾 Saving updated team access...');
-  await teamAccess.save();
-  console.log('✅ Team access saved successfully');
-  
-  await teamAccess.populate([
-    { path: 'user', select: 'firstName lastName email' },
-    { path: 'originalUser', select: 'firstName lastName email' },
-    { path: 'updatedBy', select: 'firstName lastName email' }
+
+  if (reason !== undefined) {
+    payload.reason = reason;
+  }
+
+  if (notes !== undefined) {
+    payload.notes = notes;
+  }
+
+  if (status !== undefined) {
+    payload.status = status;
+  } else if (!accessRecord) {
+    payload.status = 'active';
+  }
+
+  if (accessRecord) {
+    Object.assign(accessRecord, payload);
+  } else {
+    payload.grantedBy = req.user._id;
+    payload.createdBy = req.user._id;
+    accessRecord = new TeamAccess(payload);
+  }
+
+  await accessRecord.save();
+  await accessRecord.populate([
+    { path: 'employeeId', select: 'firstName lastName email userType' },
+    { path: 'managedUser', select: 'firstName lastName email userType' }
   ]);
-  
-  res.status(200).json({
+
+  const responseData = serializeAccessRecord(accessRecord);
+
+  res.status(isNewRecord ? 201 : 200).json({
     status: 'success',
-    message: 'Team access updated successfully',
-    data: {
-      teamAccess,
-      updateDetails: {
-        updatedBy: req.user.email,
-        updatedAt: teamAccess.lastUpdatedAt,
-        changes: {
-          accessLevel: originalValues.accessLevel !== teamAccess.accessLevel ? {
-            from: originalValues.accessLevel,
-            to: teamAccess.accessLevel
-          } : null,
-          permissionsUpdated: permissions ? true : false,
-          restrictionsUpdated: restrictions ? true : false,
-          expiresAtUpdated: originalValues.expiresAt !== teamAccess.expiresAt ? {
-            from: originalValues.expiresAt,
-            to: teamAccess.expiresAt
-          } : null
-        }
-      }
-    }
+    message: isNewRecord ? 'Team access granted' : 'Team access updated',
+    data: responseData
   });
 });
 
-// Update team member permissions by email (easier method)
-exports.updatePermissionsByEmail = catchAsync(async (req, res) => {
-  const { userEmail } = req.params;
-  const { accessLevel, permissions, restrictions, expiresAt } = req.body;
-  
-  console.log('🔍 Attempting to update permissions for userEmail:', userEmail, 'employeeId:', req.user._id);
-  console.log('📝 Update data received:', { accessLevel, permissions, restrictions, expiresAt });
-  
-  // Find the team access record
-  const teamAccess = await TeamAccess.findOne({
-    userEmail: userEmail.toLowerCase(),
+exports.listMyTeam = catchAsync(async (req, res) => {
+  const records = await TeamAccess.find(buildAccessOwnershipFilter(req.user._id))
+    .populate('employeeId', 'firstName lastName email userType')
+    .populate('managedUser', 'firstName lastName email userType')
+    .sort({ createdAt: -1 });
+
+  const team = records.map(serializeAccessRecord);
+
+  res.status(200).json({
+    status: 'success',
+    count: team.length,
+    data: team
+  });
+});
+
+exports.listMyAccess = catchAsync(async (req, res) => {
+  const records = await TeamAccess.find({
     employeeId: req.user._id,
-    status: { $in: ['active', 'suspended'] }
-  });
-  
-  if (!teamAccess) {
-    console.log('❌ No active team access found for:', { userEmail, employeeId: req.user._id });
-    throw new AppError('No active team access found for this user', 404);
-  }
-  
-  console.log('✅ Found team access to update:', {
-    id: teamAccess._id,
-    userEmail: teamAccess.userEmail,
-    currentAccessLevel: teamAccess.accessLevel,
-    currentStatus: teamAccess.status
-  });
-  
-  // Store original values for comparison
-  const originalValues = {
-    accessLevel: teamAccess.accessLevel,
-    permissions: { ...teamAccess.permissions },
-    restrictions: { ...teamAccess.restrictions },
-    expiresAt: teamAccess.expiresAt
-  };
-  
-  // Update the access
-  if (accessLevel) {
-    console.log('🔄 Updating accessLevel from', teamAccess.accessLevel, 'to', accessLevel);
-    teamAccess.accessLevel = accessLevel;
-  }
-  
-  if (permissions) {
-    console.log('🔄 Updating permissions:', permissions);
-    Object.assign(teamAccess.permissions, permissions);
-  }
-  
-  if (restrictions) {
-    console.log('🔄 Updating restrictions:', restrictions);
-    Object.assign(teamAccess.restrictions, restrictions);
-  }
-  
-  if (expiresAt !== undefined) {
-    const newExpiresAt = expiresAt ? new Date(expiresAt) : null;
-    console.log('🔄 Updating expiresAt from', teamAccess.expiresAt, 'to', newExpiresAt);
-    teamAccess.expiresAt = newExpiresAt;
-  }
-  
-  // Track who updated and when
-  teamAccess.updatedBy = req.user._id;
-  teamAccess.lastUpdatedAt = new Date();
-  
-  console.log('💾 Saving updated team access...');
-  await teamAccess.save();
-  console.log('✅ Team access updated successfully');
-  
-  await teamAccess.populate([
-    { path: 'user', select: 'firstName lastName email' },
-    { path: 'originalUser', select: 'firstName lastName email' },
-    { path: 'updatedBy', select: 'firstName lastName email' }
-  ]);
-  
+    status: { $in: ['active', 'pending'] }
+  })
+    .populate('managedUser', 'firstName lastName email userType')
+    .sort({ updatedAt: -1 });
+
+  const managedAccess = records.map(serializeAccessRecord);
+
   res.status(200).json({
     status: 'success',
-    message: 'Team access updated successfully',
-    data: {
-      teamAccess,
-      updateDetails: {
-        updatedBy: req.user.email,
-        updatedAt: teamAccess.lastUpdatedAt,
-        changes: {
-          accessLevel: originalValues.accessLevel !== teamAccess.accessLevel ? {
-            from: originalValues.accessLevel,
-            to: teamAccess.accessLevel
-          } : null,
-          permissionsUpdated: permissions ? true : false,
-          restrictionsUpdated: restrictions ? true : false,
-          expiresAtUpdated: originalValues.expiresAt !== teamAccess.expiresAt ? {
-            from: originalValues.expiresAt,
-            to: teamAccess.expiresAt
-          } : null
-        }
-      }
-    }
+    count: managedAccess.length,
+    data: managedAccess
   });
 });
 
-// Revoke team access
-exports.revokeAccess = catchAsync(async (req, res) => {
-  const { teamAccessId } = req.params;
-  const { reason } = req.body;
-  
-  console.log('🔍 Attempting to revoke access for teamAccessId:', teamAccessId);
-  
-  const teamAccess = await TeamAccess.findById(teamAccessId);
-  if (!teamAccess) {
-    console.log('❌ No team access found with ID:', teamAccessId);
-    throw new AppError('Team access not found', 404);
-  }
-  
-  console.log('✅ Found team access:', {
-    id: teamAccess._id,
-    userEmail: teamAccess.userEmail,
-    employeeId: teamAccess.employeeId,
-    currentStatus: teamAccess.status
-  });
-  
-  // Check if current user can revoke this access
-  const managedUser = await User.findById(teamAccess.employeeId);
-  const isOwner = managedUser._id.toString() === req.user._id.toString();
-  let hasManagePermission = false;
-  
-  if (!isOwner) {
-    const currentUserAccess = await TeamAccess.checkAccess(
-      req.user.email, 
-      teamAccess.employeeId, 
-      'canManageTeam'
-    );
-    hasManagePermission = currentUserAccess.hasAccess;
-  }
-  
-  if (!isOwner && !hasManagePermission) {
-    throw new AppError('You do not have permission to revoke this team access', 403);
-  }
-  
-  // Update status to revoked
-  const previousStatus = teamAccess.status;
-  teamAccess.status = 'revoked';
-  teamAccess.notes = reason || 'Access revoked';
-  teamAccess.revokedAt = new Date();
-  teamAccess.revokedBy = req.user._id;
-  
-  await teamAccess.save();
-  console.log('✅ Team access revoked:', {
-    previousStatus,
-    newStatus: teamAccess.status,
-    revokedAt: teamAccess.revokedAt
-  });
-  
-  await teamAccess.populate('user', 'firstName lastName email');
-  
-  res.status(200).json({
-    status: 'success',
-    message: `Team access revoked for ${teamAccess.user?.firstName || 'user'} ${teamAccess.user?.lastName || ''}`,
-    data: {
-      teamAccess,
-      revocationDetails: {
-        previousStatus,
-        revokedAt: teamAccess.revokedAt,
-        revokedBy: req.user.email,
-        reason: teamAccess.notes
-      }
-    }
-  });
-});
-
-// Revoke team access by email (easier method)
-exports.revokeAccessByEmail = catchAsync(async (req, res) => {
-  const { userEmail } = req.params;
-  const { reason } = req.body;
-  
-  console.log('🔍 Attempting to revoke access for userEmail:', userEmail, 'employeeId:', req.user._id);
-  
-  // Find the team access record
-  const teamAccess = await TeamAccess.findOne({
-    userEmail: userEmail.toLowerCase(),
-    employeeId: req.user._id,
-    status: { $in: ['active', 'suspended'] }
-  });
-  
-  if (!teamAccess) {
-    console.log('❌ No active team access found for:', { userEmail, employeeId: req.user._id });
-    throw new AppError('No active team access found for this user', 404);
-  }
-  
-  console.log('✅ Found team access to revoke:', {
-    id: teamAccess._id,
-    userEmail: teamAccess.userEmail,
-    currentStatus: teamAccess.status
-  });
-  
-  // Update status to revoked
-  const previousStatus = teamAccess.status;
-  teamAccess.status = 'revoked';
-  teamAccess.notes = reason || 'Access revoked';
-  teamAccess.revokedAt = new Date();
-  teamAccess.revokedBy = req.user._id;
-  
-  await teamAccess.save();
-  console.log('✅ Team access revoked successfully');
-  
-  await teamAccess.populate('user', 'firstName lastName email');
-  
-  res.status(200).json({
-    status: 'success',
-    message: `Team access revoked for ${teamAccess.user?.firstName || 'user'} ${teamAccess.user?.lastName || ''}`,
-    data: {
-      teamAccess,
-      revocationDetails: {
-        previousStatus,
-        revokedAt: teamAccess.revokedAt,
-        revokedBy: req.user.email,
-        reason: teamAccess.notes
-      }
-    }
-  });
-});
-
-// Check if current user has access to manage data for a specific employee (by ObjectId)
 exports.checkAccess = catchAsync(async (req, res) => {
-  const { employeeId } = req.params;
+  const { userId } = req.params;
   const { permission } = req.query;
-  
-  // Check if user is trying to access their own data
-  if (req.user._id.toString() === employeeId) {
-    return res.status(200).json({
-      status: 'success',
-      data: {
-        hasAccess: true,
-        reason: 'Owner access',
-        accessLevel: 'owner',
-        permissions: 'all'
-      }
-    });
+
+  if (!userId) {
+    throw new AppError('userId parameter is required', 400);
   }
-  
-  // Check team access
-  const accessCheck = await TeamAccess.checkAccess(
-    req.user.email, 
-    employeeId, 
-    permission
-  );
-  
+
+  const result = await TeamAccess.checkAccess(req.user._id, userId, permission);
+
+  if (result.access) {
+    await result.access.populate([
+      { path: 'employeeId', select: 'firstName lastName email userType' },
+      { path: 'managedUser', select: 'firstName lastName email userType' }
+    ]);
+    result.access = serializeAccessRecord(result.access);
+  }
+
   res.status(200).json({
     status: 'success',
-    data: accessCheck
+    data: result
   });
 });
 
-// Check if current user has access to manage data for a specific employee (by email)
-exports.checkAccessByEmail = catchAsync(async (req, res) => {
-  const { userEmail } = req.params;
+exports.checkAccessByEmail = catchAsync(async (req, res, next) => {
+  const email = normalizeEmail(req.params.email);
   const { permission } = req.query;
-  
-  // Find the user by email to get their ObjectId
-  const targetUser = await User.findOne({ email: userEmail.toLowerCase() });
-  if (!targetUser) {
-    throw new AppError('User not found with provided email', 404);
+
+  if (!email) {
+    return next(new AppError('Email parameter is required', 400));
   }
-  
-  // Check if user is trying to access their own data
-  if (req.user.email.toLowerCase() === userEmail.toLowerCase()) {
-    return res.status(200).json({
-      status: 'success',
-      data: {
-        hasAccess: true,
-        reason: 'Owner access',
-        accessLevel: 'owner',
-        permissions: 'all',
-        targetUser: {
-          id: targetUser._id,
-          name: `${targetUser.firstName} ${targetUser.lastName}`,
-          email: targetUser.email
-        }
-      }
-    });
+
+  const user = await User.findOne({ email });
+  const identifier = user ? user.userId || user._id.toString() : email;
+
+  const result = await TeamAccess.checkAccess(req.user._id, identifier, permission);
+
+  if (result.access) {
+    await result.access.populate([
+      { path: 'employeeId', select: 'firstName lastName email userType' },
+      { path: 'managedUser', select: 'firstName lastName email userType' }
+    ]);
+    result.access = serializeAccessRecord(result.access);
   }
-  
-  // Check team access
-  const accessCheck = await TeamAccess.checkAccess(
-    req.user.email, 
-    targetUser._id, 
-    permission
-  );
-  
+
   res.status(200).json({
     status: 'success',
-    data: {
-      ...accessCheck,
-      targetUser: {
-        id: targetUser._id,
-        name: `${targetUser.firstName} ${targetUser.lastName}`,
-        email: targetUser.email
-      }
-    }
+    data: result
   });
 });
 
-// Get comprehensive access report for an employee
-exports.getAccessReport = catchAsync(async (req, res) => {
-  const { employeeId } = req.params;
-  
-  // Verify employee exists
-  const managedUser = await User.findById(employeeId);
-  if (!managedUser) {
-    throw new AppError('Employee not found with provided ID', 404);
+const buildAccessQueryFromIdentifier = (identifier, ownerId) => {
+  const query = {};
+
+  if (identifier && isValidObjectId(identifier)) {
+    query._id = identifier;
+  } else if (identifier && identifier.includes('@')) {
+    query.userEmail = normalizeEmail(identifier);
+  } else {
+    query.targetUserId = identifier;
   }
-  
-  // Check if current user has access to view this report
-  const isOwner = managedUser._id.toString() === req.user._id.toString();
-  let hasAccess = false;
-  
-  if (!isOwner) {
-    const accessCheck = await TeamAccess.checkAccess(
-      req.user.email, 
-      employeeId, 
-      'canViewAttendance'
-    );
-    hasAccess = accessCheck.hasAccess;
+
+  Object.assign(query, buildAccessOwnershipFilter(ownerId));
+
+  return query;
+};
+
+exports.updateAccess = catchAsync(async (req, res, next) => {
+  const { identifier } = req.params;
+  const {
+    accessLevel,
+    role,
+    permissions,
+    status,
+    businessContext,
+    expiresAt,
+    restrictions,
+    reason,
+    notes
+  } = req.body || {};
+
+  const query = buildAccessQueryFromIdentifier(identifier, req.user._id);
+  const accessRecord = await TeamAccess.findOne(query)
+    .populate('employeeId', 'firstName lastName email userType')
+    .populate('managedUser', 'firstName lastName email userType');
+
+  if (!accessRecord) {
+    return next(new AppError('Access record not found', 404));
   }
-  
-  if (!isOwner && !hasAccess) {
-    throw new AppError('You do not have permission to view this access report', 403);
+
+  if (accessLevel) {
+    accessRecord.accessLevel = accessLevel;
   }
-  
-  // Get all team members with access to this employee's data
-  const teamMembers = await TeamAccess.find({
-    employeeId: employeeId,
-    status: { $in: ['active', 'suspended'] }
-  })
-  .populate('user', 'firstName lastName email')
-  .populate('grantedBy', 'firstName lastName email')
-  .sort({ lastAccessedAt: -1 });
-  
-  const report = {
-    managedUser: {
-      id: managedUser._id,
-      name: `${managedUser.firstName} ${managedUser.lastName}`,
-      email: managedUser.email
-    },
-    teamMembers: teamMembers.map(member => ({
-      user: member.user,
-      role: member.role,
-      permissions: member.permissionSummary,
-      status: member.status,
-      isValid: member.isAccessValid,
-      grantedBy: member.grantedBy,
-      grantedAt: member.createdAt,
-      lastAccessed: member.lastAccessedAt,
-      accessCount: member.accessCount,
-      expiresAt: member.expiresAt
-    })),
-    summary: {
-      totalMembers: teamMembers.length,
-      activeMembers: teamMembers.filter(m => m.status === 'active' && m.isAccessValid).length,
-      suspendedMembers: teamMembers.filter(m => m.status === 'suspended').length,
-      expiredMembers: teamMembers.filter(m => m.expiresAt && m.expiresAt < new Date()).length
-    }
-  };
-  
+
+  if (permissions) {
+    accessRecord.permissions = TeamAccess.resolvePermissionSet(accessRecord.accessLevel, permissions);
+  }
+
+  if (role) {
+    accessRecord.role = role;
+  }
+
+  if (status) {
+    accessRecord.status = status;
+  }
+
+  if (reason) {
+    accessRecord.reason = reason;
+  }
+
+  if (notes !== undefined) {
+    accessRecord.notes = notes;
+  }
+
+  if (expiresAt !== undefined) {
+    accessRecord.expiresAt = expiresAt ? new Date(expiresAt) : null;
+  }
+
+  if (restrictions) {
+    accessRecord.restrictions = restrictions;
+  }
+
+  if (businessContext) {
+    const business = await ensureBusinessOwnership(businessContext.businessId, req.user._id);
+    accessRecord.businessContext = business
+      ? { ...businessContext, businessId: business._id }
+      : businessContext;
+  }
+
+  await accessRecord.save();
+
+  const responseData = serializeAccessRecord(accessRecord);
+
   res.status(200).json({
     status: 'success',
-    data: report
+    message: 'Access record updated',
+    data: responseData
+  });
+});
+
+exports.revokeAccess = catchAsync(async (req, res, next) => {
+  const { identifier } = req.params;
+  const query = buildAccessQueryFromIdentifier(identifier, req.user._id);
+
+  const accessRecord = await TeamAccess.findOne(query)
+    .populate('employeeId', 'firstName lastName email userType')
+    .populate('managedUser', 'firstName lastName email userType');
+
+  if (!accessRecord) {
+    return next(new AppError('Access record not found', 404));
+  }
+
+  accessRecord.status = 'revoked';
+  accessRecord.revokedAt = new Date();
+
+  if (req.body?.reason) {
+    accessRecord.reason = req.body.reason;
+  }
+
+  await accessRecord.save();
+
+  const responseData = serializeAccessRecord(accessRecord);
+
+  res.status(200).json({
+    status: 'success',
+    message: 'Access revoked',
+    data: responseData
   });
 });
