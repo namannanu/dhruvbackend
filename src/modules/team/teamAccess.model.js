@@ -172,7 +172,7 @@ const teamAccessSchema = new Schema(
     originalUser: { type: Schema.Types.ObjectId, ref: 'User' },
     targetUserId: { type: String, trim: true, index: true },
 
-    employeeId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    employeeId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
     userEmail: { type: String, required: true, lowercase: true, trim: true, index: true },
 
     accessLevel: { type: String, enum: ACCESS_LEVELS, default: 'view_only', index: true },

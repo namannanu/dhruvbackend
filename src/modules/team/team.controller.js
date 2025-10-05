@@ -124,13 +124,15 @@ exports.grantAccess = catchAsync(async (req, res, next) => {
   const normalizedEmail = normalizeEmail(userEmail);
   
   // Resolve employee user using either employeeId or userEmail
-  const employeeUser = await resolveUser({ 
+  let employeeUser = await resolveUser({ 
     identifier: employeeId || normalizedEmail, 
     email: normalizedEmail 
   });
 
-  if (!employeeUser) {
-    return next(new AppError('Employee user not found. Ensure the user has an account first.', 404));
+  // If user doesn't exist yet, we can still create access record with email
+  // The user will get access when they register with this email
+  if (!employeeUser && !normalizedEmail) {
+    return next(new AppError('Employee user not found and no email provided. Provide either existing employeeId or userEmail.', 404));
   }
 
   let managedIdentifier = managedUserId || targetUserId || managedUserEmail;
@@ -168,10 +170,15 @@ exports.grantAccess = catchAsync(async (req, res, next) => {
   const permissionSet = TeamAccess.resolvePermissionSet(accessLevel, permissions);
 
   const matchQuery = {
-    employeeId: employeeUser._id,
+    userEmail: normalizedEmail,
     targetUserId: managedIdentifier,
     accessScope: resolvedScope
   };
+
+  // If user exists, also match by employeeId
+  if (employeeUser) {
+    matchQuery.employeeId = employeeUser._id;
+  }
 
   if (resolvedBusinessContext?.businessId) {
     matchQuery['businessContext.businessId'] = resolvedBusinessContext.businessId;
@@ -181,8 +188,7 @@ exports.grantAccess = catchAsync(async (req, res, next) => {
   const isNewRecord = !accessRecord;
 
   const payload = {
-    employeeId: employeeUser._id,
-    userEmail: normalizedEmail || employeeUser.email,
+    userEmail: normalizedEmail,
     managedUserId: managedIdentifier,
     originalUser: managedUser?._id || req.user._id,
     targetUserId: managedIdentifier,
@@ -191,6 +197,11 @@ exports.grantAccess = catchAsync(async (req, res, next) => {
     role: role || accessLevel,
     permissions: permissionSet
   };
+
+  // Set employeeId only if user exists
+  if (employeeUser) {
+    payload.employeeId = employeeUser._id;
+  }
 
   if (managedUser?._id) {
     payload.managedUser = managedUser._id;
