@@ -133,14 +133,63 @@ async function ensureBusinessAccess({
       const hasRequiredPermissions = permissionsToCheck.every(permission => {
         let hasPermission;
         switch (permission) {
+          // Job permissions
           case 'create_jobs': hasPermission = permissions.canCreateJobs; break;
           case 'edit_jobs': hasPermission = permissions.canEditJobs; break;
           case 'delete_jobs': hasPermission = permissions.canDeleteJobs; break;
           case 'view_jobs': hasPermission = permissions.canViewJobs; break;
+          
+          // Business permissions
           case 'create_business': hasPermission = permissions.canCreateBusiness; break;
           case 'edit_business': hasPermission = permissions.canEditBusiness; break;
           case 'delete_business': hasPermission = permissions.canDeleteBusiness; break;
           case 'view_business': hasPermission = permissions.canViewBusiness; break;
+          
+          // Worker permissions
+          case 'hire_workers': hasPermission = permissions.canHireWorkers; break;
+          case 'fire_workers': hasPermission = permissions.canFireWorkers; break;
+          case 'manage_workers': hasPermission = permissions.canManageWorkers; break;
+          case 'view_workers': hasPermission = permissions.canViewWorkers; break;
+          
+          // Application permissions
+          case 'view_applications': hasPermission = permissions.canViewApplications; break;
+          case 'manage_applications': hasPermission = permissions.canManageApplications; break;
+          
+          // Shift permissions
+          case 'create_shifts': hasPermission = permissions.canCreateShifts; break;
+          case 'edit_shifts': hasPermission = permissions.canEditShifts; break;
+          case 'delete_shifts': hasPermission = permissions.canDeleteShifts; break;
+          case 'view_shifts': hasPermission = permissions.canViewShifts; break;
+          
+          // Team permissions
+          case 'view_team': hasPermission = permissions.canViewTeam; break;
+          case 'manage_team': hasPermission = permissions.canManageTeam; break;
+          case 'grant_access': hasPermission = permissions.canGrantAccess; break;
+          
+          // Attendance permissions
+          case 'create_attendance': hasPermission = permissions.canCreateAttendance; break;
+          case 'edit_attendance': hasPermission = permissions.canEditAttendance; break;
+          case 'view_attendance': hasPermission = permissions.canViewAttendance; break;
+          case 'manage_attendance': hasPermission = permissions.canManageAttendance; break;
+          
+          // Employment permissions
+          case 'view_employment': hasPermission = permissions.canViewEmployment; break;
+          case 'manage_employment': hasPermission = permissions.canManageEmployment; break;
+          
+          // Payment permissions
+          case 'view_payments': hasPermission = permissions.canViewPayments; break;
+          case 'manage_payments': hasPermission = permissions.canManagePayments; break;
+          case 'process_payments': hasPermission = permissions.canProcessPayments; break;
+          
+          // Budget permissions
+          case 'view_budgets': hasPermission = permissions.canViewBudgets; break;
+          case 'manage_budgets': hasPermission = permissions.canManageBudgets; break;
+          
+          // Analytics permissions
+          case 'view_analytics': hasPermission = permissions.canViewAnalytics; break;
+          case 'view_reports': hasPermission = permissions.canViewReports; break;
+          case 'export_data': hasPermission = permissions.canExportData; break;
+          
           default: hasPermission = false;
         }
         console.log(`Permission check: ${permission} = ${hasPermission} (raw value: ${permissions['can' + permission.split('_').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('')]})`);
