@@ -44,6 +44,11 @@
       "key": "wrongEmail",
       "value": "p@gmail.com",
       "type": "string"
+    },
+    {
+      "key": "partnerEmailEncoded",
+      "value": "p%40example.com",
+      "type": "string"
     }
   ],
   "item": [
@@ -84,6 +89,19 @@
           "path": ["team", "check-access", "{{wrongEmail}}"]
         },
         "description": "Check access for p@gmail.com (WRONG EMAIL - should return no access found)"
+      }
+    },
+    {
+      "name": "1d. Check Access with URL Encoded Email",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/team/check-access/{{partnerEmailEncoded}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["team", "check-access", "{{partnerEmailEncoded}}"]
+        },
+        "description": "Check access using URL-encoded email (p%40example.com)"
       }
     },
     {

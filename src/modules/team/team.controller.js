@@ -308,17 +308,30 @@ exports.listMyAccess = catchAsync(async (req, res) => {
 });
 
 exports.checkAccessByEmail = catchAsync(async (req, res, next) => {
-  const email = normalizeEmail(req.params.email);
+  const targetEmail = normalizeEmail(req.params.email);
   const { permission } = req.query;
 
-  if (!email) {
+  if (!targetEmail) {
     return next(new AppError('Email parameter is required', 400));
   }
 
-  // Find access records by userEmail
+  // Find access records where current user has access to the target email
+  // The current user should be in userEmail field, and target should be in targetUserId or managed fields
   const accessRecords = await TeamAccess.find({
-    employeeId: req.user._id,
-    userEmail: email,
+    $and: [
+      { 
+        $or: [
+          { employeeId: req.user._id },
+          { userEmail: req.user.email }
+        ]
+      },
+      {
+        $or: [
+          { targetUserId: targetEmail },
+          { managedUserId: targetEmail }
+        ]
+      }
+    ],
     status: { $in: ['active', 'pending'] }
   }).sort({ updatedAt: -1 });
 
