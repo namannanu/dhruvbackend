@@ -7,9 +7,9 @@ const router = express.Router();
 
 router.use(protect);
 
-// Business management routes with permission protection
+// Business management routes - create business without permission barriers for own businesses
 router.get('/', controller.listBusinesses); // No specific permission needed - users can see their businesses
-router.post('/', restrictTo('employer'), requirePermissions('create_business', { requireBusinessId: false }), controller.createBusiness);
+router.post('/', restrictTo('employer'), controller.createBusiness); // Direct creation for own businesses - no permission check needed
 router.patch('/:businessId', requirePermissions('edit_business'), controller.updateBusiness);
 router.delete('/:businessId', requirePermissions('delete_business'), controller.deleteBusiness);
 router.post('/:businessId/select', restrictTo('employer'), controller.selectBusiness); // No specific permission needed
