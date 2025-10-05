@@ -5,11 +5,14 @@ const AppError = require('../../shared/utils/appError');
 
 // Grant team access to a user for managing another user's data
 exports.grantAccess = catchAsync(async (req, res) => {
-  const { userEmail, employeeId, accessLevel, permissions, restrictions, expiresAt, reason } = req.body;
+  const { userEmail, accessLevel, permissions, restrictions, expiresAt, reason } = req.body;
   
-  if (!userEmail || !employeeId || !accessLevel) {
-    throw new AppError('userEmail, employeeId, and accessLevel are required', 400);
+  if (!userEmail || !accessLevel) {
+    throw new AppError('userEmail and accessLevel are required', 400);
   }
+  
+  // Get employeeId from JWT token (current authenticated user)
+  const employeeId = req.user._id;
   
   // Verify the target user exists by email
   const targetUser = await User.findOne({ email: userEmail.toLowerCase() });
@@ -17,29 +20,15 @@ exports.grantAccess = catchAsync(async (req, res) => {
     throw new AppError('Target user not found with provided email', 404);
   }
   
-  // Verify the employee exists by ID
-  const managedUser = await User.findById(employeeId);
-  if (!managedUser) {
-    throw new AppError('Employee not found with provided ID', 404);
-  }
+  // Current user is the employee whose data will be managed
+  const managedUser = req.user;
   
-  // Check if the current user has permission to grant access to this managed user's data
-  // Either they are the owner or they have canGrantAccess permission
-  const isOwner = managedUser._id.toString() === req.user._id.toString();
-  let hasGrantPermission = false;
+  // Current user is the employee whose data will be managed
+  const managedUser = req.user;
   
-  if (!isOwner) {
-    const currentUserAccess = await TeamAccess.checkAccess(
-      req.user.email, 
-      employeeId, 
-      'canGrantAccess'
-    );
-    hasGrantPermission = currentUserAccess.hasAccess;
-  }
-  
-  if (!isOwner && !hasGrantPermission) {
-    throw new AppError('You do not have permission to grant access to this user data', 403);
-  }
+  // Check if the current user has permission to grant access to their own data
+  // Note: Users can always grant access to their own data
+  const isOwner = true; // Current user is always the owner of their own data
   
   // Check if access already exists
   const existingAccess = await TeamAccess.findOne({
