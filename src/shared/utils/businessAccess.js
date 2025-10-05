@@ -87,6 +87,15 @@ async function ensureBusinessAccess({
     });
 
     console.log('TeamAccess query result:', teamAccess ? 'Found' : 'Not found');
+    if (teamAccess) {
+      console.log('TeamAccess details:', {
+        id: teamAccess._id,
+        status: teamAccess.status,
+        accessScope: teamAccess.accessScope,
+        businessContext: teamAccess.businessContext,
+        managedUser: teamAccess.managedUser?._id || teamAccess.managedUserId
+      });
+    }
     
     if (!teamAccess) {
       // Let's also try a simpler query to see if any TeamAccess records exist for this user
@@ -137,6 +146,16 @@ async function ensureBusinessAccess({
       
       if (!hasRequiredPermissions) {
         throw new AppError('Insufficient permissions for this business operation', 403);
+      }
+    }
+
+    // For allBusinesses access, verify the business belongs to the managed user
+    if (teamAccess.businessContext?.allBusinesses) {
+      const managedUserId = teamAccess.managedUser?._id || teamAccess.originalUser;
+      console.log('Checking allBusinesses access - managed user:', managedUserId, 'business owner:', business.owner);
+      
+      if (managedUserId && normalizeId(business.owner) !== normalizeId(managedUserId)) {
+        throw new AppError('This business does not belong to the user you have access to manage', 403);
       }
     }
 
