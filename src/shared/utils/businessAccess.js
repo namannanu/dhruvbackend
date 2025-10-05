@@ -58,13 +58,6 @@ async function ensureBusinessAccess({
 
   // If no traditional team member found, check TeamAccess records
   if (!teamMember) {
-    // Debug logging
-    console.log('No TeamMember found, checking TeamAccess for:', {
-      userId,
-      userEmail: user.email,
-      businessId: business._id
-    });
-    
     const teamAccess = await TeamAccess.findOne({
       $and: [
         {
@@ -85,51 +78,28 @@ async function ensureBusinessAccess({
         }
       ]
     });
-
-    console.log('TeamAccess query result:', teamAccess ? 'Found' : 'Not found');
-    if (teamAccess) {
-      console.log('TeamAccess details:', {
-        id: teamAccess._id,
-        status: teamAccess.status,
-        accessScope: teamAccess.accessScope,
-        businessContext: teamAccess.businessContext,
-        managedUser: teamAccess.managedUser?._id || teamAccess.managedUserId
-      });
-      console.log('Full TeamAccess object keys:', Object.keys(teamAccess.toObject ? teamAccess.toObject() : teamAccess));
-      console.log('Raw permissions on TeamAccess:', {
-        canCreateJobs: teamAccess.canCreateJobs,
-        permissions: teamAccess.permissions,
-        effectivePermissions: teamAccess.effectivePermissions
-      });
-    }
     
     if (!teamAccess) {
-      // Let's also try a simpler query to see if any TeamAccess records exist for this user
-      const anyTeamAccess = await TeamAccess.find({
-        $or: [
-          { employeeId: userId },
-          { userEmail: user.email }
-        ]
-      }).limit(5);
-      
-      console.log('Any TeamAccess records for user:', anyTeamAccess.length, 'found');
-      if (anyTeamAccess.length > 0) {
-        console.log('Sample TeamAccess record:', JSON.stringify(anyTeamAccess[0], null, 2));
-      }
-      
       throw new AppError('You are not a team member of this business', 403);
     }
 
     // Check if TeamAccess has the required permissions
     const permissionsToCheck = normalizePermissions(requiredPermissions);
-    console.log('Permissions to check:', permissionsToCheck);
-    
-    // Get permissions from the most likely sources
-    const permissions = teamAccess.effectivePermissions || teamAccess.permissions || teamAccess;
-    console.log('Using permissions from:', permissions);
-    console.log('Available permission fields:', Object.keys(permissions).filter(k => k.startsWith('can')));
     
     if (permissionsToCheck.length) {
+      // Get permissions from the most likely sources
+      const permissions = teamAccess.effectivePermissions || teamAccess.permissions || teamAccess;
+      
+      // Special debug for hire_workers permission
+      if (permissionsToCheck.includes('hire_workers')) {
+        console.log('=== HIRE WORKERS PERMISSION DEBUG ===');
+        console.log('Required permission: hire_workers');
+        console.log('TeamAccess canHireWorkers:', teamAccess.canHireWorkers);
+        console.log('Permissions object canHireWorkers:', permissions.canHireWorkers);
+        console.log('EffectivePermissions canHireWorkers:', teamAccess.effectivePermissions?.canHireWorkers);
+        console.log('Direct permissions canHireWorkers:', teamAccess.permissions?.canHireWorkers);
+      }
+      
       const hasRequiredPermissions = permissionsToCheck.every(permission => {
         let hasPermission;
         switch (permission) {
@@ -192,13 +162,16 @@ async function ensureBusinessAccess({
           
           default: hasPermission = false;
         }
-        console.log(`Permission check: ${permission} = ${hasPermission} (raw value: ${permissions['can' + permission.split('_').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('')]})`);
+        
+        if (permission === 'hire_workers') {
+          console.log(`Final hire_workers permission result: ${hasPermission}`);
+        }
+        
         return hasPermission;
       });
-
-      console.log('All required permissions satisfied:', hasRequiredPermissions);
       
       if (!hasRequiredPermissions) {
+        console.log('Permission check FAILED for:', permissionsToCheck);
         throw new AppError('Insufficient permissions for this business operation', 403);
       }
     }
