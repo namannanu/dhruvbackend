@@ -5,25 +5,45 @@ const AppError = require('../../shared/utils/appError');
 
 // Grant team access to a user for managing another user's data
 exports.grantAccess = catchAsync(async (req, res) => {
-  const { targetUserEmail, role, permissions, restrictions, expiresAt, reason } = req.body;
+  const { targetUserId, managedUserId, role, permissions, restrictions, expiresAt, reason } = req.body;
   
-  if (!targetUserEmail || !role) {
-    throw new AppError('targetUserEmail and role are required', 400);
+  if (!targetUserId || !managedUserId || !role) {
+    throw new AppError('targetUserId, managedUserId, and role are required', 400);
   }
   
-  // The current user (employee) is granting access to their data
-  const managedUserId = req.user.userId; // Current user's userId
-  const managedUser = req.user; // Current user
-  
-  // Find the target user (team member) by email
-  const targetUser = await User.findOne({ email: targetUserEmail.toLowerCase() });
+  // Verify the target user exists
+  const targetUser = await User.findById(targetUserId);
   if (!targetUser) {
-    throw new AppError('Target user not found with provided email', 404);
+    throw new AppError('Target user not found', 404);
+  }
+  
+  // Verify the managed user exists and get their userId
+  const managedUser = await User.findOne({ userId: managedUserId });
+  if (!managedUser) {
+    throw new AppError('Managed user not found with provided userId', 404);
+  }
+  
+  // Check if the current user has permission to grant access to this managed user's data
+  // Either they are the owner or they have canGrantAccess permission
+  const isOwner = managedUser._id.toString() === req.user._id.toString();
+  let hasGrantPermission = false;
+  
+  if (!isOwner) {
+    const currentUserAccess = await TeamAccess.checkAccess(
+      req.user._id, 
+      managedUserId, 
+      'canGrantAccess'
+    );
+    hasGrantPermission = currentUserAccess.hasAccess;
+  }
+  
+  if (!isOwner && !hasGrantPermission) {
+    throw new AppError('You do not have permission to grant access to this user data', 403);
   }
   
   // Check if access already exists
   const existingAccess = await TeamAccess.findOne({
-    user: targetUser._id,
+    user: targetUserId,
     managedUserId: managedUserId,
     status: { $in: ['active', 'suspended'] }
   });
@@ -34,7 +54,7 @@ exports.grantAccess = catchAsync(async (req, res) => {
   
   // Create team access
   const teamAccess = await TeamAccess.create({
-    user: targetUser._id,
+    user: targetUserId,
     managedUserId: managedUserId,
     originalUser: managedUser._id,
     grantedBy: req.user._id,
@@ -57,13 +77,11 @@ exports.grantAccess = catchAsync(async (req, res) => {
     data: {
       teamAccess,
       summary: {
-        grantedTo: `${targetUser.firstName} ${targetUser.lastName} (${targetUser.email})`,
+        grantedTo: `${targetUser.firstName} ${targetUser.lastName}`,
         managedUserData: `${managedUser.firstName} ${managedUser.lastName} (${managedUserId})`,
         role: role,
         permissions: teamAccess.permissionSummary,
-        expiresAt: teamAccess.expiresAt,
-        // Team member can use this userId to access employee's data
-        employeeUserId: managedUserId
+        expiresAt: teamAccess.expiresAt
       }
     }
   });
@@ -244,58 +262,6 @@ exports.checkAccess = catchAsync(async (req, res) => {
   res.status(200).json({
     status: 'success',
     data: accessCheck
-  });
-});
-
-// Check if a specific user (by email) has access to manage current user's data
-exports.checkAccessByEmail = catchAsync(async (req, res) => {
-  const { userEmail } = req.params;
-  const { permission } = req.query;
-  
-  // Find the target user by email (the user we're checking permissions for)
-  const targetUser = await User.findOne({ email: userEmail.toLowerCase() });
-  if (!targetUser) {
-    throw new AppError('User not found with provided email', 404);
-  }
-  
-  // We're checking if targetUser has access to current user's data
-  const managedUserId = req.user.userId; // Current user's data
-  
-  // Check if target user is the same as current user (checking own access)
-  if (targetUser.userId === req.user.userId) {
-    return res.status(200).json({
-      status: 'success',
-      data: {
-        hasAccess: true,
-        reason: 'Owner access - same user',
-        role: 'owner',
-        permissions: 'all',
-        targetUser: {
-          userId: targetUser.userId,
-          email: targetUser.email,
-          name: `${targetUser.firstName} ${targetUser.lastName}`
-        }
-      }
-    });
-  }
-  
-  // Check if targetUser has team access to current user's data
-  const accessCheck = await TeamAccess.checkAccess(
-    targetUser._id,  // The user we're checking permissions for
-    managedUserId,   // Current user's userId (the data being managed)
-    permission
-  );
-  
-  res.status(200).json({
-    status: 'success',
-    data: {
-      ...accessCheck,
-      targetUser: {
-        userId: targetUser.userId,
-        email: targetUser.email,
-        name: `${targetUser.firstName} ${targetUser.lastName}`
-      }
-    }
   });
 });
 

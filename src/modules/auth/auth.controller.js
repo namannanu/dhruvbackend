@@ -95,3 +95,25 @@ exports.getUserTeamMemberInfo = catchAsync(async (req, res) => {
     teamMember
   });
 });
+
+// Switch business context for team members
+exports.switchBusiness = catchAsync(async (req, res) => {
+  const { businessId } = req.body;
+  
+  if (!businessId) {
+    return next(new AppError('Business ID is required', 400));
+  }
+
+  const data = await authService.switchBusinessContext(req.user._id, businessId);
+  await authService.issueAuthResponse(res, data, 200);
+});
+
+// Get all businesses where user is a team member
+exports.getUserBusinesses = catchAsync(async (req, res) => {
+  const businesses = await authService.getUserBusinesses(req.user._id);
+  
+  res.status(200).json({
+    status: 'success',
+    data: businesses
+  });
+});

@@ -25,9 +25,6 @@ router.delete('/access/:teamAccessId', teamController.revokeAccess);
 // Check if I have access to manage data for a specific userId
 router.get('/check-access/:managedUserId', teamController.checkAccess);
 
-// Check if I have access to manage data for a specific user by email
-router.get('/check-access-by-email/:userEmail', teamController.checkAccessByEmail);
-
 // Get comprehensive access report for a userId
 router.get('/report/:managedUserId', teamController.getAccessReport);
 

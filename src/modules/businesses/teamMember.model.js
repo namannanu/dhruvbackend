@@ -12,8 +12,7 @@ const teamMemberSchema = new mongoose.Schema(
       ref: 'User',
       required: true
     },
-    firstName: { type: String, required: true, trim: true },
-    lastName: { type: String, required: true, trim: true },
+    name: { type: String, required: true, trim: true },
     email: { type: String, required: true, trim: true },
     role: {
       type: String,

@@ -322,12 +322,17 @@ function hasAllPermissions(userPermissions, requiredPermissions) {
  */
 async function getBusinessIdFromRequest(req) {
   try {
-    // 1. Check URL parameters first
+    // 1. Check JWT token payload first (for team members with active business context)
+    if (req.tokenPayload && req.tokenPayload.businessId) {
+      return req.tokenPayload.businessId;
+    }
+
+    // 2. Check URL parameters
     if (req.params.businessId) {
       return req.params.businessId;
     }
 
-    // 2. Check if employerId parameter maps to a business
+    // 3. Check if employerId parameter maps to a business
     if (req.params.employerId) {
       const business = await Business.findOne({ owner: req.params.employerId });
       if (business) {
@@ -335,7 +340,7 @@ async function getBusinessIdFromRequest(req) {
       }
     }
 
-    // 3. Check body and query parameters
+    // 4. Check body and query parameters
     if (req.body.businessId) {
       return req.body.businessId;
     }
@@ -344,13 +349,10 @@ async function getBusinessIdFromRequest(req) {
       return req.query.businessId;
     }
 
-    // 4. Check headers
+    // 5. Check headers
     if (req.headers['x-business-id']) {
       return req.headers['x-business-id'];
     }
-
-    // 5. Use user's selected business
-    // Business ID should be provided in request parameters or body
 
     // 6. If user is an employer, find their primary business
     if (req.user && req.user.userType === 'employer') {
@@ -385,19 +387,6 @@ function requirePermissions(permissions, options = {}) {
       if (!req.user || !req.user.id) {
         return next(new AppError('Authentication required', 401));
       }
-
-      // Check if this is the main employee (token userId matches user's userId)
-      // If token has userId and it matches the authenticated user's userId, grant all permissions
-      if (req.user.tokenUserId && req.user.tokenUserId === req.user.userId) {
-        console.log(`✅ Main employee access granted for userId: ${req.user.userId}`);
-        // Main employee has all permissions - skip permission checks
-        req.userPermissions = ['all_permissions']; // Indicate full access
-        req.businessId = await getBusinessIdFromRequest(req);
-        return next();
-      }
-
-      // For team members or when no userId in token, check permissions normally
-      console.log(`🔍 Checking team permissions for user: ${req.user.id}`);
 
       // Get business ID from request
       const businessId = await getBusinessIdFromRequest(req);

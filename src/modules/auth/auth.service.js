@@ -11,27 +11,46 @@ const ensureJwtSecret = () => {
   }
 };
 
-const signToken = (user) => {
+const signToken = (payload) => {
   ensureJwtSecret();
-  return jwt.sign({ 
-    id: user._id || user.id,
-    userId: user.userId 
-  }, process.env.JWT_SECRET, {
+  return jwt.sign(payload, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d'
   });
 };
 
-const buildUserResponse = async (user) => {
+const buildUserResponse = async (user, includeTeamContext = true) => {
+  const TeamMember = require('../businesses/teamMember.model');
   const base = user.toObject({ getters: true });
   delete base.password;
 
+  let response = { user: base };
+
   if (base.userType === 'worker') {
     const profile = await WorkerProfile.findOne({ user: user._id });
-    return { user: base, workerProfile: profile };
+    response.workerProfile = profile;
+  } else {
+    const profile = await EmployerProfile.findOne({ user: user._id });
+    response.employerProfile = profile;
   }
 
-  const profile = await EmployerProfile.findOne({ user: user._id });
-  return { user: base, employerProfile: profile };
+  // Add team member context for employers
+  if (includeTeamContext && base.userType === 'employer') {
+    const teamMember = await TeamMember.findOne({ user: user._id, active: true })
+      .populate('business', 'name industry')
+      .sort({ createdAt: -1 }); // Get most recent active team membership
+    
+    if (teamMember) {
+      response.teamMember = teamMember;
+      response.businessContext = {
+        businessId: teamMember.business._id,
+        businessName: teamMember.business.name,
+        role: teamMember.role,
+        permissions: teamMember.permissions
+      };
+    }
+  }
+
+  return response;
 };
 
 exports.signup = async (payload) => {
@@ -49,8 +68,8 @@ exports.signup = async (payload) => {
     email: email.toLowerCase(),
     password: payload.password,
     userType,
-    firstName: payload.firstName || payload.firstname || payload.name || '',
-    lastName: payload.lastName || payload.lastname || '',
+    firstName: payload.firstName || payload.name || '',
+    lastName: payload.lastName || '',
     phone: payload.phone || null
   });
 
@@ -89,7 +108,20 @@ exports.login = async ({ email, password }) => {
 };
 
 exports.issueAuthResponse = async (res, data, statusCode = 200) => {
-  const token = signToken(data.user);
+  // Build JWT payload with team management context
+  const jwtPayload = {
+    id: data.user._id,
+    role: data.user.userType
+  };
+
+  // Add business context for employers with team memberships
+  if (data.businessContext) {
+    jwtPayload.businessId = data.businessContext.businessId;
+    jwtPayload.teamRole = data.businessContext.role;
+    jwtPayload.permissions = data.businessContext.permissions;
+  }
+
+  const token = signToken(jwtPayload);
   
   // Set Access-Control-Allow-Credentials header
   res.header('Access-Control-Allow-Credentials', 'true');
@@ -133,6 +165,7 @@ exports.logout = (res) => {
 };
 
 exports.refreshUserToken = async (token) => {
+  const { promisify } = require('util');
   try {
     const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.id);
@@ -155,4 +188,56 @@ exports.refreshUserToken = async (token) => {
     }
     throw error;
   }
+};
+
+// New function for switching business context for team members
+exports.switchBusinessContext = async (userId, businessId) => {
+  const TeamMember = require('../businesses/teamMember.model');
+  
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new AppError('User not found', 404);
+  }
+
+  // Verify user is a team member of the requested business
+  const teamMember = await TeamMember.findOne({ 
+    user: userId, 
+    business: businessId, 
+    active: true 
+  }).populate('business', 'name industry');
+
+  if (!teamMember) {
+    throw new AppError('You are not a member of this business', 403);
+  }
+
+  // Build response with specific business context
+  const response = await buildUserResponse(user, false); // Don't auto-include team context
+  response.teamMember = teamMember;
+  response.businessContext = {
+    businessId: teamMember.business._id,
+    businessName: teamMember.business.name,
+    role: teamMember.role,
+    permissions: teamMember.permissions
+  };
+
+  return response;
+};
+
+// Get all businesses where user is a team member
+exports.getUserBusinesses = async (userId) => {
+  const TeamMember = require('../businesses/teamMember.model');
+  
+  const teamMemberships = await TeamMember.find({ 
+    user: userId, 
+    active: true 
+  }).populate('business', 'name industry createdAt');
+
+  return teamMemberships.map(tm => ({
+    businessId: tm.business._id,
+    businessName: tm.business.name,
+    industry: tm.business.industry,
+    role: tm.role,
+    permissions: tm.permissions,
+    joinedAt: tm.createdAt
+  }));
 };

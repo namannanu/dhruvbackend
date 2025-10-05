@@ -5,9 +5,6 @@ const { requirePermissions } = require('../../shared/middlewares/permissionMiddl
 
 const router = express.Router();
 
-// Public userId routes (no auth required)
-router.get('/user/:userId', controller.getPaymentsByUserId);
-
 router.use(protect);
 router.post('/job-posting', requirePermissions(['manage_payments']), controller.processJobPayment);
 

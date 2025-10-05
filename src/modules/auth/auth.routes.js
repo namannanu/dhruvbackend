@@ -13,4 +13,8 @@ router.get('/permissions', protect, controller.getUserPermissions);
 router.get('/team-member', protect, controller.getUserTeamMemberInfo);
 router.post('/refresh-token', controller.refreshToken);
 
+// Team management routes
+router.post('/switch-business', protect, controller.switchBusiness);
+router.get('/businesses', protect, controller.getUserBusinesses);
+
 module.exports = router;
