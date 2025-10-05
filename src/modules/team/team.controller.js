@@ -19,13 +19,6 @@ const resolveUser = async ({ identifier, email }) => {
     }
   }
 
-  if (identifier && typeof identifier === 'string') {
-    const byUserId = await User.findOne({ userId: identifier });
-    if (byUserId) {
-      return byUserId;
-    }
-  }
-
   if (normalizedEmail) {
     const byEmail = await User.findOne({ email: normalizedEmail });
     if (byEmail) {
@@ -139,12 +132,12 @@ exports.grantAccess = catchAsync(async (req, res, next) => {
   let managedUser = await resolveUser({ identifier: managedIdentifier, email: managedUserEmail });
 
   if (!managedIdentifier && managedUser) {
-    managedIdentifier = managedUser.userId || managedUser._id.toString();
+    managedIdentifier = managedUser._id.toString();
   }
 
   if (!managedIdentifier) {
     managedUser = req.user;
-    managedIdentifier = req.user.userId || req.user._id.toString();
+    managedIdentifier = req.user._id.toString();
   }
 
   const businessDetails = await ensureBusinessOwnership(businessContext?.businessId, req.user._id);
@@ -279,30 +272,6 @@ exports.listMyAccess = catchAsync(async (req, res) => {
   });
 });
 
-exports.checkAccess = catchAsync(async (req, res) => {
-  const { userId } = req.params;
-  const { permission } = req.query;
-
-  if (!userId) {
-    throw new AppError('userId parameter is required', 400);
-  }
-
-  const result = await TeamAccess.checkAccess(req.user._id, userId, permission);
-
-  if (result.access) {
-    await result.access.populate([
-      { path: 'employeeId', select: 'firstName lastName email userType' },
-      { path: 'managedUser', select: 'firstName lastName email userType' }
-    ]);
-    result.access = serializeAccessRecord(result.access);
-  }
-
-  res.status(200).json({
-    status: 'success',
-    data: result
-  });
-});
-
 exports.checkAccessByEmail = catchAsync(async (req, res, next) => {
   const email = normalizeEmail(req.params.email);
   const { permission } = req.query;
@@ -311,17 +280,54 @@ exports.checkAccessByEmail = catchAsync(async (req, res, next) => {
     return next(new AppError('Email parameter is required', 400));
   }
 
-  const user = await User.findOne({ email });
-  const identifier = user ? user.userId || user._id.toString() : email;
+  // Find access records by userEmail
+  const accessRecords = await TeamAccess.find({
+    employeeId: req.user._id,
+    userEmail: email,
+    status: { $in: ['active', 'pending'] }
+  }).sort({ updatedAt: -1 });
 
-  const result = await TeamAccess.checkAccess(req.user._id, identifier, permission);
+  if (!accessRecords.length) {
+    return res.status(404).json({
+      status: 'fail',
+      message: 'No team access records found for this user'
+    });
+  }
 
-  if (result.access) {
-    await result.access.populate([
+  let result = {
+    hasAccess: false,
+    reason: 'Access not granted for this user'
+  };
+
+  // Check each access record
+  for (const accessRecord of accessRecords) {
+    if (!accessRecord.isAccessValid) {
+      result.reason = accessRecord.getInvalidReason();
+      continue;
+    }
+
+    const effectivePermissions = accessRecord.getEffectivePermissions();
+
+    if (permission && !effectivePermissions[permission]) {
+      result.reason = `Missing required permission: ${permission}`;
+      continue;
+    }
+
+    // Found valid access
+    await accessRecord.populate([
       { path: 'employeeId', select: 'firstName lastName email userType' },
       { path: 'managedUser', select: 'firstName lastName email userType' }
     ]);
-    result.access = serializeAccessRecord(result.access);
+
+    result = {
+      hasAccess: true,
+      reason: null,
+      role: accessRecord.role || accessRecord.accessLevel,
+      permissions: effectivePermissions,
+      accessLevel: accessRecord.accessLevel,
+      access: serializeAccessRecord(accessRecord)
+    };
+    break;
   }
 
   res.status(200).json({

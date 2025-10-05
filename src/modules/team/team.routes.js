@@ -9,8 +9,7 @@ router.use(protect);
 router.post('/grant-access', restrictTo('employer'), controller.grantAccess);
 router.get('/my-team', restrictTo('employer'), controller.listMyTeam);
 router.get('/my-access', controller.listMyAccess);
-router.get('/check-access/:userId', controller.checkAccess);
-router.get('/check-access-by-email/:email', controller.checkAccessByEmail);
+router.get('/check-access/:email', controller.checkAccessByEmail);
 router.patch('/access/:identifier', restrictTo('employer'), controller.updateAccess);
 router.delete('/access/:identifier', restrictTo('employer'), controller.revokeAccess);
 
