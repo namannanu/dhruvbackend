@@ -112,6 +112,13 @@ const teamMemberSchema = new mongoose.Schema(
       ref: 'User'
     },
     
+    // Update tracking
+    updatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    lastUpdatedAt: Date,
+    
     // Expiration (optional)
     expiresAt: Date,
     

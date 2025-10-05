@@ -137,10 +137,22 @@ exports.updatePermissions = catchAsync(async (req, res) => {
   const { teamAccessId } = req.params;
   const { accessLevel, permissions, restrictions, expiresAt } = req.body;
   
+  console.log('🔍 Attempting to update permissions for teamAccessId:', teamAccessId);
+  console.log('📝 Update data received:', { accessLevel, permissions, restrictions, expiresAt });
+  
   const teamAccess = await TeamAccess.findById(teamAccessId);
   if (!teamAccess) {
+    console.log('❌ No team access found with ID:', teamAccessId);
     throw new AppError('Team access not found', 404);
   }
+  
+  console.log('✅ Found team access:', {
+    id: teamAccess._id,
+    userEmail: teamAccess.userEmail,
+    currentAccessLevel: teamAccess.accessLevel,
+    currentPermissions: teamAccess.permissions,
+    currentStatus: teamAccess.status
+  });
   
   // Check if current user can modify this access
   const managedUser = await User.findById(teamAccess.employeeId);
@@ -160,22 +172,168 @@ exports.updatePermissions = catchAsync(async (req, res) => {
     throw new AppError('You do not have permission to modify this team access', 403);
   }
   
-  // Update the access
-  if (accessLevel) teamAccess.accessLevel = accessLevel;
-  if (permissions) Object.assign(teamAccess.permissions, permissions);
-  if (restrictions) Object.assign(teamAccess.restrictions, restrictions);
-  if (expiresAt !== undefined) teamAccess.expiresAt = expiresAt ? new Date(expiresAt) : null;
+  // Store original values for comparison
+  const originalValues = {
+    accessLevel: teamAccess.accessLevel,
+    permissions: { ...teamAccess.permissions },
+    restrictions: { ...teamAccess.restrictions },
+    expiresAt: teamAccess.expiresAt
+  };
   
+  // Update the access
+  if (accessLevel) {
+    console.log('🔄 Updating accessLevel from', teamAccess.accessLevel, 'to', accessLevel);
+    teamAccess.accessLevel = accessLevel;
+  }
+  
+  if (permissions) {
+    console.log('🔄 Updating permissions:', permissions);
+    Object.assign(teamAccess.permissions, permissions);
+  }
+  
+  if (restrictions) {
+    console.log('🔄 Updating restrictions:', restrictions);
+    Object.assign(teamAccess.restrictions, restrictions);
+  }
+  
+  if (expiresAt !== undefined) {
+    const newExpiresAt = expiresAt ? new Date(expiresAt) : null;
+    console.log('🔄 Updating expiresAt from', teamAccess.expiresAt, 'to', newExpiresAt);
+    teamAccess.expiresAt = newExpiresAt;
+  }
+  
+  // Track who updated and when
+  teamAccess.updatedBy = req.user._id;
+  teamAccess.lastUpdatedAt = new Date();
+  
+  console.log('💾 Saving updated team access...');
   await teamAccess.save();
+  console.log('✅ Team access saved successfully');
+  
   await teamAccess.populate([
     { path: 'user', select: 'firstName lastName email' },
-    { path: 'originalUser', select: 'firstName lastName email userId' }
+    { path: 'originalUser', select: 'firstName lastName email' },
+    { path: 'updatedBy', select: 'firstName lastName email' }
   ]);
   
   res.status(200).json({
     status: 'success',
     message: 'Team access updated successfully',
-    data: teamAccess
+    data: {
+      teamAccess,
+      updateDetails: {
+        updatedBy: req.user.email,
+        updatedAt: teamAccess.lastUpdatedAt,
+        changes: {
+          accessLevel: originalValues.accessLevel !== teamAccess.accessLevel ? {
+            from: originalValues.accessLevel,
+            to: teamAccess.accessLevel
+          } : null,
+          permissionsUpdated: permissions ? true : false,
+          restrictionsUpdated: restrictions ? true : false,
+          expiresAtUpdated: originalValues.expiresAt !== teamAccess.expiresAt ? {
+            from: originalValues.expiresAt,
+            to: teamAccess.expiresAt
+          } : null
+        }
+      }
+    }
+  });
+});
+
+// Update team member permissions by email (easier method)
+exports.updatePermissionsByEmail = catchAsync(async (req, res) => {
+  const { userEmail } = req.params;
+  const { accessLevel, permissions, restrictions, expiresAt } = req.body;
+  
+  console.log('🔍 Attempting to update permissions for userEmail:', userEmail, 'employeeId:', req.user._id);
+  console.log('📝 Update data received:', { accessLevel, permissions, restrictions, expiresAt });
+  
+  // Find the team access record
+  const teamAccess = await TeamAccess.findOne({
+    userEmail: userEmail.toLowerCase(),
+    employeeId: req.user._id,
+    status: { $in: ['active', 'suspended'] }
+  });
+  
+  if (!teamAccess) {
+    console.log('❌ No active team access found for:', { userEmail, employeeId: req.user._id });
+    throw new AppError('No active team access found for this user', 404);
+  }
+  
+  console.log('✅ Found team access to update:', {
+    id: teamAccess._id,
+    userEmail: teamAccess.userEmail,
+    currentAccessLevel: teamAccess.accessLevel,
+    currentStatus: teamAccess.status
+  });
+  
+  // Store original values for comparison
+  const originalValues = {
+    accessLevel: teamAccess.accessLevel,
+    permissions: { ...teamAccess.permissions },
+    restrictions: { ...teamAccess.restrictions },
+    expiresAt: teamAccess.expiresAt
+  };
+  
+  // Update the access
+  if (accessLevel) {
+    console.log('🔄 Updating accessLevel from', teamAccess.accessLevel, 'to', accessLevel);
+    teamAccess.accessLevel = accessLevel;
+  }
+  
+  if (permissions) {
+    console.log('🔄 Updating permissions:', permissions);
+    Object.assign(teamAccess.permissions, permissions);
+  }
+  
+  if (restrictions) {
+    console.log('🔄 Updating restrictions:', restrictions);
+    Object.assign(teamAccess.restrictions, restrictions);
+  }
+  
+  if (expiresAt !== undefined) {
+    const newExpiresAt = expiresAt ? new Date(expiresAt) : null;
+    console.log('🔄 Updating expiresAt from', teamAccess.expiresAt, 'to', newExpiresAt);
+    teamAccess.expiresAt = newExpiresAt;
+  }
+  
+  // Track who updated and when
+  teamAccess.updatedBy = req.user._id;
+  teamAccess.lastUpdatedAt = new Date();
+  
+  console.log('💾 Saving updated team access...');
+  await teamAccess.save();
+  console.log('✅ Team access updated successfully');
+  
+  await teamAccess.populate([
+    { path: 'user', select: 'firstName lastName email' },
+    { path: 'originalUser', select: 'firstName lastName email' },
+    { path: 'updatedBy', select: 'firstName lastName email' }
+  ]);
+  
+  res.status(200).json({
+    status: 'success',
+    message: 'Team access updated successfully',
+    data: {
+      teamAccess,
+      updateDetails: {
+        updatedBy: req.user.email,
+        updatedAt: teamAccess.lastUpdatedAt,
+        changes: {
+          accessLevel: originalValues.accessLevel !== teamAccess.accessLevel ? {
+            from: originalValues.accessLevel,
+            to: teamAccess.accessLevel
+          } : null,
+          permissionsUpdated: permissions ? true : false,
+          restrictionsUpdated: restrictions ? true : false,
+          expiresAtUpdated: originalValues.expiresAt !== teamAccess.expiresAt ? {
+            from: originalValues.expiresAt,
+            to: teamAccess.expiresAt
+          } : null
+        }
+      }
+    }
   });
 });
 
