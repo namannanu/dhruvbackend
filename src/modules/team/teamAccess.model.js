@@ -2,16 +2,23 @@ const mongoose = require('mongoose');
 
 const teamMemberSchema = new mongoose.Schema(
   {
-    // The user being granted access
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true
+    // The user being granted access (identified by email)
+    userEmail: {
+      type: String,
+      required: true,
+      lowercase: true,
+      index: true
     },
     
-    // The userId they can manage (the original creator's userId)
-    managedUserId: {
-      type: String,
+    // Reference to the user document (populated from email)
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    
+    // The employee ID they can manage (taken from JWT token)
+    employeeId: {
+      type: mongoose.Schema.Types.ObjectId,
       required: true,
       index: true
     },
@@ -31,9 +38,9 @@ const teamMemberSchema = new mongoose.Schema(
     },
     
     // Access level and permissions
-    role: {
+    accessLevel: {
       type: String,
-      enum: ['admin', 'manager', 'staff', 'viewer'],
+      enum: ['full_access', 'manage_operations', 'limited_access', 'view_only'],
       required: true
     },
     
@@ -113,14 +120,14 @@ const teamMemberSchema = new mongoose.Schema(
 );
 
 // Indexes for efficient queries
-teamMemberSchema.index({ user: 1, status: 1 });
-teamMemberSchema.index({ managedUserId: 1, status: 1 });
+teamMemberSchema.index({ userEmail: 1, status: 1 });
+teamMemberSchema.index({ employeeId: 1, status: 1 });
 teamMemberSchema.index({ originalUser: 1, status: 1 });
 teamMemberSchema.index({ grantedBy: 1 });
 teamMemberSchema.index({ expiresAt: 1 });
 
 // Compound index for permission checks
-teamMemberSchema.index({ user: 1, managedUserId: 1, status: 1 });
+teamMemberSchema.index({ userEmail: 1, employeeId: 1, status: 1 });
 
 // Virtual to check if access is currently valid
 teamMemberSchema.virtual('isAccessValid').get(function() {
@@ -133,7 +140,7 @@ teamMemberSchema.virtual('isAccessValid').get(function() {
 teamMemberSchema.virtual('permissionSummary').get(function() {
   const perms = this.permissions;
   return {
-    level: this.role,
+    level: this.accessLevel,
     jobAccess: {
       read: perms.canViewJobs,
       create: perms.canCreateJobs,
@@ -154,11 +161,11 @@ teamMemberSchema.virtual('permissionSummary').get(function() {
   };
 });
 
-// Static method to check if user has permission to access data for a userId
-teamMemberSchema.statics.checkAccess = async function(userId, managedUserId, requiredPermission) {
+// Static method to check if user has permission to access data for an employeeId
+teamMemberSchema.statics.checkAccess = async function(userEmail, employeeId, requiredPermission) {
   const access = await this.findOne({
-    user: userId,
-    managedUserId: managedUserId,
+    userEmail: userEmail.toLowerCase(),
+    employeeId: employeeId,
     status: 'active'
   }).populate('user', 'firstName lastName email');
   
@@ -192,21 +199,21 @@ teamMemberSchema.statics.checkAccess = async function(userId, managedUserId, req
   return {
     hasAccess: true,
     access,
-    role: access.role,
+    accessLevel: access.accessLevel,
     permissions: access.permissions
   };
 };
 
-// Static method to get all managed userIds for a user
-teamMemberSchema.statics.getManagedUserIds = async function(userId) {
+// Static method to get all managed employeeIds for a user
+teamMemberSchema.statics.getManagedEmployeeIds = async function(userEmail) {
   const accesses = await this.find({
-    user: userId,
+    userEmail: userEmail.toLowerCase(),
     status: 'active'
-  }).select('managedUserId role permissions');
+  }).select('employeeId accessLevel permissions');
   
   return accesses.filter(access => access.isAccessValid).map(access => ({
-    userId: access.managedUserId,
-    role: access.role,
+    employeeId: access.employeeId,
+    accessLevel: access.accessLevel,
     permissions: access.permissions
   }));
 };
@@ -242,18 +249,30 @@ teamMemberSchema.methods.reactivate = function() {
   return this.save();
 };
 
-// Pre-save middleware to handle role-based permissions
+// Pre-save middleware to populate user reference from email
+teamMemberSchema.pre('save', async function(next) {
+  if (this.isModified('userEmail') && this.userEmail) {
+    const User = mongoose.model('User');
+    const user = await User.findOne({ email: this.userEmail.toLowerCase() });
+    if (user) {
+      this.user = user._id;
+    }
+  }
+  next();
+});
+
+// Pre-save middleware to handle access level permissions
 teamMemberSchema.pre('save', function(next) {
-  // Set default permissions based on role
-  if (this.isModified('role')) {
-    switch (this.role) {
-      case 'admin':
+  // Set default permissions based on access level
+  if (this.isModified('accessLevel')) {
+    switch (this.accessLevel) {
+      case 'full_access':
         Object.keys(this.permissions).forEach(perm => {
           this.permissions[perm] = true;
         });
         break;
         
-      case 'manager':
+      case 'manage_operations':
         this.permissions.canCreateJobs = true;
         this.permissions.canEditJobs = true;
         this.permissions.canViewJobs = true;
@@ -266,14 +285,14 @@ teamMemberSchema.pre('save', function(next) {
         this.permissions.canManageApplications = true;
         break;
         
-      case 'staff':
+      case 'limited_access':
         this.permissions.canViewJobs = true;
         this.permissions.canViewAttendance = true;
         this.permissions.canCreateAttendance = true;
         this.permissions.canViewApplications = true;
         break;
         
-      case 'viewer':
+      case 'view_only':
         this.permissions.canViewJobs = true;
         this.permissions.canViewAttendance = true;
         this.permissions.canViewApplications = true;
@@ -282,5 +301,21 @@ teamMemberSchema.pre('save', function(next) {
   }
   next();
 });
+
+// Static method to check access using JWT token context
+teamMemberSchema.statics.checkAccessFromToken = async function(req, requiredPermission) {
+  if (!req.user || !req.user.email) {
+    return {
+      hasAccess: false,
+      reason: 'No authenticated user found'
+    };
+  }
+  
+  // Get employee ID from JWT token (the authenticated user's ID)
+  const employeeId = req.user._id;
+  const userEmail = req.user.email;
+  
+  return this.checkAccess(userEmail, employeeId, requiredPermission);
+};
 
 module.exports = mongoose.model('TeamAccess', teamMemberSchema);
