@@ -22,10 +22,10 @@ router.patch('/access/:teamAccessId', teamController.updatePermissions);
 // Revoke team access
 router.delete('/access/:teamAccessId', teamController.revokeAccess);
 
-// Check if I have access to manage data for a specific userId
-router.get('/check-access/:managedUserId', teamController.checkAccess);
+// Check if I have access to manage data for a specific employee
+router.get('/check-access/:employeeId', teamController.checkAccess);
 
-// Get comprehensive access report for a userId
-router.get('/report/:managedUserId', teamController.getAccessReport);
+// Get comprehensive access report for an employee
+router.get('/report/:employeeId', teamController.getAccessReport);
 
 module.exports = router;

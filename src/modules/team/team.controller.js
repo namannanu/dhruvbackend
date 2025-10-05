@@ -5,22 +5,22 @@ const AppError = require('../../shared/utils/appError');
 
 // Grant team access to a user for managing another user's data
 exports.grantAccess = catchAsync(async (req, res) => {
-  const { targetUserId, managedUserId, role, permissions, restrictions, expiresAt, reason } = req.body;
+  const { userEmail, employeeId, accessLevel, permissions, restrictions, expiresAt, reason } = req.body;
   
-  if (!targetUserId || !managedUserId || !role) {
-    throw new AppError('targetUserId, managedUserId, and role are required', 400);
+  if (!userEmail || !employeeId || !accessLevel) {
+    throw new AppError('userEmail, employeeId, and accessLevel are required', 400);
   }
   
-  // Verify the target user exists
-  const targetUser = await User.findById(targetUserId);
+  // Verify the target user exists by email
+  const targetUser = await User.findOne({ email: userEmail.toLowerCase() });
   if (!targetUser) {
-    throw new AppError('Target user not found', 404);
+    throw new AppError('Target user not found with provided email', 404);
   }
   
-  // Verify the managed user exists and get their userId
-  const managedUser = await User.findOne({ userId: managedUserId });
+  // Verify the employee exists by ID
+  const managedUser = await User.findById(employeeId);
   if (!managedUser) {
-    throw new AppError('Managed user not found with provided userId', 404);
+    throw new AppError('Employee not found with provided ID', 404);
   }
   
   // Check if the current user has permission to grant access to this managed user's data
@@ -30,8 +30,8 @@ exports.grantAccess = catchAsync(async (req, res) => {
   
   if (!isOwner) {
     const currentUserAccess = await TeamAccess.checkAccess(
-      req.user._id, 
-      managedUserId, 
+      req.user.email, 
+      employeeId, 
       'canGrantAccess'
     );
     hasGrantPermission = currentUserAccess.hasAccess;
@@ -43,8 +43,8 @@ exports.grantAccess = catchAsync(async (req, res) => {
   
   // Check if access already exists
   const existingAccess = await TeamAccess.findOne({
-    user: targetUserId,
-    managedUserId: managedUserId,
+    userEmail: userEmail.toLowerCase(),
+    employeeId: employeeId,
     status: { $in: ['active', 'suspended'] }
   });
   
@@ -54,32 +54,32 @@ exports.grantAccess = catchAsync(async (req, res) => {
   
   // Create team access
   const teamAccess = await TeamAccess.create({
-    user: targetUserId,
-    managedUserId: managedUserId,
+    userEmail: userEmail.toLowerCase(),
+    employeeId: employeeId,
     originalUser: managedUser._id,
     grantedBy: req.user._id,
-    role,
-    permissions: permissions || {}, // Will be set by pre-save middleware based on role
+    accessLevel,
+    permissions: permissions || {}, // Will be set by pre-save middleware based on accessLevel
     restrictions: restrictions || {},
     expiresAt: expiresAt ? new Date(expiresAt) : null,
-    reason: reason || `${role.charAt(0).toUpperCase() + role.slice(1)} access granted`
+    reason: reason || `${accessLevel.charAt(0).toUpperCase() + accessLevel.slice(1)} access granted`
   });
   
   await teamAccess.populate([
-    { path: 'user', select: 'firstName lastName email userId' },
-    { path: 'originalUser', select: 'firstName lastName email userId' },
+    { path: 'user', select: 'firstName lastName email' },
+    { path: 'originalUser', select: 'firstName lastName email' },
     { path: 'grantedBy', select: 'firstName lastName email' }
   ]);
   
   res.status(201).json({
     status: 'success',
-    message: `${role} access granted successfully`,
+    message: `${accessLevel} access granted successfully`,
     data: {
       teamAccess,
       summary: {
         grantedTo: `${targetUser.firstName} ${targetUser.lastName}`,
-        managedUserData: `${managedUser.firstName} ${managedUser.lastName} (${managedUserId})`,
-        role: role,
+        managedUserData: `${managedUser.firstName} ${managedUser.lastName} (${employeeId})`,
+        accessLevel: accessLevel,
         permissions: teamAccess.permissionSummary,
         expiresAt: teamAccess.expiresAt
       }
@@ -90,10 +90,10 @@ exports.grantAccess = catchAsync(async (req, res) => {
 // List all team members who have access to current user's data
 exports.listMyTeamMembers = catchAsync(async (req, res) => {
   const teamMembers = await TeamAccess.find({
-    managedUserId: req.user.userId,
+    employeeId: req.user._id,
     status: { $in: ['active', 'suspended'] }
   })
-  .populate('user', 'firstName lastName email userId')
+  .populate('user', 'firstName lastName email')
   .populate('grantedBy', 'firstName lastName email')
   .sort({ createdAt: -1 });
   
@@ -115,13 +115,13 @@ exports.listMyTeamMembers = catchAsync(async (req, res) => {
   });
 });
 
-// List all userIds current user can manage
+// List all employees current user can manage
 exports.listManagedAccess = catchAsync(async (req, res) => {
   const managedAccess = await TeamAccess.find({
-    user: req.user._id,
+    userEmail: req.user.email.toLowerCase(),
     status: 'active'
   })
-  .populate('originalUser', 'firstName lastName email userId')
+  .populate('originalUser', 'firstName lastName email')
   .populate('grantedBy', 'firstName lastName email')
   .sort({ createdAt: -1 });
   
@@ -132,7 +132,7 @@ exports.listManagedAccess = catchAsync(async (req, res) => {
     results: validAccess.length,
     data: {
       managedAccess: validAccess.map(access => ({
-        managedUserId: access.managedUserId,
+        employeeId: access.employeeId,
         originalUser: access.originalUser,
         role: access.role,
         permissions: access.permissionSummary,
@@ -149,7 +149,7 @@ exports.listManagedAccess = catchAsync(async (req, res) => {
 // Update team member permissions
 exports.updatePermissions = catchAsync(async (req, res) => {
   const { teamAccessId } = req.params;
-  const { role, permissions, restrictions, expiresAt } = req.body;
+  const { accessLevel, permissions, restrictions, expiresAt } = req.body;
   
   const teamAccess = await TeamAccess.findById(teamAccessId);
   if (!teamAccess) {
@@ -157,14 +157,14 @@ exports.updatePermissions = catchAsync(async (req, res) => {
   }
   
   // Check if current user can modify this access
-  const managedUser = await User.findOne({ userId: teamAccess.managedUserId });
+  const managedUser = await User.findById(teamAccess.employeeId);
   const isOwner = managedUser._id.toString() === req.user._id.toString();
   let hasManagePermission = false;
   
   if (!isOwner) {
     const currentUserAccess = await TeamAccess.checkAccess(
-      req.user._id, 
-      teamAccess.managedUserId, 
+      req.user.email, 
+      teamAccess.employeeId, 
       'canManageTeam'
     );
     hasManagePermission = currentUserAccess.hasAccess;
@@ -175,7 +175,7 @@ exports.updatePermissions = catchAsync(async (req, res) => {
   }
   
   // Update the access
-  if (role) teamAccess.role = role;
+  if (accessLevel) teamAccess.accessLevel = accessLevel;
   if (permissions) Object.assign(teamAccess.permissions, permissions);
   if (restrictions) Object.assign(teamAccess.restrictions, restrictions);
   if (expiresAt !== undefined) teamAccess.expiresAt = expiresAt ? new Date(expiresAt) : null;
@@ -204,14 +204,14 @@ exports.revokeAccess = catchAsync(async (req, res) => {
   }
   
   // Check if current user can revoke this access
-  const managedUser = await User.findOne({ userId: teamAccess.managedUserId });
+  const managedUser = await User.findById(teamAccess.employeeId);
   const isOwner = managedUser._id.toString() === req.user._id.toString();
   let hasManagePermission = false;
   
   if (!isOwner) {
     const currentUserAccess = await TeamAccess.checkAccess(
-      req.user._id, 
-      teamAccess.managedUserId, 
+      req.user.email, 
+      teamAccess.employeeId, 
       'canManageTeam'
     );
     hasManagePermission = currentUserAccess.hasAccess;
@@ -234,19 +234,19 @@ exports.revokeAccess = catchAsync(async (req, res) => {
   });
 });
 
-// Check if current user has access to manage data for a specific userId
+// Check if current user has access to manage data for a specific employee
 exports.checkAccess = catchAsync(async (req, res) => {
-  const { managedUserId } = req.params;
+  const { employeeId } = req.params;
   const { permission } = req.query;
   
   // Check if user is trying to access their own data
-  if (req.user.userId === managedUserId) {
+  if (req.user._id.toString() === employeeId) {
     return res.status(200).json({
       status: 'success',
       data: {
         hasAccess: true,
         reason: 'Owner access',
-        role: 'owner',
+        accessLevel: 'owner',
         permissions: 'all'
       }
     });
@@ -254,8 +254,8 @@ exports.checkAccess = catchAsync(async (req, res) => {
   
   // Check team access
   const accessCheck = await TeamAccess.checkAccess(
-    req.user._id, 
-    managedUserId, 
+    req.user.email, 
+    employeeId, 
     permission
   );
   
@@ -265,14 +265,14 @@ exports.checkAccess = catchAsync(async (req, res) => {
   });
 });
 
-// Get comprehensive access report for a userId
+// Get comprehensive access report for an employee
 exports.getAccessReport = catchAsync(async (req, res) => {
-  const { managedUserId } = req.params;
+  const { employeeId } = req.params;
   
-  // Verify managed user exists
-  const managedUser = await User.findOne({ userId: managedUserId });
+  // Verify employee exists
+  const managedUser = await User.findById(employeeId);
   if (!managedUser) {
-    throw new AppError('User not found with provided userId', 404);
+    throw new AppError('Employee not found with provided ID', 404);
   }
   
   // Check if current user has access to view this report
@@ -281,8 +281,8 @@ exports.getAccessReport = catchAsync(async (req, res) => {
   
   if (!isOwner) {
     const accessCheck = await TeamAccess.checkAccess(
-      req.user._id, 
-      managedUserId, 
+      req.user.email, 
+      employeeId, 
       'canViewAttendance'
     );
     hasAccess = accessCheck.hasAccess;
@@ -292,18 +292,18 @@ exports.getAccessReport = catchAsync(async (req, res) => {
     throw new AppError('You do not have permission to view this access report', 403);
   }
   
-  // Get all team members with access to this user's data
+  // Get all team members with access to this employee's data
   const teamMembers = await TeamAccess.find({
-    managedUserId: managedUserId,
+    employeeId: employeeId,
     status: { $in: ['active', 'suspended'] }
   })
-  .populate('user', 'firstName lastName email userId')
+  .populate('user', 'firstName lastName email')
   .populate('grantedBy', 'firstName lastName email')
   .sort({ lastAccessedAt: -1 });
   
   const report = {
     managedUser: {
-      userId: managedUser.userId,
+      id: managedUser._id,
       name: `${managedUser.firstName} ${managedUser.lastName}`,
       email: managedUser.email
     },
