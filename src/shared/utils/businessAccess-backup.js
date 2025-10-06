@@ -69,7 +69,7 @@ async function ensureBusinessAccess({
         {
           status: { $in: ['active', 'pending'] }
         },
-        {
+        {view_jobs
           $or: [
             { 'businessContext.businessId': business._id },
             { 'businessContext.allBusinesses': true },
@@ -83,20 +83,22 @@ async function ensureBusinessAccess({
       throw new AppError('You are not a team member of this business', 403);
     }
 
-    // For allBusinesses access, verify the business belongs to the managed user
-    if (teamAccess.businessContext?.allBusinesses) {
-      const managedUserId = teamAccess.managedUser?._id || teamAccess.originalUser;
-      if (managedUserId && normalizeId(business.owner) !== normalizeId(managedUserId)) {
-        throw new AppError('This business does not belong to the user you have access to manage', 403);
-      }
-    }
-
     // Check if TeamAccess has the required permissions
     const permissionsToCheck = normalizePermissions(requiredPermissions);
     
     if (permissionsToCheck.length) {
       // Get permissions from the most likely sources
       const permissions = teamAccess.effectivePermissions || teamAccess.permissions || teamAccess;
+      
+      // Special debug for hire_workers permission
+      if (permissionsToCheck.includes('hire_workers')) {
+        console.log('=== HIRE WORKERS PERMISSION DEBUG ===');
+        console.log('Required permission: hire_workers');
+        console.log('TeamAccess canHireWorkers:', teamAccess.canHireWorkers);
+        console.log('Permissions object canHireWorkers:', permissions.canHireWorkers);
+        console.log('EffectivePermissions canHireWorkers:', teamAccess.effectivePermissions?.canHireWorkers);
+        console.log('Direct permissions canHireWorkers:', teamAccess.permissions?.canHireWorkers);
+      }
       
       const hasRequiredPermissions = permissionsToCheck.every(permission => {
         let hasPermission;
@@ -161,11 +163,26 @@ async function ensureBusinessAccess({
           default: hasPermission = false;
         }
         
+        if (permission === 'hire_workers') {
+          console.log(`Final hire_workers permission result: ${hasPermission}`);
+        }
+        
         return hasPermission;
       });
       
       if (!hasRequiredPermissions) {
+        console.log('Permission check FAILED for:', permissionsToCheck);
         throw new AppError('Insufficient permissions for this business operation', 403);
+      }
+    }
+
+    // For allBusinesses access, verify the business belongs to the managed user
+    if (teamAccess.businessContext?.allBusinesses) {
+      const managedUserId = teamAccess.managedUser?._id || teamAccess.originalUser;
+      console.log('Checking allBusinesses access - managed user:', managedUserId, 'business owner:', business.owner);
+      
+      if (managedUserId && normalizeId(business.owner) !== normalizeId(managedUserId)) {
+        throw new AppError('This business does not belong to the user you have access to manage', 403);
       }
     }
 
