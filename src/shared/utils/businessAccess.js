@@ -147,6 +147,12 @@ async function ensureBusinessAccess({
           case 'view_attendance': hasPermission = permissions.canViewAttendance; break;
           case 'manage_attendance': hasPermission = permissions.canManageAttendance; break;
           
+          // Map attendance permissions to schedule permissions (attendance scheduling)
+          case 'create_schedules': hasPermission = permissions.canCreateAttendance || permissions.canCreateShifts; break;
+          case 'edit_schedules': hasPermission = permissions.canEditAttendance || permissions.canEditShifts; break;
+          case 'view_schedules': hasPermission = permissions.canViewAttendance || permissions.canViewShifts; break;
+          case 'manage_schedules': hasPermission = permissions.canManageAttendance || permissions.canManageShifts; break;
+          
           // Employment permissions
           case 'view_employment': hasPermission = permissions.canViewEmployment; break;
           case 'manage_employment': hasPermission = permissions.canManageEmployment; break;

@@ -326,6 +326,12 @@ async function getUserPermissions(userId, businessId) {
         if (teamAccess.permissions.canEditAttendance) permissions.push('edit_attendance');
         if (teamAccess.permissions.canViewAttendance) permissions.push('view_attendance');
         
+        // Map attendance permissions to schedule permissions (for attendance scheduling)
+        if (teamAccess.permissions.canCreateAttendance) permissions.push('create_schedules');
+        if (teamAccess.permissions.canEditAttendance) permissions.push('edit_schedules');
+        if (teamAccess.permissions.canViewAttendance) permissions.push('view_schedules');
+        if (teamAccess.permissions.canManageAttendance) permissions.push('manage_schedules');
+        
         // Worker permissions - THIS WAS MISSING!
         if (teamAccess.permissions.canHireWorkers) permissions.push('hire_workers');
         if (teamAccess.permissions.canFireWorkers) permissions.push('fire_workers');
