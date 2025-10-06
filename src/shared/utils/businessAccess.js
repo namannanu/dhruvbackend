@@ -129,6 +129,13 @@ async function ensureBusinessAccess({
           case 'delete_shifts': hasPermission = permissions.canDeleteShifts; break;
           case 'view_shifts': hasPermission = permissions.canViewShifts; break;
           
+          // Schedule permissions (mapped from shift permissions)
+          case 'create_schedules': hasPermission = permissions.canCreateShifts; break;
+          case 'edit_schedules': hasPermission = permissions.canEditShifts; break;
+          case 'delete_schedules': hasPermission = permissions.canDeleteShifts; break;
+          case 'view_schedules': hasPermission = permissions.canViewShifts; break;
+          case 'manage_schedules': hasPermission = permissions.canManageShifts; break;
+          
           // Team permissions
           case 'view_team': hasPermission = permissions.canViewTeam; break;
           case 'manage_team': hasPermission = permissions.canManageTeam; break;

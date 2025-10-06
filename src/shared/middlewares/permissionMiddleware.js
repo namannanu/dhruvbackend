@@ -342,6 +342,13 @@ async function getUserPermissions(userId, businessId) {
         if (teamAccess.permissions.canDeleteShifts) permissions.push('delete_shifts');
         if (teamAccess.permissions.canViewShifts) permissions.push('view_shifts');
         
+        // Schedule permissions (mapped from shift permissions)
+        if (teamAccess.permissions.canCreateShifts) permissions.push('create_schedules');
+        if (teamAccess.permissions.canEditShifts) permissions.push('edit_schedules');
+        if (teamAccess.permissions.canDeleteShifts) permissions.push('delete_schedules');
+        if (teamAccess.permissions.canViewShifts) permissions.push('view_schedules');
+        if (teamAccess.permissions.canManageShifts) permissions.push('manage_schedules');
+        
         // Team permissions
         if (teamAccess.permissions.canViewTeam) permissions.push('view_team');
         if (teamAccess.permissions.canManageTeam) permissions.push('manage_team');
