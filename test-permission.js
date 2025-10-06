@@ -10,7 +10,7 @@ async function testPermissionCheck() {
     // Simulate the request object for GET /jobs/:jobId
     const mockReq = {
       params: {
-        jobId: '68e2ec8aacb76ebec3d8ceb0'
+        jobId: '670205b44e069da6e0a4ba18'  // Original job ID from your request
       },
       body: {},
       query: {},

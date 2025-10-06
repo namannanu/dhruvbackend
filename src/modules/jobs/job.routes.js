@@ -13,11 +13,19 @@ const ensureViewJobsPermission = (req, res, next) => {
   return requirePermissions('view_jobs', { requireBusinessId: false })(req, res, next);
 };
 
+const ensureViewJobDetailsPermission = (req, res, next) => {
+  if (req.user?.userType === 'worker') {
+    return next(); // Workers can view job details without permission checks
+  }
+  // For employers, check view_jobs permission
+  return requirePermissions('view_jobs')(req, res, next);
+};
+
 // Job management routes with permission protection
 router.get('/access-context', protect, controller.getJobAccessContext);
 router.get('/', protect, ensureViewJobsPermission, controller.listJobs);
 router.get('/user/:id', controller.getJobsByUserId); // Public endpoint for id access
-router.get('/:jobId', protect, requirePermissions('view_jobs'), controller.getJob);
+router.get('/:jobId', protect, ensureViewJobDetailsPermission, controller.getJob);
 router.get('/:jobId/applications', protect, requirePermissions('view_applications'), controller.listApplicationsForJob);
 router.post('/:jobId/applications', protect, applicationController.createApplication); // Workers can apply without special permission
 router.patch('/:jobId/status', protect, requirePermissions('edit_jobs'), controller.updateJobStatus);
