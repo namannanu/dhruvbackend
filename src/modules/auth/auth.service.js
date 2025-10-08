@@ -18,8 +18,38 @@ const signToken = (payload) => {
   });
 };
 
-const buildUserResponse = async (user, includeTeamContext = true) => {
+const buildBusinessCollections = async (userId) => {
   const TeamMember = require('../businesses/teamMember.model');
+
+  const [ownedBusinesses, teamMemberships] = await Promise.all([
+    Business.find({ owner: userId }).select('name industry createdAt'),
+    TeamMember.find({ user: userId, active: true })
+      .populate('business', 'name industry createdAt')
+      .sort({ createdAt: -1 })
+  ]);
+
+  return {
+    ownedBusinesses: ownedBusinesses.map((business) => ({
+      businessId: business._id,
+      businessName: business.name,
+      industry: business.industry || null,
+      createdAt: business.createdAt
+    })),
+    teamBusinesses: teamMemberships
+      .filter((membership) => membership.business)
+      .map((membership) => ({
+        businessId: membership.business._id,
+        businessName: membership.business.name,
+        industry: membership.business.industry || null,
+        role: membership.role,
+        permissions: membership.permissions,
+        joinedAt: membership.createdAt
+      })),
+    teamMemberships
+  };
+};
+
+const buildUserResponse = async (user, includeTeamContext = true) => {
   const base = user.toObject({ getters: true });
   delete base.password;
 
@@ -29,24 +59,26 @@ const buildUserResponse = async (user, includeTeamContext = true) => {
     const profile = await WorkerProfile.findOne({ user: user._id });
     response.workerProfile = profile;
   } else {
-    const profile = await EmployerProfile.findOne({ user: user._id });
-    response.employerProfile = profile;
-  }
+    const [profile, businessCollections] = await Promise.all([
+      EmployerProfile.findOne({ user: user._id }),
+      buildBusinessCollections(user._id)
+    ]);
 
-  // Add team member context for employers
-  if (includeTeamContext && base.userType === 'employer') {
-    const teamMember = await TeamMember.findOne({ user: user._id, active: true })
-      .populate('business', 'name industry')
-      .sort({ createdAt: -1 }); // Get most recent active team membership
-    
-    if (teamMember) {
-      response.teamMember = teamMember;
-      response.businessContext = {
-        businessId: teamMember.business._id,
-        businessName: teamMember.business.name,
-        role: teamMember.role,
-        permissions: teamMember.permissions
-      };
+    response.employerProfile = profile;
+    response.ownedBusinesses = businessCollections.ownedBusinesses;
+    response.teamBusinesses = businessCollections.teamBusinesses;
+
+    if (includeTeamContext) {
+      const teamMember = businessCollections.teamMemberships[0];
+      if (teamMember) {
+        response.teamMember = teamMember;
+        response.businessContext = {
+          businessId: teamMember.business._id,
+          businessName: teamMember.business.name,
+          role: teamMember.role,
+          permissions: teamMember.permissions
+        };
+      }
     }
   }
 
@@ -225,19 +257,10 @@ exports.switchBusinessContext = async (userId, businessId) => {
 
 // Get all businesses where user is a team member
 exports.getUserBusinesses = async (userId) => {
-  const TeamMember = require('../businesses/teamMember.model');
-  
-  const teamMemberships = await TeamMember.find({ 
-    user: userId, 
-    active: true 
-  }).populate('business', 'name industry createdAt');
+  const { ownedBusinesses, teamBusinesses } = await buildBusinessCollections(userId);
 
-  return teamMemberships.map(tm => ({
-    businessId: tm.business._id,
-    businessName: tm.business.name,
-    industry: tm.business.industry,
-    role: tm.role,
-    permissions: tm.permissions,
-    joinedAt: tm.createdAt
-  }));
+  return {
+    ownedBusinesses,
+    teamBusinesses
+  };
 };
