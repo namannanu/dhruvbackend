@@ -188,16 +188,34 @@ exports.updateApplication = catchAsync(async (req, res, next) => {
     const updatedApplication = await Application.findById(application._id).populate(populateJobOwnership);
     return res.status(200).json({ status: 'success', data: formatApplicationResponse(updatedApplication, req.user) });
   }
-  if (req.user.userType === 'employer') {
+  // Check if user can manage this application (employer OR business owner)
+  const canManageApplication = req.user.userType === 'employer' || 
+    (application.job && application.job.business && 
+     application.job.business.owner && 
+     application.job.business.owner.toString() === req.user._id.toString());
+
+  if (canManageApplication) {
     if (!application.job) {
       return next(new AppError('Job information missing for application', 400));
     }
 
-    await ensureBusinessAccess({
-      user: req.user,
-      businessId: application.job.business,
-      requiredPermissions: 'manage_applications',
+    console.log('🔍 Business access check:', {
+      userId: req.user._id.toString(),
+      businessId: application.job.business?.toString(),
+      userRole: req.user.userType,
+      isBusinessOwner: application.job.business?.owner?.toString() === req.user._id.toString()
     });
+
+    try {
+      await ensureBusinessAccess({
+        user: req.user,
+        businessId: application.job.business,
+        requiredPermissions: 'manage_applications',
+      });
+    } catch (error) {
+      console.log('❌ Business access failed:', error.message);
+      return next(error);
+    }
 
     const previousStatus = application.status;
     const nextStatus = req.body.status;
