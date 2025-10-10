@@ -16,6 +16,7 @@ const {
   ensureBusinessAccess,
   getAccessibleBusinessIds,
 } = require('../../shared/utils/businessAccess');
+const { resolveOwnershipTag } = require('../../shared/utils/ownershipTag');
 
 const JOB_FREE_QUOTA = 20000;///////               change to 2
 
@@ -27,6 +28,18 @@ const buildJobResponse = async (job, currentUser) => {
     jobObj.premiumRequired =
       !currentUser.premium && currentUser.freeApplicationsUsed >= 3;
   }
+
+  if (currentUser && currentUser.userType === 'employer') {
+    const ownershipTag = resolveOwnershipTag(
+      currentUser,
+      jobObj.employer,
+      jobObj.business?.owner
+    );
+    if (ownershipTag) {
+      jobObj.createdByTag = ownershipTag;
+    }
+  }
+
   return jobObj;
 };
 
@@ -136,7 +149,13 @@ exports.listJobs = catchAsync(async (req, res) => {
     filter.tags = { $in: req.query.tags.split(',').map((tag) => tag.trim()) };
   }
 
-  const jobs = await Job.find(filter).populate('business employer').sort({ createdAt: -1 });
+  const jobs = await Job.find(filter)
+    .populate({
+      path: 'business',
+      populate: { path: 'owner', select: 'email firstName lastName' }
+    })
+    .populate('employer', 'email firstName lastName userType')
+    .sort({ createdAt: -1 });
   const lat = parseFloat(req.query.lat);
   const lng = parseFloat(req.query.lng);
   const radius = parseFloat(req.query.radius);
@@ -264,7 +283,12 @@ exports.getJobAccessContext = catchAsync(async (req, res) => {
 });
 
 exports.getJob = catchAsync(async (req, res, next) => {
-  const job = await Job.findById(req.params.jobId).populate('business employer');
+  const job = await Job.findById(req.params.jobId)
+    .populate({
+      path: 'business',
+      populate: { path: 'owner', select: 'email firstName lastName' }
+    })
+    .populate('employer', 'email firstName lastName userType');
   if (!job) {
     return next(new AppError('Job not found', 404));
   }
@@ -326,7 +350,17 @@ exports.createJob = catchAsync(async (req, res, next) => {
     await ownerUser.save();
   }
 
-  res.status(201).json({ status: 'success', data: job });
+  await job.populate([
+    {
+      path: 'business',
+      populate: { path: 'owner', select: 'email firstName lastName' }
+    },
+    { path: 'employer', select: 'email firstName lastName userType' }
+  ]);
+
+  const responseData = await buildJobResponse(job, req.user);
+
+  res.status(201).json({ status: 'success', data: responseData });
 });
 
 exports.createJobsBulk = catchAsync(async (req, res, next) => {
@@ -362,6 +396,13 @@ exports.createJobsBulk = catchAsync(async (req, res, next) => {
   }
 
   const createdJobs = await Job.insertMany(preparedJobs);
+  await Job.populate(createdJobs, [
+    {
+      path: 'business',
+      populate: { path: 'owner', select: 'email firstName lastName' }
+    },
+    { path: 'employer', select: 'email firstName lastName userType' }
+  ]);
 
   const ownerIncrements = createdJobs.reduce((acc, job) => {
     const ownerId = job.employer?.toString();
@@ -379,11 +420,19 @@ exports.createJobsBulk = catchAsync(async (req, res, next) => {
     )
   );
 
-  res.status(201).json({ status: 'success', data: { jobs: createdJobs, totalCost: cost } });
+  const responseJobs = await Promise.all(createdJobs.map((createdJob) => buildJobResponse(createdJob, req.user)));
+
+  res.status(201).json({ status: 'success', data: { jobs: responseJobs, totalCost: cost } });
 });
 
 exports.updateJob = catchAsync(async (req, res, next) => {
-  const job = await Job.findById(req.params.jobId);
+  const job = await Job.findById(req.params.jobId).populate([
+    { path: 'employer', select: 'email firstName lastName userType' },
+    {
+      path: 'business',
+      populate: { path: 'owner', select: 'email firstName lastName' }
+    }
+  ]);
   if (!job) {
     return next(new AppError('Job not found', 404));
   }
@@ -394,7 +443,15 @@ exports.updateJob = catchAsync(async (req, res, next) => {
   });
   Object.assign(job, req.body);
   await job.save();
-  res.status(200).json({ status: 'success', data: job });
+  await job.populate([
+    {
+      path: 'business',
+      populate: { path: 'owner', select: 'email firstName lastName' }
+    },
+    { path: 'employer', select: 'email firstName lastName userType' }
+  ]);
+  const responseData = await buildJobResponse(job, req.user);
+  res.status(200).json({ status: 'success', data: responseData });
 });
 
 exports.updateJobStatus = catchAsync(async (req, res, next) => {
@@ -409,7 +466,15 @@ exports.updateJobStatus = catchAsync(async (req, res, next) => {
   });
   job.status = req.body.status;
   await job.save();
-  res.status(200).json({ status: 'success', data: job });
+  await job.populate([
+    {
+      path: 'business',
+      populate: { path: 'owner', select: 'email firstName lastName' }
+    },
+    { path: 'employer', select: 'email firstName lastName userType' }
+  ]);
+  const responseData = await buildJobResponse(job, req.user);
+  res.status(200).json({ status: 'success', data: responseData });
 });
 
 exports.listApplicationsForJob = catchAsync(async (req, res, next) => {
@@ -427,14 +492,42 @@ exports.listApplicationsForJob = catchAsync(async (req, res, next) => {
     requiredPermissions: 'view_applications',
   });
 
+  await job.populate([
+    { path: 'employer', select: 'email firstName lastName userType' },
+    {
+      path: 'business',
+      populate: { path: 'owner', select: 'email firstName lastName' }
+    }
+  ]);
+
   const applications = await Application.find({ job: job._id })
-    .populate('worker')
+    .populate('worker', 'firstName lastName email phone')
     .sort({ createdAt: -1 });
-  res.status(200).json({ status: 'success', data: applications });
+  const ownershipTag =
+    req.user.userType === 'employer'
+      ? resolveOwnershipTag(req.user, job.employer, job.business?.owner)
+      : null;
+  const data = applications.map((application) => {
+    const plain = application.toObject({ virtuals: true });
+    if (ownershipTag) {
+      plain.createdByTag = ownershipTag;
+    }
+    return plain;
+  });
+  res.status(200).json({ status: 'success', data });
 });
 
 exports.hireApplicant = catchAsync(async (req, res, next) => {
-  const application = await Application.findById(req.params.applicationId).populate('job');
+  const application = await Application.findById(req.params.applicationId).populate({
+    path: 'job',
+    populate: [
+      { path: 'employer', select: 'email firstName lastName userType' },
+      {
+        path: 'business',
+        populate: { path: 'owner', select: 'email firstName lastName' }
+      }
+    ]
+  });
   if (!application) {
     return next(new AppError('Application not found', 404));
   }
@@ -566,6 +659,20 @@ exports.hireApplicant = catchAsync(async (req, res, next) => {
       employmentStatus: employmentRecord.employmentStatus
     }
   };
+
+  if (req.user.userType === 'employer') {
+    const ownershipTag = resolveOwnershipTag(
+      req.user,
+      application.job?.employer,
+      application.job?.business?.owner
+    );
+    if (ownershipTag) {
+      responseData.createdByTag = ownershipTag;
+      if (responseData.job) {
+        responseData.job.createdByTag = ownershipTag;
+      }
+    }
+  }
 
   res.status(200).json({ 
     status: 'success', 

@@ -12,6 +12,7 @@ const {
   ensureBusinessAccess,
   getAccessibleBusinessIds,
 } = require('../../shared/utils/businessAccess');
+const { resolveOwnershipTag } = require('../../shared/utils/ownershipTag');
 const {
   buildLocationLabel,
   buildAttendanceJobLocation,
@@ -165,9 +166,20 @@ exports.listEmployerApplications = catchAsync(async (req, res, next) => {
   const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
 
-  const jobFilter = business
-    ? { business: business._id }
-    : { employer: employerId };
+  const accessibleBusinessIds = await getAccessibleBusinessIds(req.user);
+  const accessibleBusinessIdArray = Array.from(accessibleBusinessIds);
+  const normalizedAccessibleBusinessIds = accessibleBusinessIdArray.map((id) =>
+    mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : id
+  );
+
+  let jobFilter;
+  if (business) {
+    jobFilter = { business: business._id };
+  } else if (normalizedAccessibleBusinessIds.length) {
+    jobFilter = { business: { $in: normalizedAccessibleBusinessIds } };
+  } else {
+    jobFilter = { employer: employerId };
+  }
   if (req.query.businessId) {
     jobFilter.business = req.query.businessId;
   }
@@ -239,7 +251,15 @@ exports.listEmployerApplications = catchAsync(async (req, res, next) => {
   const applicationsQuery = Application.find(filter)
     .populate({
       path: 'job',
-      select: 'title status business schedule location createdAt hiredWorker'
+      select: 'title status business schedule location createdAt hiredWorker employer',
+      populate: [
+        { path: 'employer', select: 'email firstName lastName userType' },
+        {
+          path: 'business',
+          select: 'businessName owner',
+          populate: { path: 'owner', select: 'email firstName lastName' }
+        }
+      ]
     })
     .populate({
       path: 'worker',
@@ -270,6 +290,22 @@ exports.listEmployerApplications = catchAsync(async (req, res, next) => {
     }
   });
 
+  const data = applications.map((application) => {
+    const plain = application.toObject({ virtuals: true });
+    if (req.user.userType === 'employer' && plain.job) {
+      const ownershipTag = resolveOwnershipTag(
+        req.user,
+        plain.job.employer,
+        plain.job.business?.owner
+      );
+      if (ownershipTag) {
+        plain.createdByTag = ownershipTag;
+        plain.job.createdByTag = ownershipTag;
+      }
+    }
+    return plain;
+  });
+
   res.status(200).json({
     status: 'success',
     pagination: {
@@ -279,7 +315,7 @@ exports.listEmployerApplications = catchAsync(async (req, res, next) => {
       limit
     },
     summary,
-    data: applications
+    data
   });
 });
 

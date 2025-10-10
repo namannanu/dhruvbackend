@@ -14,6 +14,7 @@ const {
   buildAttendanceJobLocation,
   buildLocationLabel: sharedBuildLocationLabel
 } = require('../../shared/utils/location');
+const { resolveOwnershipTag } = require('../../shared/utils/ownershipTag');
 
 const HOURS_IN_MS = 1000 * 60 * 60;
 
@@ -295,8 +296,24 @@ exports.listAttendance = catchAsync(async (req, res, next) => {
   // Get attendance records
   const records = await AttendanceRecord.find(filter)
     .populate('worker', 'firstName lastName email phone')
-    .populate('job', 'title description hourlyRate')
-    .populate('business', 'name address')
+    .populate({
+      path: 'job',
+      select: 'title description hourlyRate employer business',
+      populate: [
+        { path: 'employer', select: 'email firstName lastName userType' },
+        {
+          path: 'business',
+          select: 'businessName name owner',
+          populate: { path: 'owner', select: 'email firstName lastName' }
+        }
+      ]
+    })
+    .populate({
+      path: 'business',
+      select: 'businessName name owner',
+      populate: { path: 'owner', select: 'email firstName lastName' }
+    })
+    .populate('employer', 'email firstName lastName userType')
     .sort({ scheduledStart: -1 });
 
   let enhancedRecords = records;
@@ -327,10 +344,39 @@ exports.listAttendance = catchAsync(async (req, res, next) => {
     }));
   }
 
+  const toPlain = (record) =>
+    typeof record.toObject === 'function' ? record.toObject({ virtuals: true }) : record;
+
+  const recordsWithTags = enhancedRecords.map((record) => {
+    const plain = toPlain(record);
+    if (req.user.userType === 'employer') {
+      const ownershipTag = resolveOwnershipTag(
+        req.user,
+        plain.employer,
+        plain.job?.employer,
+        plain.business?.owner
+      );
+      if (ownershipTag) {
+        plain.createdByTag = ownershipTag;
+      }
+      if (plain.job && !plain.job.createdByTag) {
+        const jobTag = resolveOwnershipTag(
+          req.user,
+          plain.job.employer,
+          plain.job.business?.owner
+        );
+        if (jobTag) {
+          plain.job.createdByTag = jobTag;
+        }
+      }
+    }
+    return plain;
+  });
+
   res.status(200).json({ 
     status: 'success', 
-    results: enhancedRecords.length, 
-    data: enhancedRecords 
+    results: recordsWithTags.length, 
+    data: recordsWithTags 
   });
 });
 
@@ -409,7 +455,37 @@ exports.scheduleAttendance = catchAsync(async (req, res, next) => {
   }
 
   const record = await AttendanceRecord.create(payload);
-  res.status(201).json({ status: 'success', data: record });
+  await record.populate([
+    'worker',
+    {
+      path: 'job',
+      populate: [
+        { path: 'employer', select: 'email firstName lastName userType' },
+        {
+          path: 'business',
+          populate: { path: 'owner', select: 'email firstName lastName' }
+        }
+      ]
+    },
+    {
+      path: 'business',
+      populate: { path: 'owner', select: 'email firstName lastName' }
+    },
+    { path: 'employer', select: 'email firstName lastName userType' }
+  ]);
+  const recordData = record.toObject({ virtuals: true });
+  if (req.user.userType === 'employer') {
+    const ownershipTag = resolveOwnershipTag(
+      req.user,
+      recordData.employer,
+      recordData.job?.employer,
+      recordData.business?.owner
+    );
+    if (ownershipTag) {
+      recordData.createdByTag = ownershipTag;
+    }
+  }
+  res.status(201).json({ status: 'success', data: recordData });
 });
 
 exports.clockIn = catchAsync(async (req, res, next) => {

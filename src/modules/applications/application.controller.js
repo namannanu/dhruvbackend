@@ -6,6 +6,41 @@ const catchAsync = require('../../shared/utils/catchAsync');
 const AppError = require('../../shared/utils/appError');
 const { ensureBusinessAccess } = require('../../shared/utils/businessAccess');
 const notificationService = require('../notifications/notification.service');
+const { resolveOwnershipTag } = require('../../shared/utils/ownershipTag');
+
+const populateJobOwnership = [
+  {
+    path: 'job',
+    populate: [
+      { path: 'employer', select: 'email firstName lastName userType' },
+      {
+        path: 'business',
+        populate: { path: 'owner', select: 'email firstName lastName' }
+      }
+    ]
+  }
+];
+
+const formatApplicationResponse = (applicationDoc, currentUser) => {
+  if (!applicationDoc) {
+    return null;
+  }
+  const plain = applicationDoc.toObject({ virtuals: true });
+
+  if (currentUser?.userType === 'employer' && plain.job) {
+    const ownershipTag = resolveOwnershipTag(
+      currentUser,
+      plain.job.employer,
+      plain.job.business?.owner
+    );
+    if (ownershipTag) {
+      plain.createdByTag = ownershipTag;
+      plain.job.createdByTag = ownershipTag;
+    }
+  }
+
+  return plain;
+};
 
 const APPLICATION_FREE_QUOTA = 3;
 
@@ -76,13 +111,13 @@ exports.listMyApplications = catchAsync(async (req, res, next) => {
     return next(new AppError('Only workers can view their applications', 403));
   }
   const applications = await Application.find({ worker: req.user._id })
-    .populate('job')
+    .populate(populateJobOwnership)
     .sort({ createdAt: -1 });
   res.status(200).json({ status: 'success', data: applications });
 });
 
 exports.updateApplication = catchAsync(async (req, res, next) => {
-  const application = await Application.findById(req.params.applicationId).populate('job');
+  const application = await Application.findById(req.params.applicationId).populate(populateJobOwnership);
   if (!application) {
     return next(new AppError('Application not found', 404));
   }
@@ -145,8 +180,8 @@ exports.updateApplication = catchAsync(async (req, res, next) => {
       });
     }
 
-    const updatedApplication = await Application.findById(application._id).populate('job');
-    return res.status(200).json({ status: 'success', data: updatedApplication });
+    const updatedApplication = await Application.findById(application._id).populate(populateJobOwnership);
+    return res.status(200).json({ status: 'success', data: formatApplicationResponse(updatedApplication, req.user) });
   }
   if (req.user.userType === 'employer') {
     if (!application.job) {
@@ -212,7 +247,8 @@ exports.updateApplication = catchAsync(async (req, res, next) => {
         senderUserId: req.user._id
       });
     }
-    return res.status(200).json({ status: 'success', data: application });
+    await application.populate(populateJobOwnership);
+    return res.status(200).json({ status: 'success', data: formatApplicationResponse(application, req.user) });
   }
   return next(new AppError('Not authorized to update application', 403));
 });
@@ -225,8 +261,11 @@ exports.listApplications = catchAsync(async (req, res) => {
   if (req.query.jobId) {
     filter.job = req.query.jobId;
   }
-  const applications = await Application.find(filter).populate('job worker');
-  res.status(200).json({ status: 'success', data: applications });
+  const applications = await Application.find(filter)
+    .populate(populateJobOwnership)
+    .populate('worker');
+  const data = applications.map((application) => formatApplicationResponse(application, req.user));
+  res.status(200).json({ status: 'success', data });
 });
 
 // Get all applications by id (for both worker and employer)
