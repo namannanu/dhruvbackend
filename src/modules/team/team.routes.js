@@ -20,6 +20,26 @@ const canManageTeam = async (req, res, next) => {
     return next();
   }
   
+  // Check if user has team management permissions for the specific business in the request
+  const businessId = req.body?.businessContext?.businessId;
+  if (businessId) {
+    const TeamAccess = require('./teamAccess.model');
+    const access = await TeamAccess.findOne({
+      employeeId: req.user._id,
+      'businessContext.businessId': businessId,
+      status: { $in: ['active', 'pending'] },
+      $or: [
+        { 'permissions.canManageTeam': true },
+        { 'permissions.canGrantAccess': true },
+        { accessLevel: 'full_access' }
+      ]
+    });
+    
+    if (access) {
+      return next();
+    }
+  }
+  
   return next(new AppError('Access denied. You must be an employer or business owner to manage teams.', 403));
 };
 
