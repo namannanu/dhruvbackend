@@ -49,7 +49,12 @@ exports.createApplication = catchAsync(async (req, res, next) => {
     return next(new AppError('Only workers can apply to jobs', 403));
   }
 
-  const job = await Job.findById(req.params.jobId);
+  const jobId = req.params.jobId || req.body.jobId;
+  if (!jobId) {
+    return next(new AppError('Job ID is required to apply', 400));
+  }
+
+  const job = await Job.findById(jobId);
   if (!job || job.status !== 'active') {
     return next(new AppError('Job is not available for applications', 400));
   }

@@ -1,6 +1,7 @@
 const express = require('express');
 const controller = require('./worker.controller');
 const { protect, restrictTo } = require('../../shared/middlewares/auth.middleware');
+const applicationController = require('../applications/application.controller');
 
 const router = express.Router();
 
@@ -16,6 +17,7 @@ router.get('/me/employment/scheduled-dates', restrictTo('worker'), controller.ge
 router.patch('/me/employment/end', restrictTo('worker'), controller.endMyEmployment);
 
 // Worker applications route
+router.post('/me/applications', restrictTo('worker'), applicationController.createApplication);
 router.get('/me/applications', restrictTo('worker'), controller.getWorkerApplications);
 
 router.get('/:workerId', controller.getWorkerProfile);
@@ -26,5 +28,4 @@ router.get('/:workerId/attendance', controller.getWorkerAttendance);
 router.get('/:workerId/shifts', controller.getWorkerShifts);
 
 module.exports = router;
-
 

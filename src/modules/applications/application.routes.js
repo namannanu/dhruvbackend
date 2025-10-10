@@ -11,6 +11,7 @@ router.get('/user/:id', controller.getApplicationsByUserId);
 router.use(protect);
 
 // Application management routes with permission protection
+router.post('/', controller.createApplication);
 router.get('/', requirePermissions('view_applications'), controller.listApplications);
 router.get('/me', controller.listMyApplications); // Workers can see their own applications
 router.patch('/:applicationId', requirePermissions('manage_applications'), controller.updateApplication);
