@@ -1,16 +1,33 @@
 const express = require('express');
 const controller = require('./team.controller');
 const { protect, restrictTo } = require('../../shared/middlewares/auth.middleware');
+const Business = require('../businesses/business.model');
+const AppError = require('../../shared/utils/appError');
 
 const router = express.Router({ mergeParams: true });
 
 router.use(protect);
 
-router.post('/grant-access', restrictTo('employer'), controller.grantAccess);
-router.get('/my-team', restrictTo('employer'), controller.listMyTeam);
+// Middleware to check if user can manage teams (either employer or business owner)
+const canManageTeam = async (req, res, next) => {
+  if (req.user.userType === 'employer') {
+    return next();
+  }
+  
+  // Check if user owns any businesses
+  const businessCount = await Business.countDocuments({ owner: req.user._id });
+  if (businessCount > 0) {
+    return next();
+  }
+  
+  return next(new AppError('Access denied. You must be an employer or business owner to manage teams.', 403));
+};
+
+router.post('/grant-access', canManageTeam, controller.grantAccess);
+router.get('/my-team', canManageTeam, controller.listMyTeam);
 router.get('/my-access', controller.listMyAccess);
 router.get('/check-access/:email', controller.checkAccessByEmail);
-router.patch('/access/:identifier', restrictTo('employer'), controller.updateAccess);
-router.delete('/access/:identifier', restrictTo('employer'), controller.revokeAccess);
+router.patch('/access/:identifier', canManageTeam, controller.updateAccess);
+router.delete('/access/:identifier', canManageTeam, controller.revokeAccess);
 
 module.exports = router;
