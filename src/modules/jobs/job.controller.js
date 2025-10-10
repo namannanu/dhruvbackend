@@ -441,13 +441,28 @@ exports.hireApplicant = catchAsync(async (req, res, next) => {
 
   // Check if user has access to hire for this job's business
   // Use ensureBusinessAccess to support both job owners and team members with hiring permissions
-  try {
-    await ensureBusinessAccess({
-      user: req.user,
-      businessId: application.job.business,
-      requiredPermissions: 'hire_workers',
-    });
-  } catch (error) {
+  const job = application.job;
+  const isJobOwner = job?.employer?.toString() === req.user._id.toString();
+  let hasAccess = isJobOwner;
+  let accessError = null;
+
+  if (!hasAccess && job?.business) {
+    try {
+      await ensureBusinessAccess({
+        user: req.user,
+        businessId: job.business,
+        requiredPermissions: 'hire_workers',
+      });
+      hasAccess = true;
+    } catch (error) {
+      accessError = error;
+    }
+  }
+
+  if (!hasAccess) {
+    if (accessError) {
+      return next(accessError);
+    }
     return next(new AppError('You can only hire for jobs you have access to manage', 403));
   }
 
