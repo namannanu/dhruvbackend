@@ -4,6 +4,7 @@ const User = require('../users/user.model');
 const Business = require('../businesses/business.model');
 const AppError = require('../../shared/utils/appError');
 const catchAsync = require('../../shared/utils/catchAsync');
+const notificationService = require('../notifications/notification.service');
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
 
@@ -266,6 +267,30 @@ exports.grantAccess = catchAsync(async (req, res, next) => {
     { path: 'managedUser', select: 'firstName lastName email userType' }
   ]);
 
+  if (isNewRecord && accessRecord.employeeId) {
+    const inviterName = req.user.fullName || req.user.firstName || req.user.email;
+    const businessName =
+      businessDetails?.businessName ||
+      resolvedBusinessContext?.businessName ||
+      'their team';
+
+    await notificationService.sendSafeNotification({
+      recipient: accessRecord.employeeId._id || accessRecord.employeeId,
+      type: 'team_invite',
+      priority: 'medium',
+      title: `You've been invited to join ${businessName}`,
+      message: `${inviterName || 'A team owner'} invited you to join ${businessName} as ${resolvedRole}.`,
+      metadata: {
+        accessId: accessRecord._id,
+        accessLevel,
+        role: resolvedRole,
+        businessId: (resolvedBusinessContext && resolvedBusinessContext.businessId) || businessDetails?._id,
+        status: accessRecord.status
+      },
+      senderUserId: req.user._id
+    });
+  }
+
   const responseData = serializeAccessRecord(accessRecord);
 
   res.status(isNewRecord ? 201 : 200).json({
@@ -414,6 +439,8 @@ exports.updateAccess = catchAsync(async (req, res, next) => {
     notes
   } = req.body || {};
 
+  let businessDetails = null;
+
   const query = buildAccessQueryFromIdentifier(identifier, req.user._id);
   const accessRecord = await TeamAccess.findOne(query)
     .populate('employeeId', 'firstName lastName email userType')
@@ -456,13 +483,37 @@ exports.updateAccess = catchAsync(async (req, res, next) => {
   }
 
   if (businessContext) {
-    const business = await ensureBusinessOwnership(businessContext.businessId, req.user._id);
-    accessRecord.businessContext = business
-      ? { ...businessContext, businessId: business._id }
+    businessDetails = await ensureBusinessOwnership(businessContext.businessId, req.user._id);
+    accessRecord.businessContext = businessDetails
+      ? { ...businessContext, businessId: businessDetails._id }
       : businessContext;
   }
 
   await accessRecord.save();
+
+  if (accessRecord.employeeId) {
+    const updaterName = req.user.fullName || req.user.firstName || req.user.email;
+    const businessName =
+      businessDetails?.businessName ||
+      accessRecord.businessContext?.businessName ||
+      'your team';
+
+    await notificationService.sendSafeNotification({
+      recipient: accessRecord.employeeId._id || accessRecord.employeeId,
+      type: 'team_update',
+      priority: 'low',
+      title: `Your team access was updated`,
+      message: `${updaterName || 'A team owner'} updated your access for ${businessName}.`,
+      metadata: {
+        accessId: accessRecord._id,
+        accessLevel: accessRecord.accessLevel,
+        role: accessRecord.role,
+        businessId: accessRecord.businessContext?.businessId || businessDetails?._id,
+        status: accessRecord.status
+      },
+      senderUserId: req.user._id
+    });
+  }
 
   const responseData = serializeAccessRecord(accessRecord);
 
@@ -493,6 +544,26 @@ exports.revokeAccess = catchAsync(async (req, res, next) => {
   }
 
   await accessRecord.save();
+
+  if (accessRecord.employeeId) {
+    const revokerName = req.user.fullName || req.user.firstName || req.user.email;
+    const businessName =
+      accessRecord.businessContext?.businessName || 'the team';
+
+    await notificationService.sendSafeNotification({
+      recipient: accessRecord.employeeId._id || accessRecord.employeeId,
+      type: 'team_update',
+      priority: 'medium',
+      title: 'Your team access was revoked',
+      message: `${revokerName || 'A team owner'} revoked your access for ${businessName}.`,
+      metadata: {
+        accessId: accessRecord._id,
+        businessId: accessRecord.businessContext?.businessId,
+        status: accessRecord.status
+      },
+      senderUserId: req.user._id
+    });
+  }
 
   const responseData = serializeAccessRecord(accessRecord);
 

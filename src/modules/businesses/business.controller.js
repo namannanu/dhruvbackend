@@ -3,6 +3,7 @@ const TeamMember = require('./teamMember.model');
 const User = require('../users/user.model');
 const catchAsync = require('../../shared/utils/catchAsync');
 const AppError = require('../../shared/utils/appError');
+const notificationService = require('../notifications/notification.service');
 const {
   ensureBusinessAccess,
   getAccessibleBusinessIds,
@@ -233,6 +234,22 @@ exports.manageTeamMember = {
     await member.populate('user', 'firstName lastName email');
     
     console.log('📤 Sending response with populated member data');
+
+    const inviterName = req.user.fullName || req.user.firstName || req.user.email;
+    await notificationService.sendSafeNotification({
+      recipient: member.user._id || member.user,
+      type: 'team_invite',
+      priority: 'medium',
+      title: `You've been added to ${business.businessName}`,
+      message: `${inviterName || 'A team owner'} added you to ${business.businessName} as ${member.role}.`,
+      metadata: {
+        businessId: business._id,
+        teamMemberId: member._id,
+        permissions: member.permissions,
+        role: member.role
+      },
+      senderUserId: req.user._id
+    });
     
     res.status(201).json({ status: 'success', data: member });
   }),

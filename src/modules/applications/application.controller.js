@@ -5,6 +5,7 @@ const User = require('../users/user.model');
 const catchAsync = require('../../shared/utils/catchAsync');
 const AppError = require('../../shared/utils/appError');
 const { ensureBusinessAccess } = require('../../shared/utils/businessAccess');
+const notificationService = require('../notifications/notification.service');
 
 const APPLICATION_FREE_QUOTA = 3;
 
@@ -45,6 +46,23 @@ exports.createApplication = catchAsync(async (req, res, next) => {
   job.applicantsCount += 1;
   await job.save();
 
+  if (job.employer && job.employer.toString() !== req.user._id.toString()) {
+    const applicantName = req.user.fullName || req.user.firstName || 'A worker';
+    await notificationService.sendSafeNotification({
+      recipient: job.employer,
+      type: 'application',
+      priority: 'medium',
+      title: `${applicantName} applied to ${job.title}`,
+      message: `${applicantName} applied to your job "${job.title}".`,
+      metadata: {
+        applicationId: application._id,
+        jobId: job._id,
+        workerId: req.user._id
+      },
+      senderUserId: req.user._id
+    });
+  }
+
   if (!req.user.premium) {
     req.user.freeApplicationsUsed += 1;
     await req.user.save();
@@ -68,11 +86,13 @@ exports.updateApplication = catchAsync(async (req, res, next) => {
   if (!application) {
     return next(new AppError('Application not found', 404));
   }
+  const job = application.job;
   if (req.user.userType === 'worker') {
     if (application.worker.toString() !== req.user._id.toString()) {
       return next(new AppError('You can only modify your application', 403));
     }
     const previousStatus = application.status;
+    let statusChangedToWithdrawn = false;
 
     if (req.body.status === 'withdrawn') {
       if (previousStatus === 'hired') {
@@ -87,6 +107,7 @@ exports.updateApplication = catchAsync(async (req, res, next) => {
         application.status = 'withdrawn';
         application.withdrawnAt = new Date();
         application.rejectedAt = undefined;
+        statusChangedToWithdrawn = true;
 
         if (application.job && typeof application.job.applicantsCount === 'number') {
           if (typeof application.job.save === 'function' && previousStatus === 'pending') {
@@ -102,6 +123,28 @@ exports.updateApplication = catchAsync(async (req, res, next) => {
     }
 
     await application.save();
+    if (
+      statusChangedToWithdrawn &&
+      job?.employer &&
+      job.employer.toString() !== req.user._id.toString()
+    ) {
+      const workerName = req.user.fullName || req.user.firstName || 'A worker';
+      await notificationService.sendSafeNotification({
+        recipient: job.employer,
+        type: 'application_update',
+        priority: 'low',
+        title: `Application withdrawn for ${job.title}`,
+        message: `${workerName} withdrew their application for "${job.title}".`,
+        metadata: {
+          applicationId: application._id,
+          jobId: job._id,
+          workerId: req.user._id,
+          status: application.status
+        },
+        senderUserId: req.user._id
+      });
+    }
+
     const updatedApplication = await Application.findById(application._id).populate('job');
     return res.status(200).json({ status: 'success', data: updatedApplication });
   }
@@ -116,19 +159,59 @@ exports.updateApplication = catchAsync(async (req, res, next) => {
       requiredPermissions: 'manage_applications',
     });
 
-    if (!['pending', 'hired', 'rejected'].includes(req.body.status)) {
+    const previousStatus = application.status;
+    const nextStatus = req.body.status;
+
+    if (!['pending', 'hired', 'rejected'].includes(nextStatus)) {
       return next(new AppError('Invalid status', 400));
     }
-    application.status = req.body.status;
-    if (req.body.status === 'hired') {
+    application.status = nextStatus;
+    if (nextStatus === 'hired') {
       application.hiredAt = new Date();
       application.withdrawnAt = undefined;
     }
-    if (req.body.status === 'rejected') {
+    if (nextStatus === 'rejected') {
       application.rejectedAt = new Date();
       application.withdrawnAt = undefined;
     }
     await application.save();
+    if (
+      previousStatus !== nextStatus &&
+      application.worker &&
+      application.worker.toString() !== req.user._id.toString()
+    ) {
+      const employerName = req.user.fullName || req.user.firstName || 'An employer';
+      const jobTitle = job?.title || 'a job';
+      let type = 'application_update';
+      let title = `Application update for ${jobTitle}`;
+      let message = `${employerName} updated the status of your application for "${jobTitle}" to ${nextStatus}.`;
+      let priority = 'medium';
+
+      if (nextStatus === 'hired') {
+        type = 'hire';
+        title = `You're hired for ${jobTitle}`;
+        message = `${employerName} hired you for "${jobTitle}".`;
+        priority = 'high';
+      } else if (nextStatus === 'rejected') {
+        title = `Application update for ${jobTitle}`;
+        message = `${employerName} is unable to move forward with your application for "${jobTitle}".`;
+        priority = 'low';
+      }
+
+      await notificationService.sendSafeNotification({
+        recipient: application.worker,
+        type,
+        priority,
+        title,
+        message,
+        metadata: {
+          applicationId: application._id,
+          jobId: job?._id,
+          status: nextStatus
+        },
+        senderUserId: req.user._id
+      });
+    }
     return res.status(200).json({ status: 'success', data: application });
   }
   return next(new AppError('Not authorized to update application', 403));
