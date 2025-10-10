@@ -95,7 +95,8 @@ const buildAccessOwnershipFilter = (ownerId) => ({
   $or: [
     { originalUser: ownerId },
     { managedUser: ownerId },
-    { managedUserId: ownerId?.toString() }
+    { managedUserId: ownerId?.toString() },
+    { grantedBy: ownerId }
   ]
 });
 
@@ -151,6 +152,10 @@ exports.grantAccess = catchAsync(async (req, res, next) => {
 
   if (!managedIdentifier && managedUser) {
     managedIdentifier = managedUser._id.toString();
+  }
+
+  if (!managedIdentifier && normalizedEmail && normalizedEmail !== requesterEmail) {
+    managedIdentifier = normalizedEmail;
   }
 
   if (!managedIdentifier) {
