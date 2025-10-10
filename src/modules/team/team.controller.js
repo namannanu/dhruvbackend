@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const TeamAccess = require('./teamAccess.model');
 const User = require('../users/user.model');
 const Business = require('../businesses/business.model');
+const Notification = require('../notifications/notification.model');
 const AppError = require('../../shared/utils/appError');
 const catchAsync = require('../../shared/utils/catchAsync');
 const notificationService = require('../notifications/notification.service');
@@ -588,5 +589,43 @@ exports.revokeAccess = catchAsync(async (req, res, next) => {
     status: 'success',
     message: 'Access revoked',
     data: responseData
+  });
+});
+
+exports.listTeamNotifications = catchAsync(async (req, res) => {
+  const notifications = await Notification.find({
+    user: req.user._id,
+    type: { $in: ['team_invite', 'team_update'] }
+  })
+    .sort({ createdAt: -1 })
+    .limit(100)
+    .populate('sender', 'firstName lastName email userType');
+
+  res.status(200).json({
+    status: 'success',
+    count: notifications.length,
+    data: notifications
+  });
+});
+
+exports.markTeamNotificationRead = catchAsync(async (req, res, next) => {
+  const notification = await Notification.findOne({
+    _id: req.params.notificationId,
+    user: req.user._id,
+    type: { $in: ['team_invite', 'team_update'] }
+  }).populate('sender', 'firstName lastName email userType');
+
+  if (!notification) {
+    return next(new AppError('Notification not found', 404));
+  }
+
+  if (!notification.readAt) {
+    notification.readAt = new Date();
+    await notification.save();
+  }
+
+  res.status(200).json({
+    status: 'success',
+    data: notification
   });
 });

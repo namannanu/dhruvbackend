@@ -49,5 +49,7 @@ router.get('/my-access', controller.listMyAccess);
 router.get('/check-access/:email', controller.checkAccessByEmail);
 router.patch('/access/:identifier', canManageTeam, controller.updateAccess);
 router.delete('/access/:identifier', canManageTeam, controller.revokeAccess);
+router.get('/notifications', controller.listTeamNotifications);
+router.patch('/notifications/:notificationId/read', controller.markTeamNotificationRead);
 
 module.exports = router;
