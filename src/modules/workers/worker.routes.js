@@ -15,6 +15,9 @@ router.get('/me/employment/current', restrictTo('worker'), controller.getCurrent
 router.get('/me/employment/scheduled-dates', restrictTo('worker'), controller.getMyScheduledDates);
 router.patch('/me/employment/end', restrictTo('worker'), controller.endMyEmployment);
 
+// Worker applications route
+router.get('/me/applications', restrictTo('worker'), controller.getWorkerApplications);
+
 router.get('/:workerId', controller.getWorkerProfile);
 router.get('/:workerId/dashboard', controller.getWorkerDashboardMetrics);
 router.patch('/:workerId', restrictTo('worker'), controller.updateWorkerProfile);

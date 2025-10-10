@@ -29,6 +29,22 @@ const buildJobResponse = async (job, currentUser) => {
       !currentUser.premium && currentUser.freeApplicationsUsed >= 3;
   }
 
+  if (jobObj.employer && typeof jobObj.employer === 'object' && jobObj.employer._id) {
+    jobObj.employerDetails = jobObj.employer;
+    jobObj.employerId = jobObj.employer._id.toString();
+    if (!currentUser || currentUser.userType !== 'employer') {
+      jobObj.employer = jobObj.employer._id.toString();
+    }
+  }
+
+  if (jobObj.business && typeof jobObj.business === 'object' && jobObj.business._id) {
+    jobObj.businessDetails = jobObj.business;
+    jobObj.businessId = jobObj.business._id.toString();
+    if (!currentUser || currentUser.userType !== 'employer') {
+      jobObj.business = jobObj.business._id.toString();
+    }
+  }
+
   if (currentUser && currentUser.userType === 'employer') {
     const ownershipTag = resolveOwnershipTag(
       currentUser,
@@ -149,13 +165,17 @@ exports.listJobs = catchAsync(async (req, res) => {
     filter.tags = { $in: req.query.tags.split(',').map((tag) => tag.trim()) };
   }
 
-  const jobs = await Job.find(filter)
-    .populate({
-      path: 'business',
-      populate: { path: 'owner', select: 'email firstName lastName' }
-    })
-    .populate('employer', 'email firstName lastName userType')
-    .sort({ createdAt: -1 });
+  let jobQuery = Job.find(filter).sort({ createdAt: -1 });
+  if (req.user.userType === 'employer') {
+    jobQuery = jobQuery
+      .populate({
+        path: 'business',
+        populate: { path: 'owner', select: 'email firstName lastName' }
+      })
+      .populate('employer', 'email firstName lastName userType');
+  }
+
+  const jobs = await jobQuery;
   const lat = parseFloat(req.query.lat);
   const lng = parseFloat(req.query.lng);
   const radius = parseFloat(req.query.radius);
@@ -283,12 +303,17 @@ exports.getJobAccessContext = catchAsync(async (req, res) => {
 });
 
 exports.getJob = catchAsync(async (req, res, next) => {
-  const job = await Job.findById(req.params.jobId)
-    .populate({
-      path: 'business',
-      populate: { path: 'owner', select: 'email firstName lastName' }
-    })
-    .populate('employer', 'email firstName lastName userType');
+  let jobQuery = Job.findById(req.params.jobId);
+  if (req.user.userType === 'employer') {
+    jobQuery = jobQuery
+      .populate({
+        path: 'business',
+        populate: { path: 'owner', select: 'email firstName lastName' }
+      })
+      .populate('employer', 'email firstName lastName userType');
+  }
+
+  const job = await jobQuery;
   if (!job) {
     return next(new AppError('Job not found', 404));
   }
