@@ -123,12 +123,22 @@ exports.grantAccess = catchAsync(async (req, res, next) => {
   }
 
   const normalizedEmail = normalizeEmail(userEmail);
+  const requesterEmail = normalizeEmail(req.user.email);
+  const requesterId = req.user._id?.toString();
+
+  if (normalizedEmail && requesterEmail && normalizedEmail === requesterEmail) {
+    return next(new AppError('You already have full access and cannot grant team permissions to yourself.', 400));
+  }
   
   // Resolve employee user using either employeeId or userEmail
   let employeeUser = await resolveUser({ 
     identifier: employeeId || normalizedEmail, 
     email: normalizedEmail 
   });
+
+  if (employeeUser && employeeUser._id?.toString() === requesterId) {
+    return next(new AppError('You already have full access and cannot grant team permissions to yourself.', 400));
+  }
 
   // If user doesn't exist yet, we can still create access record with email
   // The user will get access when they register with this email
@@ -460,6 +470,8 @@ exports.updateAccess = catchAsync(async (req, res, next) => {
 
   if (role) {
     accessRecord.role = role;
+  } else if (permissions) {
+    accessRecord.role = 'custom';
   }
 
   if (status) {

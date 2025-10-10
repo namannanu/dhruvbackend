@@ -186,15 +186,20 @@ exports.manageTeamMember = {
     }
     
     console.log(`📧 Looking for user with email: ${email}`);
+    const normalizedEmail = email.toLowerCase();
+
+    if (req.user.email && normalizedEmail === req.user.email.toLowerCase()) {
+      throw new AppError('You already have primary access to this business and cannot invite yourself as a team member.', 400);
+    }
     
     // Check if user already exists
-    let user = await User.findOne({ email: email.toLowerCase() });
+    let user = await User.findOne({ email: normalizedEmail });
     
     if (!user) {
       console.log('👤 User not found, creating new user');
       // Create a placeholder user for the invitation
       user = await User.create({
-        email: email.toLowerCase(),
+        email: normalizedEmail,
         firstName: name ? name.split(' ')[0] : email.split('@')[0],
         lastName: name ? name.split(' ').slice(1).join(' ') : '',
         userType: 'employer', // Default type for team members
@@ -212,6 +217,10 @@ exports.manageTeamMember = {
       user: user._id
     });
     
+    if (user && user._id?.toString() === req.user._id?.toString()) {
+      throw new AppError('You already have primary access to this business and cannot invite yourself as a team member.', 400);
+    }
+
     if (existingMember) {
       throw new AppError('User is already a team member of this business', 400);
     }
@@ -222,7 +231,7 @@ exports.manageTeamMember = {
       business: business._id,
       user: user._id,
       name: name || `${user.firstName} ${user.lastName}`.trim(),
-      email: email.toLowerCase(),
+      email: normalizedEmail,
       role: role || 'staff',
       permissions: permissions || [],
       isActive: true
