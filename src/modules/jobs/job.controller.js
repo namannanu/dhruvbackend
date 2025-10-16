@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Job = require('./job.model');
 const Application = require('../applications/application.model');
 const Business = require('../businesses/business.model');
@@ -82,7 +83,15 @@ exports.listJobs = catchAsync(async (req, res) => {
     accessSource: 'unknown',
     jobsFrom: 'all_accessible'
   };
-  const requestedEmployerId = req.query.employerId ? req.query.employerId.toString() : null;
+  const queryEmployerId = req.query.employerId ? req.query.employerId.toString() : null;
+  const paramEmployerId = req.params?.employerId;
+  let requestedEmployerId = queryEmployerId;
+  if (!requestedEmployerId && paramEmployerId && paramEmployerId !== 'me') {
+    requestedEmployerId = paramEmployerId.toString();
+  }
+  if (requestedEmployerId && !mongoose.Types.ObjectId.isValid(requestedEmployerId)) {
+    requestedEmployerId = null;
+  }
   let requestedEmployerUser = null;
   let requestedEmployerBusinessAccess = new Set();
   
