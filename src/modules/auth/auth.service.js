@@ -20,13 +20,77 @@ const signToken = (payload) => {
 
 const buildBusinessCollections = async (userId) => {
   const TeamMember = require('../businesses/teamMember.model');
+  const TeamAccess = require('../team/teamAccess.model');
+  const User = require('../users/user.model');
 
-  const [ownedBusinesses, teamMemberships] = await Promise.all([
+  // Get user email for TeamAccess query
+  const user = await User.findById(userId).select('email');
+  if (!user) {
+    throw new AppError('User not found', 404);
+  }
+
+  const [ownedBusinesses, teamMemberships, teamAccessRecords] = await Promise.all([
     Business.find({ owner: userId }).select('name industry createdAt'),
     TeamMember.find({ user: userId, active: true })
       .populate('business', 'name industry createdAt')
+      .sort({ createdAt: -1 }),
+    TeamAccess.find({ 
+      userEmail: user.email.toLowerCase(), 
+      status: 'active' 
+    })
+      .populate('businessContext.businessId', 'name industry createdAt')
       .sort({ createdAt: -1 })
   ]);
+
+  // Combine team memberships from both models
+  const combinedTeamBusinesses = [];
+  
+  // Add TeamMember records
+  teamMemberships
+    .filter((membership) => membership.business)
+    .forEach((membership) => {
+      combinedTeamBusinesses.push({
+        businessId: membership.business._id,
+        businessName: membership.business.name,
+        industry: membership.business.industry || null,
+        role: membership.role,
+        permissions: membership.permissions,
+        joinedAt: membership.createdAt,
+        source: 'teamMember'
+      });
+    });
+
+  // Add TeamAccess records
+  teamAccessRecords
+    .filter((access) => access.businessContext?.businessId)
+    .forEach((access) => {
+      const business = access.businessContext.businessId;
+      if (business) {
+        combinedTeamBusinesses.push({
+          businessId: business._id,
+          businessName: business.name,
+          industry: business.industry || null,
+          role: access.role,
+          accessLevel: access.accessLevel,
+          permissions: access.permissions,
+          joinedAt: access.createdAt,
+          grantedBy: access.grantedBy,
+          source: 'teamAccess'
+        });
+      }
+    });
+
+  // Remove duplicates (same business from both sources)
+  const uniqueTeamBusinesses = [];
+  const seenBusinessIds = new Set();
+  
+  combinedTeamBusinesses.forEach((business) => {
+    const businessIdStr = business.businessId.toString();
+    if (!seenBusinessIds.has(businessIdStr)) {
+      seenBusinessIds.add(businessIdStr);
+      uniqueTeamBusinesses.push(business);
+    }
+  });
 
   return {
     ownedBusinesses: ownedBusinesses.map((business) => ({
@@ -35,17 +99,9 @@ const buildBusinessCollections = async (userId) => {
       industry: business.industry || null,
       createdAt: business.createdAt
     })),
-    teamBusinesses: teamMemberships
-      .filter((membership) => membership.business)
-      .map((membership) => ({
-        businessId: membership.business._id,
-        businessName: membership.business.name,
-        industry: membership.business.industry || null,
-        role: membership.role,
-        permissions: membership.permissions,
-        joinedAt: membership.createdAt
-      })),
-    teamMemberships
+    teamBusinesses: uniqueTeamBusinesses,
+    teamMemberships: teamMemberships,
+    teamAccessRecords: teamAccessRecords
   };
 };
 
@@ -69,7 +125,10 @@ const buildUserResponse = async (user, includeTeamContext = true) => {
     response.teamBusinesses = businessCollections.teamBusinesses;
 
     if (includeTeamContext) {
+      // Try teamMemberships first, then teamAccessRecords
       const teamMember = businessCollections.teamMemberships[0];
+      const teamAccess = businessCollections.teamAccessRecords[0];
+      
       if (teamMember) {
         response.teamMember = teamMember;
         response.businessContext = {
@@ -77,6 +136,15 @@ const buildUserResponse = async (user, includeTeamContext = true) => {
           businessName: teamMember.business.name,
           role: teamMember.role,
           permissions: teamMember.permissions
+        };
+      } else if (teamAccess && teamAccess.businessContext?.businessId) {
+        response.teamAccess = teamAccess;
+        response.businessContext = {
+          businessId: teamAccess.businessContext.businessId._id,
+          businessName: teamAccess.businessContext.businessId.name,
+          role: teamAccess.role,
+          accessLevel: teamAccess.accessLevel,
+          permissions: teamAccess.permissions
         };
       }
     }
