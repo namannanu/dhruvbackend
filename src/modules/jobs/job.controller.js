@@ -83,6 +83,8 @@ exports.listJobs = catchAsync(async (req, res) => {
     jobsFrom: 'all_accessible'
   };
   const requestedEmployerId = req.query.employerId ? req.query.employerId.toString() : null;
+  let requestedEmployerUser = null;
+  let requestedEmployerBusinessAccess = new Set();
   
   // Handle different user types
   if (req.user.userType === 'worker') {
@@ -160,6 +162,15 @@ exports.listJobs = catchAsync(async (req, res) => {
     }
 
     if (requestedEmployerId) {
+      if (requestedEmployerId === req.user._id.toString()) {
+        requestedEmployerUser = req.user;
+        requestedEmployerBusinessAccess = accessibleBusinesses;
+      } else {
+        requestedEmployerUser = await User.findById(requestedEmployerId).select('email firstName lastName userType');
+        if (requestedEmployerUser) {
+          requestedEmployerBusinessAccess = await getAccessibleBusinessIds(requestedEmployerUser);
+        }
+      }
       accessContext.jobsFrom = 'specific_employer';
       accessContext.requestedEmployerId = requestedEmployerId;
     }
@@ -170,16 +181,29 @@ exports.listJobs = catchAsync(async (req, res) => {
     filter.business = req.query.businessId;
   }
   if (requestedEmployerId) {
-    const employerFilter = {
-      $or: [
-        { employer: requestedEmployerId },
-        { createdBy: requestedEmployerId }
-      ]
-    };
+    const employerOrCreatorFilter = [
+      { employer: requestedEmployerId },
+      { createdBy: requestedEmployerId }
+    ];
+
+    if (requestedEmployerBusinessAccess.size) {
+      employerOrCreatorFilter.push({
+        $and: [
+          { business: { $in: Array.from(requestedEmployerBusinessAccess) } },
+          {
+            $or: [
+              { createdBy: { $exists: false } },
+              { createdBy: null }
+            ]
+          }
+        ]
+      });
+    }
+
     if (filter.$and) {
-      filter.$and.push(employerFilter);
+      filter.$and.push({ $or: employerOrCreatorFilter });
     } else {
-      filter.$and = [employerFilter];
+      filter.$and = [{ $or: employerOrCreatorFilter }];
     }
   }
   if (req.query.status) {
@@ -226,7 +250,65 @@ exports.listJobs = catchAsync(async (req, res) => {
     })
   );
 
-  const filtered = decorated.filter(Boolean);
+  const resolveJobBusinessId = (job) => {
+    if (!job) return null;
+    if (job.businessId) {
+      return job.businessId.toString();
+    }
+    if (job.business && typeof job.business === 'object' && job.business._id) {
+      return job.business._id.toString();
+    }
+    if (typeof job.business === 'string') {
+      return job.business;
+    }
+    return null;
+  };
+
+  const filtered = [];
+  for (const job of decorated) {
+    if (!job) {
+      continue;
+    }
+
+    let includeJob = true;
+
+    if (requestedEmployerId) {
+      const matchesRequestedEmployer =
+        (job.employerId && job.employerId === requestedEmployerId) ||
+        (job.createdById && job.createdById === requestedEmployerId);
+
+      if (!matchesRequestedEmployer) {
+        includeJob = false;
+
+        const jobHasCreator = Boolean(job.createdById);
+        const jobBusinessId = resolveJobBusinessId(job);
+        const hasBusinessAccess =
+          jobBusinessId && requestedEmployerBusinessAccess.has(jobBusinessId);
+
+        if (!jobHasCreator && hasBusinessAccess) {
+          includeJob = true;
+          job.createdById = requestedEmployerId;
+          job.createdBy = requestedEmployerId;
+          if (!job.createdByDetails && requestedEmployerUser) {
+            job.createdByDetails = {
+              _id: requestedEmployerUser._id?.toString() || requestedEmployerId,
+              email: requestedEmployerUser.email || undefined,
+              firstName: requestedEmployerUser.firstName || undefined,
+              lastName: requestedEmployerUser.lastName || undefined,
+              userType: requestedEmployerUser.userType || undefined
+            };
+          }
+          if (!job.createdByTag) {
+            job.createdByTag = 'team_member';
+          }
+        }
+      }
+    }
+
+    if (includeJob) {
+      filtered.push(job);
+    }
+  }
   
   // Add summary of jobs by business
   if (req.user.userType === 'employer' && filtered.length > 0) {
