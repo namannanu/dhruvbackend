@@ -75,10 +75,16 @@ const serializeAccessRecord = (record) => {
     plain.originalUser = plain.originalUser.toString();
   }
   if (plain.grantedBy && plain.grantedBy._id) {
-    plain.grantedBy = plain.grantedBy._id.toString();
+    // Keep the populated user object for grantedBy
+    plain.grantedBy._id = plain.grantedBy._id.toString();
+  } else if (plain.grantedBy && typeof plain.grantedBy !== 'string') {
+    plain.grantedBy = plain.grantedBy.toString();
   }
   if (plain.createdBy && plain.createdBy._id) {
-    plain.createdBy = plain.createdBy._id.toString();
+    // Keep the populated user object for createdBy  
+    plain.createdBy._id = plain.createdBy._id.toString();
+  } else if (plain.createdBy && typeof plain.createdBy !== 'string') {
+    plain.createdBy = plain.createdBy.toString();
   }
   if (plain.managedUserId && typeof plain.managedUserId !== 'string') {
     plain.managedUserId = plain.managedUserId.toString();
@@ -320,6 +326,8 @@ exports.listMyTeam = catchAsync(async (req, res) => {
   const records = await TeamAccess.find(buildAccessOwnershipFilter(req.user._id))
     .populate('employeeId', 'firstName lastName email userType')
     .populate('managedUser', 'firstName lastName email userType')
+    .populate('grantedBy', 'firstName lastName email userType')
+    .populate('createdBy', 'firstName lastName email userType')
     .sort({ createdAt: -1 });
 
   const team = records.map(serializeAccessRecord);

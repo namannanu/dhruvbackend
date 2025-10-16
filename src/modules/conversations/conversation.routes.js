@@ -10,14 +10,14 @@ const ensureViewMessages = (req, res, next) => {
   if (req.user?.userType === 'worker') {
     return next();
   }
-  return requirePermissions(['view_messages'])(req, res, next);
+  return requirePermissions(['view_messages'], { requireBusinessId: false })(req, res, next);
 };
 
 const ensureSendMessages = (req, res, next) => {
   if (req.user?.userType === 'worker') {
     return next();
   }
-  return requirePermissions(['send_messages'])(req, res, next);
+  return requirePermissions(['send_messages'], { requireBusinessId: false })(req, res, next);
 };
 
 router.get('/', ensureViewMessages, controller.listConversations);
