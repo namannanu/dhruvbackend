@@ -37,6 +37,19 @@ const buildJobResponse = async (job, currentUser) => {
     }
   }
 
+  if (jobObj.createdBy && typeof jobObj.createdBy === 'object' && jobObj.createdBy._id) {
+    jobObj.createdByDetails = jobObj.createdBy;
+    jobObj.createdById = jobObj.createdBy._id.toString();
+    if (!currentUser || currentUser.userType !== 'employer') {
+      jobObj.createdBy = jobObj.createdBy._id.toString();
+    }
+  } else if (jobObj.createdBy) {
+    jobObj.createdById = jobObj.createdBy.toString();
+    jobObj.createdBy = jobObj.createdById;
+  } else {
+    jobObj.createdById = null;
+  }
+
   if (jobObj.business && typeof jobObj.business === 'object' && jobObj.business._id) {
     jobObj.businessDetails = jobObj.business;
     jobObj.businessId = jobObj.business._id.toString();
@@ -69,6 +82,7 @@ exports.listJobs = catchAsync(async (req, res) => {
     accessSource: 'unknown',
     jobsFrom: 'all_accessible'
   };
+  const requestedEmployerId = req.query.employerId ? req.query.employerId.toString() : null;
   
   // Handle different user types
   if (req.user.userType === 'worker') {
@@ -145,16 +159,28 @@ exports.listJobs = catchAsync(async (req, res) => {
       accessContext.jobsFrom = 'all_accessible_businesses';
     }
 
-    if (req.query.employerId && req.query.employerId !== req.user._id.toString()) {
-      filter.employer = req.query.employerId;
+    if (requestedEmployerId) {
       accessContext.jobsFrom = 'specific_employer';
-      accessContext.requestedEmployerId = req.query.employerId;
+      accessContext.requestedEmployerId = requestedEmployerId;
     }
   }
   
   // Additional filters
   if (req.query.businessId) {
     filter.business = req.query.businessId;
+  }
+  if (requestedEmployerId) {
+    const employerFilter = {
+      $or: [
+        { employer: requestedEmployerId },
+        { createdBy: requestedEmployerId }
+      ]
+    };
+    if (filter.$and) {
+      filter.$and.push(employerFilter);
+    } else {
+      filter.$and = [employerFilter];
+    }
   }
   if (req.query.status) {
     filter.status = req.query.status;
@@ -172,7 +198,8 @@ exports.listJobs = catchAsync(async (req, res) => {
         path: 'business',
         populate: { path: 'owner', select: 'email firstName lastName' }
       })
-      .populate('employer', 'email firstName lastName userType');
+      .populate('employer', 'email firstName lastName userType')
+      .populate('createdBy', 'email firstName lastName userType');
   }
 
   const jobs = await jobQuery;
@@ -310,7 +337,8 @@ exports.getJob = catchAsync(async (req, res, next) => {
         path: 'business',
         populate: { path: 'owner', select: 'email firstName lastName' }
       })
-      .populate('employer', 'email firstName lastName userType');
+      .populate('employer', 'email firstName lastName userType')
+      .populate('createdBy', 'email firstName lastName userType');
   }
 
   const job = await jobQuery;
@@ -357,6 +385,7 @@ exports.createJob = catchAsync(async (req, res, next) => {
   const job = await Job.create({
     ...jobData,
     employer: business.owner,
+    createdBy: req.user._id,
     business: business._id,
     premiumRequired: !ownerUser.premium && ownerUser.freeJobsPosted >= 3
   });
@@ -380,7 +409,8 @@ exports.createJob = catchAsync(async (req, res, next) => {
       path: 'business',
       populate: { path: 'owner', select: 'email firstName lastName' }
     },
-    { path: 'employer', select: 'email firstName lastName userType' }
+    { path: 'employer', select: 'email firstName lastName userType' },
+    { path: 'createdBy', select: 'email firstName lastName userType' }
   ]);
 
   const responseData = await buildJobResponse(job, req.user);
@@ -415,6 +445,7 @@ exports.createJobsBulk = catchAsync(async (req, res, next) => {
     preparedJobs.push({
       ...job,
       employer: business.owner,
+      createdBy: req.user._id,
       business: business._id,
       status: job.status || 'active',
     });
@@ -426,7 +457,8 @@ exports.createJobsBulk = catchAsync(async (req, res, next) => {
       path: 'business',
       populate: { path: 'owner', select: 'email firstName lastName' }
     },
-    { path: 'employer', select: 'email firstName lastName userType' }
+    { path: 'employer', select: 'email firstName lastName userType' },
+    { path: 'createdBy', select: 'email firstName lastName userType' }
   ]);
 
   const ownerIncrements = createdJobs.reduce((acc, job) => {
@@ -466,14 +498,17 @@ exports.updateJob = catchAsync(async (req, res, next) => {
     businessId: job.business,
     requiredPermissions: 'edit_jobs',
   });
-  Object.assign(job, req.body);
+  const updatePayload = { ...req.body };
+  delete updatePayload.createdBy;
+  Object.assign(job, updatePayload);
   await job.save();
   await job.populate([
     {
       path: 'business',
       populate: { path: 'owner', select: 'email firstName lastName' }
     },
-    { path: 'employer', select: 'email firstName lastName userType' }
+    { path: 'employer', select: 'email firstName lastName userType' },
+    { path: 'createdBy', select: 'email firstName lastName userType' }
   ]);
   const responseData = await buildJobResponse(job, req.user);
   res.status(200).json({ status: 'success', data: responseData });
@@ -496,7 +531,8 @@ exports.updateJobStatus = catchAsync(async (req, res, next) => {
       path: 'business',
       populate: { path: 'owner', select: 'email firstName lastName' }
     },
-    { path: 'employer', select: 'email firstName lastName userType' }
+    { path: 'employer', select: 'email firstName lastName userType' },
+    { path: 'createdBy', select: 'email firstName lastName userType' }
   ]);
   const responseData = await buildJobResponse(job, req.user);
   res.status(200).json({ status: 'success', data: responseData });
