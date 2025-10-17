@@ -6,8 +6,8 @@ const { requirePermissions } = require('../../shared/middlewares/permissionMiddl
 const router = express.Router();
 
 router.use(protect);
-router.get('/', requirePermissions(['view_notifications'], { requireBusinessId: false }), controller.listNotifications);
+router.get('/', controller.listNotifications);
 router.post('/', requirePermissions(['send_notifications']), controller.createNotification);
-router.patch('/:notificationId/read', requirePermissions(['view_notifications'], { requireBusinessId: false }), controller.markRead);
+router.patch('/:notificationId/read', controller.markRead);
 
 module.exports = router;
