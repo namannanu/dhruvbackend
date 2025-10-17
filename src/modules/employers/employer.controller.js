@@ -78,9 +78,7 @@ const resolveEmployerContext = async (req, { requiredPermissions } = {}) => {
 };
 
 exports.getEmployerProfile = catchAsync(async (req, res, next) => {
-  const { employerId } = await resolveEmployerContext(req, {
-    requiredPermissions: 'view_business_profile',
-  });
+  const { employerId } = await resolveEmployerContext(req);
 
   const profile = await EmployerProfile.findOne({ user: employerId });
   if (!profile) {
@@ -109,9 +107,7 @@ exports.updateEmployerProfile = catchAsync(async (req, res, next) => {
 });
 
 exports.getDashboard = catchAsync(async (req, res, next) => {
-  const { business, employerId } = await resolveEmployerContext(req, {
-    requiredPermissions: 'view_dashboard',
-  });
+  const { business, employerId } = await resolveEmployerContext(req);
 
   const jobFilter = business
     ? { business: business._id }

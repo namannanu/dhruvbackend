@@ -206,15 +206,26 @@ exports.updateApplication = catchAsync(async (req, res, next) => {
       isBusinessOwner: application.job.business?.owner?.toString() === req.user._id.toString()
     });
 
+    let accessError = null;
     try {
       await ensureBusinessAccess({
         user: req.user,
         businessId: application.job.business,
         requiredPermissions: 'manage_applications',
       });
-    } catch (error) {
-      console.log('❌ Business access failed:', error.message);
-      return next(error);
+    } catch (primaryError) {
+      accessError = primaryError;
+      try {
+        await ensureBusinessAccess({
+          user: req.user,
+          businessId: application.job.business,
+          requiredPermissions: 'hire_workers',
+        });
+        accessError = null;
+      } catch (secondaryError) {
+        console.log('❌ Business access failed (manage_applications/hire_workers):', primaryError.message, secondaryError.message);
+        return next(primaryError);
+      }
     }
 
     const previousStatus = application.status;
