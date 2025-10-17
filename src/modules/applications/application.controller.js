@@ -4,7 +4,7 @@ const WorkerProfile = require('../workers/workerProfile.model');
 const User = require('../users/user.model');
 const catchAsync = require('../../shared/utils/catchAsync');
 const AppError = require('../../shared/utils/appError');
-const { ensureBusinessAccess } = require('../../shared/utils/businessAccess');
+const { ensureBusinessAccess, getAccessibleBusinessIds } = require('../../shared/utils/businessAccess');
 const notificationService = require('../notifications/notification.service');
 const { resolveOwnershipTag } = require('../../shared/utils/ownershipTag');
 
@@ -189,43 +189,51 @@ exports.updateApplication = catchAsync(async (req, res, next) => {
     return res.status(200).json({ status: 'success', data: formatApplicationResponse(updatedApplication, req.user) });
   }
   // Check if user can manage this application (employer OR business owner)
-  const canManageApplication = req.user.userType === 'employer' || 
-    (application.job && application.job.business && 
-     application.job.business.owner && 
-     application.job.business.owner.toString() === req.user._id.toString());
+  const jobBusiness = application.job?.business;
+  const businessReference =
+    jobBusiness && typeof jobBusiness === 'object' && jobBusiness !== null
+      ? jobBusiness._id || jobBusiness.id || jobBusiness
+      : jobBusiness;
+  const businessId =
+    typeof businessReference === 'string'
+      ? businessReference
+      : businessReference?.toString?.();
+  const normalizedBusinessId = businessId && businessId !== '[object Object]' ? businessId : null;
+  const isDirectOwner =
+    application.job &&
+    application.job.business &&
+    application.job.business.owner &&
+    application.job.business.owner.toString() === req.user._id.toString();
 
-  if (canManageApplication) {
+  let hasJobAccess = req.user.userType === 'employer' || isDirectOwner;
+  if (!hasJobAccess && normalizedBusinessId) {
+    const accessibleBusinesses = await getAccessibleBusinessIds(req.user);
+    if (accessibleBusinesses.has(normalizedBusinessId)) {
+      hasJobAccess = true;
+    }
+  }
+
+  if (hasJobAccess) {
     if (!application.job) {
       return next(new AppError('Job information missing for application', 400));
     }
 
     console.log('🔍 Business access check:', {
       userId: req.user._id.toString(),
-      businessId: application.job.business?.toString(),
+      businessId: normalizedBusinessId,
       userRole: req.user.userType,
-      isBusinessOwner: application.job.business?.owner?.toString() === req.user._id.toString()
+      isBusinessOwner: isDirectOwner
     });
 
-    let accessError = null;
     try {
       await ensureBusinessAccess({
         user: req.user,
-        businessId: application.job.business,
-        requiredPermissions: 'manage_applications',
+        businessId: businessReference,
+        requiredPermissions: ['manage_applications', 'hire_workers'],
       });
-    } catch (primaryError) {
-      accessError = primaryError;
-      try {
-        await ensureBusinessAccess({
-          user: req.user,
-          businessId: application.job.business,
-          requiredPermissions: 'hire_workers',
-        });
-        accessError = null;
-      } catch (secondaryError) {
-        console.log('❌ Business access failed (manage_applications/hire_workers):', primaryError.message, secondaryError.message);
-        return next(primaryError);
-      }
+    } catch (error) {
+      console.log('❌ Business access failed for application update:', error.message);
+      return next(error);
     }
 
     const previousStatus = application.status;
