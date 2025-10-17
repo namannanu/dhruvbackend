@@ -15,8 +15,8 @@ router.post('/me/applications/:applicationId/hire', requirePermissions(['hire_wo
 
 router.get('/me', requirePermissions(['view_business_profile']), controller.getEmployerProfile);
 router.patch('/me', requirePermissions(['edit_business_profile']), controller.updateEmployerProfile);
-router.get('/me/dashboard', requirePermissions(['view_dashboard']), controller.getDashboard);
-router.get('/me/analytics', requirePermissions(['view_analytics']), controller.getAnalytics);
+router.get('/me/dashboard', controller.getDashboard);
+router.get('/me/analytics', controller.getAnalytics);
 
 // Job management routes
 router.get('/me/jobs', requirePermissions(['view_jobs']), jobController.listJobs);
@@ -41,10 +41,10 @@ router.get('/:employerId/applications', requirePermissions(['view_applications']
 router.patch('/:employerId/applications/:applicationId', requirePermissions(['manage_applications']), applicationController.updateApplication);
 router.post('/:employerId/applications/:applicationId/hire', requirePermissions(['hire_workers']), jobController.hireApplicant);
 
-router.get('/:employerId', requirePermissions(['view_business_profile']), controller.getEmployerProfile);
+router.get('/:employerId', controller.getEmployerProfile);
 router.patch('/:employerId', requirePermissions(['edit_business_profile']), controller.updateEmployerProfile);
-router.get('/:employerId/dashboard', requirePermissions(['view_dashboard']), controller.getDashboard);
-router.get('/:employerId/analytics', requirePermissions(['view_analytics']), controller.getAnalytics);
+router.get('/:employerId/dashboard', controller.getDashboard);
+router.get('/:employerId/analytics', controller.getAnalytics);
 
 // Job management routes for specific employer
 router.get('/:employerId/jobs', requirePermissions(['view_jobs']), jobController.listJobs);
