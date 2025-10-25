@@ -1,5 +1,6 @@
 const AttendanceRecord = require('./attendance.model');
 const Job = require('../jobs/job.model');
+const Business = require('../businesses/business.model');
 const User = require('../users/user.model');
 const WorkerProfile = require('../workers/workerProfile.model');
 const WorkerEmployment = require('../workers/workerEmployment.model');
@@ -430,14 +431,38 @@ exports.scheduleAttendance = catchAsync(async (req, res, next) => {
     });
   }
 
+  let jobLocationFromBusiness = null;
+  if (!jobLocationFromEmployment && !jobLocationFromJob && job.business) {
+    const businessId = job.business._id || job.business;
+    const business = await Business.findById(businessId).select('name location');
+    if (business?.location && business.location.latitude != null && business.location.longitude != null) {
+      jobLocationFromBusiness = buildAttendanceJobLocation({
+        latitude: business.location.latitude,
+        longitude: business.location.longitude,
+        formattedAddress: business.location.formattedAddress,
+        label: business.location.name || business.name,
+        allowedRadius: business.location.allowedRadius,
+      });
+    }
+  }
+
   const hourlyRate = typeof req.body.hourlyRate === 'number' ? req.body.hourlyRate : job.hourlyRate;
   const workerNameSnapshot = req.body.workerNameSnapshot || buildWorkerName(worker, null);
   const jobTitleSnapshot = req.body.jobTitleSnapshot || job.title;
-  const chosenJobLocation = req.body.jobLocation || jobLocationFromEmployment || jobLocationFromJob;
+  const chosenJobLocation =
+    req.body.jobLocation ||
+    jobLocationFromEmployment ||
+    jobLocationFromJob ||
+    jobLocationFromBusiness;
   const locationSnapshot =
     req.body.locationSnapshot ||
     employmentLocationLabel ||
-    (chosenJobLocation && sharedBuildLocationLabel(chosenJobLocation)) ||
+    (chosenJobLocation &&
+      sharedBuildLocationLabel({
+        formattedAddress: chosenJobLocation.formattedAddress,
+        label: chosenJobLocation.label,
+        address: chosenJobLocation.address,
+      })) ||
     pickJobLocationSnapshot(job, jobLocationFromJob);
 
   const payload = {
@@ -489,14 +514,32 @@ exports.scheduleAttendance = catchAsync(async (req, res, next) => {
 });
 
 exports.clockIn = catchAsync(async (req, res, next) => {
+  console.log('[ATTENDANCE] Clock-in attempt', {
+    recordId: req.params.recordId,
+    userId: req.user?._id,
+    userType: req.user?.userType,
+    timestamp: new Date().toISOString()
+  });
   const record = await AttendanceRecord.findById(req.params.recordId);
   if (!record) {
+    console.warn('[ATTENDANCE] Clock-in failed: record not found', {
+      recordId: req.params.recordId
+    });
     return next(new AppError('Attendance record not found', 404));
   }
   if (req.user.userType === 'worker' && record.worker.toString() !== req.user._id.toString()) {
+    console.warn('[ATTENDANCE] Clock-in denied: worker mismatch', {
+      recordId: record._id,
+      workerOnRecord: record.worker,
+      requester: req.user._id
+    });
     return next(new AppError('You can only clock in for your own shift', 403));
   }
   if (record.clockInAt) {
+    console.warn('[ATTENDANCE] Clock-in blocked: already clocked in', {
+      recordId: record._id,
+      clockInAt: record.clockInAt
+    });
     return next(new AppError('Already clocked in', 400));
   }
 
@@ -510,6 +553,7 @@ exports.clockIn = catchAsync(async (req, res, next) => {
       const jobLocation = buildAttendanceJobLocation(activeEmployment.workLocationDetails);
       if (jobLocation) {
         record.jobLocation = jobLocation;
+        record.markModified('jobLocation');
         if (!record.locationSnapshot) {
           const label = activeEmployment.workLocation || sharedBuildLocationLabel(activeEmployment.workLocationDetails);
           if (label) {
@@ -520,19 +564,89 @@ exports.clockIn = catchAsync(async (req, res, next) => {
     }
   }
 
+  if (!record.jobLocation) {
+    let jobDetails = record.job;
+    if (!jobDetails || typeof jobDetails !== 'object') {
+      jobDetails = await Job.findById(record.job).populate('business');
+    } else if (!jobDetails.location || !jobDetails.business || !jobDetails.business.location) {
+      jobDetails = await Job.findById(jobDetails._id || record.job).populate('business');
+    }
+
+    const businessId = jobDetails?.business?._id || jobDetails?.business;
+    let business = jobDetails?.business && jobDetails.business.location
+      ? jobDetails.business
+      : null;
+    if (!business && businessId) {
+      business = await Business.findById(businessId).select('name location');
+    }
+
+    const businessLocation = business?.location;
+    if (businessLocation && businessLocation.latitude != null && businessLocation.longitude != null) {
+      const jobLocation = buildAttendanceJobLocation({
+        latitude: businessLocation.latitude,
+        longitude: businessLocation.longitude,
+        formattedAddress: businessLocation.formattedAddress,
+        label: businessLocation.name || business?.name,
+        allowedRadius: businessLocation.allowedRadius,
+      });
+
+      if (jobLocation) {
+        record.jobLocation = jobLocation;
+        record.markModified('jobLocation');
+        if (!record.locationSnapshot) {
+          record.locationSnapshot = sharedBuildLocationLabel({
+            formattedAddress: businessLocation.formattedAddress,
+            label: businessLocation.name || business?.name,
+            address: businessLocation.line1 || businessLocation.address,
+            city: businessLocation.city,
+            state: businessLocation.state,
+            postalCode: businessLocation.postalCode,
+          });
+        }
+      }
+    }
+  }
+
+  if (!record.jobLocation) {
+    return next(new AppError('This shift is missing a GPS location. Ask the employer to configure a business location before clocking in.', 400));
+  }
+
   // Extract location data from request body
   const { latitude, longitude, accuracy, address, altitude, heading, speed } = req.body;
+  console.log('[ATTENDANCE] Clock-in payload', {
+    recordId: record._id,
+    latitude,
+    longitude,
+    accuracy,
+    address,
+    altitude,
+    heading,
+    speed
+  });
+
+  const parsedLatitude = Number(latitude);
+  const parsedLongitude = Number(longitude);
+
+  if (!Number.isFinite(parsedLatitude) || !Number.isFinite(parsedLongitude)) {
+    console.warn('[ATTENDANCE] Clock-in failed: invalid coordinates', {
+      recordId: record._id,
+      latitude,
+      longitude
+    });
+    return next(new AppError('Valid latitude and longitude are required to clock in', 400));
+  }
 
   // Location validation
-  let locationValidation = { isValid: true, distance: null, message: 'No location validation required' };
-  
-  if (latitude != null && longitude != null && record.jobLocation) {
-    locationValidation = record.isLocationValid(latitude, longitude);
-    
-    // Strict location enforcement - reject if not within allowed radius
-    if (!locationValidation.isValid) {
-      return next(new AppError(locationValidation.message, 400));
-    }
+  const locationValidation = record.isLocationValid(parsedLatitude, parsedLongitude);
+  if (!locationValidation.isValid) {
+    console.warn('[ATTENDANCE] Clock-in location invalid', {
+      recordId: record._id,
+      distance: locationValidation.distance,
+      allowedRadius: locationValidation.allowedRadius,
+      message: locationValidation.message,
+      jobLocation: record.jobLocation
+    });
+    return next(new AppError(locationValidation.message, 400));
   }
 
   await record.populate([
@@ -568,38 +682,63 @@ exports.clockIn = catchAsync(async (req, res, next) => {
   }
 
   // Store location data
-  if (latitude != null && longitude != null) {
-    record.clockInLocation = {
-      latitude,
-      longitude,
-      accuracy,
-      address,
-      altitude,
-      heading,
-      speed,
-      timestamp: now
-    };
-    record.clockInDistance = locationValidation.distance;
-    record.locationValidated = locationValidation.isValid;
-    record.locationValidationMessage = locationValidation.message;
-  }
+  record.clockInLocation = {
+    latitude: parsedLatitude,
+    longitude: parsedLongitude,
+    accuracy,
+    address,
+    altitude,
+    heading,
+    speed,
+    timestamp: now
+  };
+  record.clockInDistance = locationValidation.distance;
+  record.locationValidated = locationValidation.isValid;
+  record.locationValidationMessage = locationValidation.message;
 
   await record.save();
+  console.log('[ATTENDANCE] Clock-in success', {
+    recordId: record._id,
+    clockInAt: record.clockInAt,
+    distance: record.clockInDistance,
+    allowedRadius: record.jobLocation?.allowedRadius
+  });
   res.status(200).json({ status: 'success', data: record });
 });
 
 exports.clockOut = catchAsync(async (req, res, next) => {
+  console.log('[ATTENDANCE] Clock-out attempt', {
+    recordId: req.params.recordId,
+    userId: req.user?._id,
+    userType: req.user?.userType,
+    timestamp: new Date().toISOString()
+  });
   const record = await AttendanceRecord.findById(req.params.recordId);
   if (!record) {
+    console.warn('[ATTENDANCE] Clock-out failed: record not found', {
+      recordId: req.params.recordId
+    });
     return next(new AppError('Attendance record not found', 404));
   }
   if (req.user.userType === 'worker' && record.worker.toString() !== req.user._id.toString()) {
+    console.warn('[ATTENDANCE] Clock-out denied: worker mismatch', {
+      recordId: record._id,
+      workerOnRecord: record.worker,
+      requester: req.user._id
+    });
     return next(new AppError('You can only clock out for your own shift', 403));
   }
   if (!record.clockInAt) {
+    console.warn('[ATTENDANCE] Clock-out blocked: no clock-in recorded', {
+      recordId: record._id
+    });
     return next(new AppError('Clock in before clocking out', 400));
   }
   if (record.clockOutAt) {
+    console.warn('[ATTENDANCE] Clock-out blocked: already clocked out', {
+      recordId: record._id,
+      clockOutAt: record.clockOutAt
+    });
     return next(new AppError('Already clocked out', 400));
   }
 
@@ -623,19 +762,71 @@ exports.clockOut = catchAsync(async (req, res, next) => {
     }
   }
 
+  if (!record.jobLocation) {
+    let jobDetails = record.job;
+    if (!jobDetails || typeof jobDetails !== 'object') {
+      jobDetails = await Job.findById(record.job).populate('business');
+    } else if (!jobDetails.location || !jobDetails.business || !jobDetails.business.location) {
+      jobDetails = await Job.findById(jobDetails._id || record.job).populate('business');
+    }
+
+    const businessId = jobDetails?.business?._id || jobDetails?.business;
+    let business = jobDetails?.business && jobDetails.business.location ? jobDetails.business : null;
+    if (!business && businessId) {
+      business = await Business.findById(businessId).select('name location');
+    }
+
+    const businessLocation = business?.location;
+    if (businessLocation && businessLocation.latitude != null && businessLocation.longitude != null) {
+      const jobLocation = buildAttendanceJobLocation({
+        latitude: businessLocation.latitude,
+        longitude: businessLocation.longitude,
+        formattedAddress: businessLocation.formattedAddress,
+        label: businessLocation.name || business?.name,
+        allowedRadius: businessLocation.allowedRadius,
+      });
+
+      if (jobLocation) {
+        record.jobLocation = jobLocation;
+        record.markModified('jobLocation');
+        if (!record.locationSnapshot) {
+          record.locationSnapshot = sharedBuildLocationLabel({
+            formattedAddress: businessLocation.formattedAddress,
+            label: businessLocation.name || business?.name,
+            address: businessLocation.line1 || businessLocation.address,
+            city: businessLocation.city,
+            state: businessLocation.state,
+            postalCode: businessLocation.postalCode,
+          });
+        }
+      }
+    }
+  }
+
+  if (!record.jobLocation) {
+    return next(new AppError('This shift is missing a GPS location. Ask the employer to configure a business location before clocking out.', 400));
+  }
+
   // Extract location data from request body
   const { latitude, longitude, accuracy, address, altitude, heading, speed } = req.body;
 
+  const parsedLatitude = Number(latitude);
+  const parsedLongitude = Number(longitude);
+  if (!Number.isFinite(parsedLatitude) || !Number.isFinite(parsedLongitude)) {
+    return next(new AppError('Valid latitude and longitude are required to clock out', 400));
+  }
+
   // Location validation for clock-out
-  let locationValidation = { isValid: true, distance: null, message: 'No location validation required' };
-  
-  if (latitude != null && longitude != null && record.jobLocation) {
-    locationValidation = record.isLocationValid(latitude, longitude);
-    
-    // Strict location enforcement - reject if not within allowed radius
-    if (!locationValidation.isValid) {
-      return next(new AppError(locationValidation.message, 400));
-    }
+  const locationValidation = record.isLocationValid(parsedLatitude, parsedLongitude);
+  if (!locationValidation.isValid) {
+    console.warn('[ATTENDANCE] Clock-out location invalid', {
+      recordId: record._id,
+      distance: locationValidation.distance,
+      allowedRadius: locationValidation.allowedRadius,
+      message: locationValidation.message,
+      jobLocation: record.jobLocation
+    });
+    return next(new AppError(locationValidation.message, 400));
   }
 
   await record.populate([
@@ -670,27 +861,34 @@ exports.clockOut = catchAsync(async (req, res, next) => {
   }
 
   // Store clock-out location data
-  if (latitude != null && longitude != null) {
-    record.clockOutLocation = {
-      latitude,
-      longitude,
-      accuracy,
-      address,
-      altitude,
-      heading,
-      speed,
-      timestamp: now
-    };
-    record.clockOutDistance = locationValidation.distance;
-    
-    // Update overall location validation status
-    if (record.locationValidated !== false) { // Don't override if already failed
-      record.locationValidated = locationValidation.isValid;
-      record.locationValidationMessage = locationValidation.message;
-    }
+  record.clockOutLocation = {
+    latitude: parsedLatitude,
+    longitude: parsedLongitude,
+    accuracy,
+    address,
+    altitude,
+    heading,
+    speed,
+    timestamp: now
+  };
+  record.clockOutDistance = locationValidation.distance;
+  
+  // Update overall location validation status
+  if (record.locationValidated !== false) { // Don't override if already failed
+    record.locationValidated = locationValidation.isValid;
+    record.locationValidationMessage = locationValidation.message;
   }
 
   await record.save();
+  console.log('[ATTENDANCE] Clock-out success', {
+    recordId: record._id,
+    clockOutAt: record.clockOutAt,
+    distance: record.clockOutDistance,
+    allowedRadius: record.jobLocation?.allowedRadius,
+    durationHours: record.totalHours,
+    hourlyRate: record.hourlyRate,
+    earnings: record.earnings
+  });
   res.status(200).json({ status: 'success', data: record });
 });
 

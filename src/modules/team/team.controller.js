@@ -490,6 +490,11 @@ exports.updateAccess = catchAsync(async (req, res, next) => {
 
   if (status) {
     accessRecord.status = status;
+    if (status === 'revoked') {
+      accessRecord.revokedAt = accessRecord.revokedAt || new Date();
+    } else {
+      accessRecord.revokedAt = null;
+    }
   }
 
   if (reason) {

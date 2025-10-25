@@ -1,3 +1,4 @@
+const https = require('https');
 const crypto = require('crypto');
 const Payment = require('./payment.model');
 const Job = require('../jobs/job.model');
@@ -6,31 +7,339 @@ const Business = require('../businesses/business.model');
 const AppError = require('../../shared/utils/appError');
 const catchAsync = require('../../shared/utils/catchAsync');
 
-exports.processJobPayment = catchAsync(async (req, res, next) => {
+const RAZORPAY_API_HOST = 'api.razorpay.com';
+const RAZORPAY_ORDER_PATH = '/v1/orders';
+
+const createRazorpayRequest = (payload, keyId, keySecret) =>
+  new Promise((resolve, reject) => {
+    const body = JSON.stringify(payload);
+    const request = https.request(
+      {
+        host: RAZORPAY_API_HOST,
+        path: RAZORPAY_ORDER_PATH,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+          Authorization: `Basic ${Buffer.from(
+            `${keyId}:${keySecret}`
+          ).toString('base64')}`,
+        },
+      },
+      (response) => {
+        let data = '';
+        response.on('data', (chunk) => {
+          data += chunk;
+        });
+        response.on('end', () => {
+          try {
+            const parsed = data ? JSON.parse(data) : {};
+            if (response.statusCode >= 200 && response.statusCode < 300) {
+              resolve(parsed);
+            } else {
+              const message =
+                parsed?.error?.description ||
+                parsed?.message ||
+                'Failed to create Razorpay order';
+              reject(new AppError(message, response.statusCode));
+            }
+          } catch (error) {
+            reject(
+              new AppError('Unable to parse Razorpay response', 502)
+            );
+          }
+        });
+      }
+    );
+
+    request.on('error', (error) => {
+      reject(
+        new AppError(
+          `Unable to contact Razorpay: ${error.message}`,
+          502
+        )
+      );
+    });
+
+    request.write(body);
+    request.end();
+  });
+
+const ensureEmployerUser = (req, next) => {
   if (req.user.userType !== 'employer') {
-    return next(new AppError('Only employers can process job payments', 403));
+    next(new AppError('Only employers can process job payments', 403));
+    return false;
   }
-  if (!req.body.job) {
-    return next(new AppError('Job payload is required', 400));
+  return true;
+};
+
+exports.createRazorpayOrder = catchAsync(async (req, res, next) => {
+  if (!ensureEmployerUser(req, next)) return;
+
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  if (!keyId || !keySecret) {
+    return next(
+      new AppError(
+        'Razorpay credentials are not configured on the server',
+        500
+      )
+    );
   }
+
+  const amountRaw = Number(req.body.amount);
+  if (!amountRaw || Number.isNaN(amountRaw) || amountRaw <= 0) {
+    return next(new AppError('Payment amount is required', 400));
+  }
+
+  const currency = (req.body.currency || 'INR').toUpperCase();
+  const jobId = req.body.jobId;
+  if (!jobId) {
+    return next(new AppError('jobId is required to create an order', 400));
+  }
+
+  const job = await Job.findOne({
+    _id: jobId,
+    employer: req.user._id,
+  }).select('_id business status premiumRequired');
+
+  if (!job) {
+    return next(new AppError('Job not found or access denied', 404));
+  }
+
+  const orderPayload = {
+    amount: Math.round(amountRaw),
+    currency,
+    receipt:
+      req.body.receipt ||
+      `job_post_${jobId}_${Date.now().toString(36)}`,
+    notes: {
+      jobId,
+      employer: req.user._id.toString(),
+      intent: 'job_posting',
+      ...(req.body.notes || {}),
+    },
+    payment_capture: 1,
+  };
+
+  const order = await createRazorpayRequest(
+    orderPayload,
+    keyId,
+    keySecret
+  );
+
+  await Payment.findOneAndUpdate(
+    { reference: order.id },
+    {
+      employer: req.user._id,
+      amount: amountRaw / 100,
+      currency,
+      description: 'Job posting payment',
+      status: 'pending',
+      metadata: {
+        jobId,
+        intent: 'job_posting',
+        order,
+      },
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+
+  res.status(201).json({
+    status: 'success',
+    data: { order },
+  });
+});
+
+exports.verifyRazorpayPayment = catchAsync(async (req, res, next) => {
+  if (!ensureEmployerUser(req, next)) return;
+
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  if (!keySecret) {
+    return next(
+      new AppError(
+        'Razorpay secret is not configured on the server',
+        500
+      )
+    );
+  }
+
+  const {
+    jobId,
+    orderId,
+    paymentId,
+    signature,
+    amount,
+    currency,
+    status,
+  } = req.body;
+
+  if (!jobId) {
+    return next(new AppError('jobId is required', 400));
+  }
+  if (!orderId || !paymentId || !signature) {
+    return next(
+      new AppError(
+        'orderId, paymentId, and signature are required for verification',
+        400
+      )
+    );
+  }
+
+  const expectedSignature = crypto
+    .createHmac('sha256', keySecret)
+    .update(`${orderId}|${paymentId}`)
+    .digest('hex');
+
+  if (expectedSignature !== signature) {
+    return next(new AppError('Invalid Razorpay payment signature', 400));
+  }
+
+  const job = await Job.findOne({
+    _id: jobId,
+    employer: req.user._id,
+  }).select('_id business status premiumRequired');
+
+  if (!job) {
+    return next(new AppError('Job not found or access denied', 404));
+  }
+
+  const paymentUpdate = {
+    employer: req.user._id,
+    currency: (currency || 'INR').toUpperCase(),
+    description: 'Job posting payment',
+    status: status === 'failed' ? 'failed' : 'succeeded',
+    metadata: {
+      jobId,
+      intent: 'job_posting',
+      orderId,
+      paymentId,
+      signature,
+    },
+  };
+
+  const normalizedAmount =
+    amount && Number(amount) > 0 ? Number(amount) / 100 : null;
+  if (normalizedAmount !== null) {
+    paymentUpdate.amount = normalizedAmount;
+  }
+
+  let payment = await Payment.findOne({
+    reference: orderId,
+    employer: req.user._id,
+  });
+
+  if (payment) {
+    payment.set({
+      ...paymentUpdate,
+      metadata: {
+        ...(payment.metadata || {}),
+        ...paymentUpdate.metadata,
+      },
+    });
+    await payment.save();
+  } else {
+    payment = await Payment.create({
+      ...paymentUpdate,
+      amount: normalizedAmount ?? 0,
+      reference: orderId,
+    });
+  }
+
+  const wasActive = job.status === 'active';
+
+  if (payment.status === 'succeeded') {
+    if (!wasActive) {
+      job.status = 'active';
+      job.premiumRequired = false;
+      await job.save();
+
+      await EmployerProfile.updateOne(
+        { user: req.user._id },
+        { $inc: { totalJobsPosted: 1 } }
+      );
+      await Business.updateOne(
+        { _id: job.business },
+        { $inc: { 'stats.jobsPosted': 1 } }
+      );
+    }
+  }
+
+  res.status(200).json({
+    status: 'success',
+    data: { payment, job },
+  });
+});
+
+exports.processJobPayment = catchAsync(async (req, res, next) => {
+  if (!ensureEmployerUser(req, next)) return;
+
+  const { job: jobPayload, jobId } = req.body;
+
+  if (!jobPayload && !jobId) {
+    return next(new AppError('Job payload or jobId is required', 400));
+  }
+
+  if (jobPayload) {
+    const reference = `legacy_${crypto.randomBytes(6).toString('hex')}`;
+    const payment = await Payment.create({
+      employer: req.user._id,
+      amount: req.body.amount || 0,
+      currency: req.body.currency || 'USD',
+      description: req.body.description || 'Job posting purchase',
+      status: 'succeeded',
+      reference,
+      metadata: { intent: 'job_posting', legacy: true },
+    });
+
+    const job = await Job.create({
+      ...jobPayload,
+      employer: req.user._id,
+      business: jobPayload.business,
+      premiumRequired: false,
+      status: 'active',
+    });
+
+    await EmployerProfile.updateOne(
+      { user: req.user._id },
+      { $inc: { totalJobsPosted: 1 } }
+    );
+    await Business.updateOne(
+      { _id: job.business },
+      { $inc: { 'stats.jobsPosted': 1 } }
+    );
+
+    return res
+      .status(201)
+      .json({ status: 'success', data: { payment, job } });
+  }
+
+  const job = await Job.findOne({
+    _id: jobId,
+    employer: req.user._id,
+  }).select('_id business status premiumRequired');
+
+  if (!job) {
+    return next(new AppError('Job not found or access denied', 404));
+  }
+
+  job.status = 'active';
+  job.premiumRequired = false;
+  await job.save();
 
   const reference = `pay_${crypto.randomBytes(6).toString('hex')}`;
   const payment = await Payment.create({
     employer: req.user._id,
     amount: req.body.amount || 0,
-    currency: req.body.currency || 'USD',
-    description: req.body.description || 'Job posting purchase',
-    status: 'succeeded',
+    currency: (req.body.currency || 'INR').toUpperCase(),
+    description: req.body.description || 'Job posting payment',
+    status: req.body.status === 'failed' ? 'failed' : 'succeeded',
     reference,
-    metadata: { intent: 'job_posting' }
-  });
-
-  const job = await Job.create({
-    ...req.body.job,
-    employer: req.user._id,
-    business: req.body.job.business,
-    premiumRequired: false,
-    status: 'active'
+    metadata: {
+      intent: 'job_posting',
+      jobId,
+      notes: req.body.notes || {},
+    },
   });
 
   await EmployerProfile.updateOne(
@@ -42,5 +351,5 @@ exports.processJobPayment = catchAsync(async (req, res, next) => {
     { $inc: { 'stats.jobsPosted': 1 } }
   );
 
-  res.status(201).json({ status: 'success', data: { payment, job } });
+  res.status(200).json({ status: 'success', data: { payment, job } });
 });

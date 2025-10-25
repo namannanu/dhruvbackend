@@ -398,16 +398,139 @@ class _TeamApiTestPageState extends State<TeamApiTestPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _businessIdController,
-                      decoration: const InputDecoration(
-                        labelText: 'Business ID',
-                        hintText: '68e8d6caaf91efc4cf7f223e',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.business),
+                    if (_businesses.isNotEmpty) ...[
+                      Text(
+                        '🐛 DEBUG: businesses=${_businesses.length}, selected=$_selectedBusinessId',
+                        style: const TextStyle(fontSize: 10, color: Colors.orange),
                       ),
-                    ),
-                    const SizedBox(height: 16),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: _businesses.any((b) => (b['_id'] ?? '').toString() == _selectedBusinessId)
+                            ? _selectedBusinessId
+                            : null,
+                        decoration: InputDecoration(
+                          labelText: 'Business',
+                          border: const OutlineInputBorder(),
+                          prefixIcon: const Icon(Icons.business),
+                          suffixIcon: _isLoadingBusinesses
+                              ? const Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                )
+                              : IconButton(
+                                  icon: const Icon(Icons.refresh),
+                                  tooltip: 'Reload businesses from login',
+                                  onPressed: () async => _loadBusinessesFromLogin(),
+                                ),
+                        ),
+                        items: _businesses
+                            .map((business) {
+                              final id = (business['_id'] ?? '').toString();
+                              if (id.isEmpty) {
+                                return null;
+                              }
+                              final name = (business['businessName'] ?? 'Unnamed Business').toString();
+                              final type = (business['type'] ?? 'team').toString();
+                              final isOwned = type == 'owned';
+                              final grantedBy = (business['grantedBy'] ?? '').toString();
+
+                              return DropdownMenuItem<String>(
+                                value: id,
+                                child: SizedBox(
+                                  height: 48,
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        isOwned ? Icons.business : Icons.group,
+                                        size: 20,
+                                        color: isOwned ? Colors.green : Colors.blue,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Column(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              name,
+                                              style: const TextStyle(fontWeight: FontWeight.w600),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            Text(
+                                              isOwned ? 'Owned business' : 'Team access',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: isOwned ? Colors.green : Colors.blue,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      if (!isOwned)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: Colors.orange.shade200,
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: Colors.orange.shade400, width: 1.5),
+                                          ),
+                                          child: Text(
+                                            grantedBy.isNotEmpty
+                                                ? 'ID: ${grantedBy.length > 8 ? grantedBy.substring(grantedBy.length - 8) : grantedBy}'
+                                                : 'TEAM',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.orange.shade800,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            })
+                            .whereType<DropdownMenuItem<String>>()
+                            .toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedBusinessId = value;
+                            _businessIdController.text = value ?? '';
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                    ] else ...[
+                      TextFormField(
+                        controller: _businessIdController,
+                        decoration: InputDecoration(
+                          labelText: 'Business ID (no businesses cached)',
+                          hintText: '68e8d6caaf91efc4cf7f223e',
+                          border: const OutlineInputBorder(),
+                          prefixIcon: const Icon(Icons.business),
+                          suffixIcon: _isLoadingBusinesses
+                              ? const Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                )
+                              : IconButton(
+                                  icon: const Icon(Icons.download),
+                                  tooltip: 'Load from login data',
+                                  onPressed: () async => _loadBusinessesFromLogin(),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     DropdownButtonFormField<String>(
                       value: _selectedRole,
                       decoration: const InputDecoration(
@@ -597,11 +720,54 @@ class _TeamApiTestPageState extends State<TeamApiTestPage> {
     final accessLevel = (member['accessLevel'] ?? '-').toString();
     final memberStatus = (member['status'] ?? '-').toString();
     final isActive = member['isAccessValid'] == true;
-    final businessId = (member['businessContext']?['businessId'] ?? '—')
-        .toString();
-    final grantedBy = member['grantedBy']?.toString() ?? '—';
+
+    final businessContext =
+        (member['businessContext'] as Map?)?.cast<String, dynamic>();
+    final businessId =
+        (businessContext?['businessId'] ?? member['businessId'] ?? '—').toString();
+    final businessName = (businessContext?['businessName'] ??
+            businessContext?['name'] ??
+            businessContext?['label'])
+        ?.toString();
+    final businessLabel = (businessName != null && businessName.isNotEmpty)
+        ? businessName
+        : (businessId.isNotEmpty ? businessId : 'Unknown');
+
+    final grantedByRaw = member['grantedBy'];
+    final createdByRaw = member['createdBy'];
     final permissions =
         (member['effectivePermissions'] as Map?)?.cast<String, dynamic>() ?? {};
+
+    String resolveUserDisplay(String key, dynamic rawValue) {
+      Map<String, dynamic>? asMap;
+      if (rawValue is Map) {
+        asMap = rawValue.cast<String, dynamic>();
+      }
+      final alternative = member['${key}User'];
+      if (asMap == null && alternative is Map) {
+        asMap = alternative.cast<String, dynamic>();
+      }
+      if (asMap != null) {
+        return _formatUserInfo(asMap);
+      }
+
+      final fallback = rawValue ?? member['${key}Name'] ?? member['${key}Email'];
+      if (fallback is Map) {
+        return _formatUserInfo(fallback.cast<String, dynamic>());
+      }
+      final fallbackText = fallback?.toString().trim() ?? '';
+      if (fallbackText.isEmpty) {
+        return '—';
+      }
+      final hex24 = RegExp(r'^[a-fA-F0-9]{24}$');
+      if (hex24.hasMatch(fallbackText)) {
+        return 'ID: ${fallbackText.substring(fallbackText.length - 6)}';
+      }
+      return fallbackText;
+    }
+
+    final grantedByDisplay = resolveUserDisplay('grantedBy', grantedByRaw);
+    final createdByDisplay = resolveUserDisplay('createdBy', createdByRaw);
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -635,8 +801,10 @@ class _TeamApiTestPageState extends State<TeamApiTestPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Business ID: $businessId'),
-                  Text('Granted By: $grantedBy'),
+                  Text('Business: $businessLabel'),
+                  Text('Granted By: $grantedByDisplay'),
+                  if (createdByDisplay != '—')
+                    Text('Created By: $createdByDisplay'),
                   const SizedBox(height: 8),
                   const Text(
                     'Permissions:',
