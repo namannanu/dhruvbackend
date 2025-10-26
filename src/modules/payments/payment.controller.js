@@ -4,6 +4,7 @@ const Payment = require('./payment.model');
 const Job = require('../jobs/job.model');
 const EmployerProfile = require('../employers/employerProfile.model');
 const Business = require('../businesses/business.model');
+const User = require('../users/user.model');
 const AppError = require('../../shared/utils/appError');
 const catchAsync = require('../../shared/utils/catchAsync');
 
@@ -262,11 +263,21 @@ exports.verifyRazorpayPayment = catchAsync(async (req, res, next) => {
   const wasActive = job.status === 'active';
 
   if (payment.status === 'succeeded') {
-    if (!wasActive) {
+    let jobChanged = false;
+    if (job.status !== 'active') {
       job.status = 'active';
+      jobChanged = true;
+    }
+    if (job.premiumRequired) {
       job.premiumRequired = false;
-      await job.save();
+      jobChanged = true;
+    }
 
+    if (jobChanged) {
+      await job.save();
+    }
+
+    if (!wasActive) {
       await EmployerProfile.updateOne(
         { user: req.user._id },
         { $inc: { totalJobsPosted: 1 } }
@@ -275,6 +286,11 @@ exports.verifyRazorpayPayment = catchAsync(async (req, res, next) => {
         { _id: job.business },
         { $inc: { 'stats.jobsPosted': 1 } }
       );
+    }
+
+    if (!req.user.premium) {
+      await User.updateOne({ _id: req.user._id }, { premium: true });
+      req.user.premium = true;
     }
   }
 
