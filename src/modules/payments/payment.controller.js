@@ -107,12 +107,25 @@ exports.createRazorpayOrder = catchAsync(async (req, res, next) => {
     return next(new AppError('Job not found or access denied', 404));
   }
 
+  const providedReceipt =
+    typeof req.body.receipt === 'string' ? req.body.receipt.trim() : '';
+  const receiptBase =
+    providedReceipt.length > 0 ? providedReceipt : null;
+  let receiptValue = receiptBase;
+
+  if (!receiptValue) {
+    const timeFragment = Date.now().toString(36);
+    const idFragment = jobId.toString().replace(/[^a-zA-Z0-9]/g, '').slice(-10);
+    receiptValue = `job_${idFragment}_${timeFragment}`;
+  }
+  if (receiptValue.length > 40) {
+    receiptValue = receiptValue.slice(0, 40);
+  }
+
   const orderPayload = {
     amount: Math.round(amountRaw),
     currency,
-    receipt:
-      req.body.receipt ||
-      `job_post_${jobId}_${Date.now().toString(36)}`,
+    receipt: receiptValue,
     notes: {
       jobId,
       employer: req.user._id.toString(),
