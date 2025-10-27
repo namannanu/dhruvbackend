@@ -24,4 +24,10 @@ router.post(
   controller.verifyRazorpayPayment
 );
 
+router.get(
+  '/job-posting',
+  requirePermissions(['view_payments']),
+  controller.listJobPayments
+);
+
 module.exports = router;

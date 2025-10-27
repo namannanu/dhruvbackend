@@ -94,6 +94,37 @@ const ensureEmployerUser = (req, next) => {
   return true;
 };
 
+const buildJobLookupMap = async (payments) => {
+  const jobIds = [
+    ...new Set(
+      payments
+        .map((payment) => payment.metadata?.jobId)
+        .filter(Boolean)
+        .map((id) => id.toString())
+    ),
+  ];
+
+  if (!jobIds.length) {
+    return new Map();
+  }
+
+  const jobs = await Job.find({ _id: { $in: jobIds } })
+    .select('title business')
+    .populate('business', 'businessName name');
+
+  const lookup = new Map();
+  jobs.forEach((job) => {
+    const businessName =
+      job.business?.businessName || job.business?.name || null;
+    lookup.set(job._id.toString(), {
+      id: job._id.toString(),
+      title: job.title,
+      businessName,
+    });
+  });
+  return lookup;
+};
+
 const findJobWithPaymentAccess = async ({
   user,
   jobId,
@@ -370,6 +401,77 @@ exports.verifyRazorpayPayment = catchAsync(async (req, res, next) => {
   res.status(200).json({
     status: 'success',
     data: { payment, job },
+  });
+});
+
+exports.listJobPayments = catchAsync(async (req, res, next) => {
+  if (req.user.userType !== 'employer') {
+    return next(new AppError('Only employers can view job payments', 403));
+  }
+
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), 100);
+  const skip = (page - 1) * limit;
+
+  const baseFilter = {
+    employer: req.user._id,
+    'metadata.intent': req.query.intent || 'job_posting',
+  };
+
+  if (req.query.status) {
+    baseFilter.status = req.query.status;
+  }
+
+  const [payments, total] = await Promise.all([
+    Payment.find(baseFilter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean({ virtuals: false }),
+    Payment.countDocuments(baseFilter),
+  ]);
+
+  const jobLookup = await buildJobLookupMap(payments);
+
+  const records = payments.map((payment) => {
+    const jobId = payment?.metadata?.jobId
+      ? payment.metadata.jobId.toString()
+      : null;
+    const jobInfo = jobId ? jobLookup.get(jobId) : null;
+
+    return {
+      id: payment._id.toString(),
+      amount: payment.amount,
+      currency: payment.currency || 'INR',
+      status: payment.status,
+      description:
+        payment.description || payment.metadata?.description || 'Job payment',
+      reference: payment.reference,
+      createdAt: payment.createdAt,
+      updatedAt: payment.updatedAt,
+      job: jobInfo
+        ? {
+            id: jobInfo.id,
+            title: jobInfo.title,
+            businessName: jobInfo.businessName,
+          }
+        : jobId
+        ? { id: jobId }
+        : null,
+      metadata: payment.metadata || {},
+    };
+  });
+
+  res.status(200).json({
+    status: 'success',
+    results: records.length,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit) || 1,
+    },
+    data: records,
   });
 });
 
