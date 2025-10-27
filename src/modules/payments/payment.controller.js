@@ -7,6 +7,7 @@ const Business = require('../businesses/business.model');
 const User = require('../users/user.model');
 const AppError = require('../../shared/utils/appError');
 const catchAsync = require('../../shared/utils/catchAsync');
+const { ensureBusinessAccess } = require('../../shared/utils/businessAccess');
 
 const RAZORPAY_API_HOST = 'api.razorpay.com';
 const RAZORPAY_ORDER_PATH = '/v1/orders';
@@ -93,6 +94,49 @@ const ensureEmployerUser = (req, next) => {
   return true;
 };
 
+const findJobWithPaymentAccess = async ({
+  user,
+  jobId,
+  requiredPermissions = 'process_payments',
+}) => {
+  if (!jobId) {
+    throw new AppError('jobId is required to process payments', 400);
+  }
+
+  const job = await Job.findById(jobId).select(
+    '_id business status premiumRequired isPublished publishedAt publishedBy employer'
+  );
+
+  if (!job) {
+    throw new AppError('Job not found or access denied', 404);
+  }
+
+  const userId =
+    (user?._id && user._id.toString && user._id.toString()) ||
+    (user?.id && user.id.toString && user.id.toString());
+
+  if (!userId) {
+    throw new AppError('User context missing for payment processing', 401);
+  }
+
+  const isOwner = job.employer && job.employer.toString() === userId;
+  if (isOwner) {
+    return job;
+  }
+
+  if (!job.business) {
+    throw new AppError('Job not found or access denied', 404);
+  }
+
+  await ensureBusinessAccess({
+    user,
+    businessId: job.business,
+    requiredPermissions,
+  });
+
+  return job;
+};
+
 exports.createRazorpayOrder = catchAsync(async (req, res, next) => {
   if (!ensureEmployerUser(req, next)) return;
 
@@ -118,14 +162,10 @@ exports.createRazorpayOrder = catchAsync(async (req, res, next) => {
     return next(new AppError('jobId is required to create an order', 400));
   }
 
-  const job = await Job.findOne({
-    _id: jobId,
-    employer: req.user._id,
-  }).select('_id business status premiumRequired isPublished publishedAt publishedBy');
-
-  if (!job) {
-    return next(new AppError('Job not found or access denied', 404));
-  }
+  const job = await findJobWithPaymentAccess({
+    user: req.user,
+    jobId,
+  });
 
   const providedReceipt =
     typeof req.body.receipt === 'string' ? req.body.receipt.trim() : '';
@@ -228,14 +268,10 @@ exports.verifyRazorpayPayment = catchAsync(async (req, res, next) => {
     return next(new AppError('Invalid Razorpay payment signature', 400));
   }
 
-  const job = await Job.findOne({
-    _id: jobId,
-    employer: req.user._id,
-  }).select('_id business status premiumRequired isPublished publishedAt publishedBy');
-
-  if (!job) {
-    return next(new AppError('Job not found or access denied', 404));
-  }
+  const job = await findJobWithPaymentAccess({
+    user: req.user,
+    jobId,
+  });
 
   const paymentUpdate = {
     employer: req.user._id,
@@ -401,14 +437,10 @@ exports.processJobPayment = catchAsync(async (req, res, next) => {
       .json({ status: 'success', data: { payment, job } });
   }
 
-  const job = await Job.findOne({
-    _id: jobId,
-    employer: req.user._id,
-  }).select('_id business status premiumRequired isPublished publishedAt publishedBy');
-
-  if (!job) {
-    return next(new AppError('Job not found or access denied', 404));
-  }
+  const job = await findJobWithPaymentAccess({
+    user: req.user,
+    jobId,
+  });
 
   let jobChanged = false;
   if (job.status !== 'active') {
