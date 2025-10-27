@@ -231,7 +231,7 @@ exports.verifyRazorpayPayment = catchAsync(async (req, res, next) => {
   const job = await Job.findOne({
     _id: jobId,
     employer: req.user._id,
-  }).select('_id business status premiumRequired');
+  }).select('_id business status premiumRequired isPublished publishedAt publishedBy');
 
   if (!job) {
     return next(new AppError('Job not found or access denied', 404));
@@ -288,6 +288,10 @@ exports.verifyRazorpayPayment = catchAsync(async (req, res, next) => {
       ? parseBoolean(req.body[publishParamKey])
       : undefined;
 
+  const shouldPublish =
+    publishRequested === true ||
+    (publishRequested === undefined && job.premiumRequired);
+
   if (payment.status === 'succeeded') {
     let jobChanged = false;
     if (job.status !== 'active') {
@@ -299,7 +303,7 @@ exports.verifyRazorpayPayment = catchAsync(async (req, res, next) => {
       jobChanged = true;
     }
 
-    if (publishRequested === true && !job.isPublished) {
+    if (shouldPublish && !job.isPublished) {
       job.isPublished = true;
       job.publishedAt = new Date();
       job.publishedBy = req.user._id;

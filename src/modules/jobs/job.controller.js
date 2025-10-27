@@ -522,45 +522,53 @@ exports.createJob = catchAsync(async (req, res, next) => {
     return next(new AppError('Business owner not found for job creation', 400));
   }
 
-  if (!ownerUser.premium && ownerUser.freeJobsPosted >= JOB_FREE_QUOTA) {
-    return next(
-      new AppError('Free job posting quota reached. Please upgrade to continue.', 402)
-    );
-  }
+  const freeJobsUsed = Number(ownerUser.freeJobsPosted || 0);
+  const requiresPayment = !ownerUser.premium && freeJobsUsed >= JOB_FREE_QUOTA;
+  const shouldAutoPublish = !requiresPayment;
 
   // Create job data and ensure business field is set correctly
   const jobData = { ...req.body };
   // Remove businessId if it exists to avoid confusion
   delete jobData.businessId;
-  delete jobData.isPublished;
   delete jobData.publish;
   delete jobData.publishAfterPayment;
+  delete jobData.publishStatus;
+  delete jobData.publishActionRequired;
+  delete jobData.premiumRequired;
+  delete jobData.status;
+  delete jobData.isPublished;
   delete jobData.published;
   delete jobData.publishedAt;
   delete jobData.publishedBy;
-  delete jobData.publishStatus;
-  delete jobData.publishActionRequired;
-  
+
+  const initialStatus = shouldAutoPublish ? 'active' : 'draft';
+
   const job = await Job.create({
     ...jobData,
     employer: business.owner,
     createdBy: req.user._id,
     business: business._id,
-    premiumRequired: !ownerUser.premium && ownerUser.freeJobsPosted >= 3
+    premiumRequired: requiresPayment,
+    status: initialStatus,
+    isPublished: shouldAutoPublish,
+    publishedAt: shouldAutoPublish ? new Date() : null,
+    publishedBy: shouldAutoPublish ? req.user._id : null,
   });
 
-  business.stats.jobsPosted += 1;
-  await business.save();
+  if (shouldAutoPublish) {
+    business.stats.jobsPosted += 1;
+    await business.save();
 
-  const employerProfile = await EmployerProfile.findOne({ user: business.owner });
-  if (employerProfile) {
-    employerProfile.totalJobsPosted += 1;
-    await employerProfile.save();
-  }
+    const employerProfile = await EmployerProfile.findOne({ user: business.owner });
+    if (employerProfile) {
+      employerProfile.totalJobsPosted += 1;
+      await employerProfile.save();
+    }
 
-  if (!ownerUser.premium) {
-    ownerUser.freeJobsPosted += 1;
-    await ownerUser.save();
+    if (!ownerUser.premium) {
+      ownerUser.freeJobsPosted = freeJobsUsed + 1;
+      await ownerUser.save();
+    }
   }
 
   await job.populate([
