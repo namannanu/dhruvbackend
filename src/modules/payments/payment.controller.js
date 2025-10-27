@@ -11,6 +11,25 @@ const catchAsync = require('../../shared/utils/catchAsync');
 const RAZORPAY_API_HOST = 'api.razorpay.com';
 const RAZORPAY_ORDER_PATH = '/v1/orders';
 
+const parseBoolean = (value) => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return value === 1;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'y', 'on'].includes(normalized)) {
+      return true;
+    }
+    if (['false', '0', 'no', 'n', 'off'].includes(normalized)) {
+      return false;
+    }
+  }
+  return false;
+};
+
 const createRazorpayRequest = (payload, keyId, keySecret) =>
   new Promise((resolve, reject) => {
     const body = JSON.stringify(payload);
@@ -102,7 +121,7 @@ exports.createRazorpayOrder = catchAsync(async (req, res, next) => {
   const job = await Job.findOne({
     _id: jobId,
     employer: req.user._id,
-  }).select('_id business status premiumRequired');
+  }).select('_id business status premiumRequired isPublished publishedAt publishedBy');
 
   if (!job) {
     return next(new AppError('Job not found or access denied', 404));
@@ -261,6 +280,13 @@ exports.verifyRazorpayPayment = catchAsync(async (req, res, next) => {
   }
 
   const wasActive = job.status === 'active';
+  const publishParamKey = ['publish', 'publishAfterPayment'].find((key) =>
+    Object.prototype.hasOwnProperty.call(req.body, key)
+  );
+  const publishRequested =
+    publishParamKey !== undefined
+      ? parseBoolean(req.body[publishParamKey])
+      : undefined;
 
   if (payment.status === 'succeeded') {
     let jobChanged = false;
@@ -270,6 +296,13 @@ exports.verifyRazorpayPayment = catchAsync(async (req, res, next) => {
     }
     if (job.premiumRequired) {
       job.premiumRequired = false;
+      jobChanged = true;
+    }
+
+    if (publishRequested === true && !job.isPublished) {
+      job.isPublished = true;
+      job.publishedAt = new Date();
+      job.publishedBy = req.user._id;
       jobChanged = true;
     }
 
@@ -309,6 +342,14 @@ exports.processJobPayment = catchAsync(async (req, res, next) => {
     return next(new AppError('Job payload or jobId is required', 400));
   }
 
+  const publishParamKey = ['publish', 'publishAfterPayment'].find((key) =>
+    Object.prototype.hasOwnProperty.call(req.body, key)
+  );
+  const publishRequested =
+    publishParamKey !== undefined
+      ? parseBoolean(req.body[publishParamKey])
+      : undefined;
+
   if (jobPayload) {
     const reference = `legacy_${crypto.randomBytes(6).toString('hex')}`;
     const payment = await Payment.create({
@@ -321,12 +362,25 @@ exports.processJobPayment = catchAsync(async (req, res, next) => {
       metadata: { intent: 'job_posting', legacy: true },
     });
 
+    const sanitizedJob = { ...jobPayload };
+    delete sanitizedJob.publish;
+    delete sanitizedJob.publishAfterPayment;
+    delete sanitizedJob.published;
+    delete sanitizedJob.isPublished;
+    delete sanitizedJob.publishedAt;
+    delete sanitizedJob.publishedBy;
+    delete sanitizedJob.publishStatus;
+    delete sanitizedJob.publishActionRequired;
+
     const job = await Job.create({
-      ...jobPayload,
+      ...sanitizedJob,
       employer: req.user._id,
       business: jobPayload.business,
       premiumRequired: false,
       status: 'active',
+      isPublished: publishRequested === true,
+      publishedAt: publishRequested === true ? new Date() : null,
+      publishedBy: publishRequested === true ? req.user._id : null,
     });
 
     await EmployerProfile.updateOne(
@@ -346,15 +400,30 @@ exports.processJobPayment = catchAsync(async (req, res, next) => {
   const job = await Job.findOne({
     _id: jobId,
     employer: req.user._id,
-  }).select('_id business status premiumRequired');
+  }).select('_id business status premiumRequired isPublished publishedAt publishedBy');
 
   if (!job) {
     return next(new AppError('Job not found or access denied', 404));
   }
 
-  job.status = 'active';
-  job.premiumRequired = false;
-  await job.save();
+  let jobChanged = false;
+  if (job.status !== 'active') {
+    job.status = 'active';
+    jobChanged = true;
+  }
+  if (job.premiumRequired) {
+    job.premiumRequired = false;
+    jobChanged = true;
+  }
+  if (publishRequested === true && !job.isPublished) {
+    job.isPublished = true;
+    job.publishedAt = new Date();
+    job.publishedBy = req.user._id;
+    jobChanged = true;
+  }
+  if (jobChanged) {
+    await job.save();
+  }
 
   const reference = `pay_${crypto.randomBytes(6).toString('hex')}`;
   const payment = await Payment.create({

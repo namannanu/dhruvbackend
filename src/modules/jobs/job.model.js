@@ -107,6 +107,13 @@ const jobSchema = new mongoose.Schema(
       enum: ['draft', 'active', 'filled', 'closed'],
       default: 'active'
     },
+    isPublished: { type: Boolean, default: false },
+    publishedAt: { type: Date, default: null },
+    publishedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    },
     applicantsCount: { type: Number, default: 0 },
     hiredWorker: {
       type: mongoose.Schema.Types.ObjectId,
@@ -245,5 +252,6 @@ jobSchema.virtual('locationInfo').get(function() {
 
 jobSchema.index({ employer: 1, status: 1 });
 jobSchema.index({ 'location.latitude': 1, 'location.longitude': 1 });
+jobSchema.index({ isPublished: 1, status: 1 });
 
 module.exports = mongoose.model('Job', jobSchema);

@@ -19,10 +19,36 @@ const {
 } = require('../../shared/utils/businessAccess');
 const { resolveOwnershipTag } = require('../../shared/utils/ownershipTag');
 
-const JOB_FREE_QUOTA = 20000;///////               change to 2
+const JOB_FREE_QUOTA = 2;
+const JOB_PUBLISH_STATUS = Object.freeze({
+  PAYMENT_REQUIRED: 'payment_required',
+  READY_TO_PUBLISH: 'ready_to_publish',
+  PUBLISHED: 'published',
+});
+const parsePublishToggle = (value) => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return value === 1;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'y', 'on'].includes(normalized)) {
+      return true;
+    }
+    if (['false', '0', 'no', 'n', 'off'].includes(normalized)) {
+      return false;
+    }
+  }
+  return undefined;
+};
 
 const buildJobResponse = async (job, currentUser) => {
   const jobObj = job.toObject();
+  const requiresPaymentForEmployer = Boolean(job.premiumRequired);
+  const isPublished = Boolean(job.isPublished);
+
   if (currentUser && currentUser.userType === 'worker') {
     const hasApplied = await Application.exists({ job: job._id, worker: currentUser._id });
     jobObj.hasApplied = Boolean(hasApplied);
@@ -58,6 +84,23 @@ const buildJobResponse = async (job, currentUser) => {
       jobObj.business = jobObj.business._id.toString();
     }
   }
+
+  if (jobObj.publishedBy && typeof jobObj.publishedBy === 'object' && jobObj.publishedBy._id) {
+    jobObj.publishedByDetails = jobObj.publishedBy;
+    jobObj.publishedBy = jobObj.publishedBy._id.toString();
+  } else if (jobObj.publishedBy) {
+    jobObj.publishedBy = jobObj.publishedBy.toString();
+  }
+
+  jobObj.isPublished = isPublished;
+  jobObj.publishStatus = isPublished
+    ? JOB_PUBLISH_STATUS.PUBLISHED
+    : requiresPaymentForEmployer
+      ? JOB_PUBLISH_STATUS.PAYMENT_REQUIRED
+      : JOB_PUBLISH_STATUS.READY_TO_PUBLISH;
+  jobObj.publishActionRequired =
+    jobObj.publishStatus === JOB_PUBLISH_STATUS.READY_TO_PUBLISH &&
+    jobObj.status === 'active';
 
   if (currentUser && currentUser.userType === 'employer') {
     const ownershipTag = resolveOwnershipTag(
@@ -100,6 +143,7 @@ exports.listJobs = catchAsync(async (req, res) => {
     // For workers, show all active jobs except their own (if they're also employers)
     filter.status = 'active';
     filter.employer = { $ne: req.user._id }; // Exclude jobs posted by the worker themselves
+    filter.isPublished = true;
     accessContext.accessSource = 'public_worker_access';
     accessContext.jobsFrom = 'all_public_jobs';
   } else if (req.user.userType === 'employer') {
@@ -220,6 +264,13 @@ exports.listJobs = catchAsync(async (req, res) => {
   } else if (!filter.status) {
     filter.status = { $ne: 'draft' }; // Exclude drafts for general listing
   }
+  if (req.user.userType !== 'worker' && typeof req.query.published === 'string') {
+    if (req.query.published.toLowerCase() === 'true') {
+      filter.isPublished = true;
+    } else if (req.query.published.toLowerCase() === 'false') {
+      filter.isPublished = false;
+    }
+  }
   if (req.query.tags) {
     filter.tags = { $in: req.query.tags.split(',').map((tag) => tag.trim()) };
   }
@@ -232,7 +283,8 @@ exports.listJobs = catchAsync(async (req, res) => {
         populate: { path: 'owner', select: 'email firstName lastName' }
       })
       .populate('employer', 'email firstName lastName userType')
-      .populate('createdBy', 'email firstName lastName userType');
+      .populate('createdBy', 'email firstName lastName userType')
+      .populate('publishedBy', 'email firstName lastName userType');
   }
 
   const jobs = await jobQuery;
@@ -429,11 +481,19 @@ exports.getJob = catchAsync(async (req, res, next) => {
         populate: { path: 'owner', select: 'email firstName lastName' }
       })
       .populate('employer', 'email firstName lastName userType')
-      .populate('createdBy', 'email firstName lastName userType');
+      .populate('createdBy', 'email firstName lastName userType')
+      .populate('publishedBy', 'email firstName lastName userType');
   }
 
   const job = await jobQuery;
   if (!job) {
+    return next(new AppError('Job not found', 404));
+  }
+  if (
+    req.user.userType === 'worker' &&
+    !job.isPublished &&
+    job.employer?.toString() !== req.user._id.toString()
+  ) {
     return next(new AppError('Job not found', 404));
   }
   const jobResp = await buildJobResponse(job, req.user);
@@ -472,6 +532,14 @@ exports.createJob = catchAsync(async (req, res, next) => {
   const jobData = { ...req.body };
   // Remove businessId if it exists to avoid confusion
   delete jobData.businessId;
+  delete jobData.isPublished;
+  delete jobData.publish;
+  delete jobData.publishAfterPayment;
+  delete jobData.published;
+  delete jobData.publishedAt;
+  delete jobData.publishedBy;
+  delete jobData.publishStatus;
+  delete jobData.publishActionRequired;
   
   const job = await Job.create({
     ...jobData,
@@ -501,7 +569,8 @@ exports.createJob = catchAsync(async (req, res, next) => {
       populate: { path: 'owner', select: 'email firstName lastName' }
     },
     { path: 'employer', select: 'email firstName lastName userType' },
-    { path: 'createdBy', select: 'email firstName lastName userType' }
+    { path: 'createdBy', select: 'email firstName lastName userType' },
+    { path: 'publishedBy', select: 'email firstName lastName userType' }
   ]);
 
   const responseData = await buildJobResponse(job, req.user);
@@ -533,8 +602,18 @@ exports.createJobsBulk = catchAsync(async (req, res, next) => {
       requiredPermissions: 'create_jobs',
     });
 
+    const sanitizedJob = { ...job };
+    delete sanitizedJob.isPublished;
+    delete sanitizedJob.publish;
+    delete sanitizedJob.publishAfterPayment;
+    delete sanitizedJob.published;
+    delete sanitizedJob.publishedAt;
+    delete sanitizedJob.publishedBy;
+    delete sanitizedJob.publishStatus;
+    delete sanitizedJob.publishActionRequired;
+
     preparedJobs.push({
-      ...job,
+      ...sanitizedJob,
       employer: business.owner,
       createdBy: req.user._id,
       business: business._id,
@@ -549,7 +628,8 @@ exports.createJobsBulk = catchAsync(async (req, res, next) => {
       populate: { path: 'owner', select: 'email firstName lastName' }
     },
     { path: 'employer', select: 'email firstName lastName userType' },
-    { path: 'createdBy', select: 'email firstName lastName userType' }
+    { path: 'createdBy', select: 'email firstName lastName userType' },
+    { path: 'publishedBy', select: 'email firstName lastName userType' }
   ]);
 
   const ownerIncrements = createdJobs.reduce((acc, job) => {
@@ -579,7 +659,8 @@ exports.updateJob = catchAsync(async (req, res, next) => {
     {
       path: 'business',
       populate: { path: 'owner', select: 'email firstName lastName' }
-    }
+    },
+    { path: 'publishedBy', select: 'email firstName lastName userType' }
   ]);
   if (!job) {
     return next(new AppError('Job not found', 404));
@@ -591,7 +672,41 @@ exports.updateJob = catchAsync(async (req, res, next) => {
   });
   const updatePayload = { ...req.body };
   delete updatePayload.createdBy;
+  const publishKeyUsed = ['publish', 'isPublished', 'publishAfterPayment'].find((key) =>
+    Object.prototype.hasOwnProperty.call(updatePayload, key)
+  );
+  const requestedPublishState =
+    publishKeyUsed !== undefined
+      ? parsePublishToggle(updatePayload[publishKeyUsed])
+      : undefined;
+  delete updatePayload.publish;
+  delete updatePayload.isPublished;
+  delete updatePayload.publishAfterPayment;
+  delete updatePayload.published;
+  delete updatePayload.publishedAt;
+  delete updatePayload.publishedBy;
+  delete updatePayload.publishStatus;
+  delete updatePayload.publishActionRequired;
   Object.assign(job, updatePayload);
+
+  if (requestedPublishState !== undefined) {
+    if (requestedPublishState) {
+      if (job.premiumRequired) {
+        return next(new AppError('Complete payment before publishing this job', 402));
+      }
+      if (job.status !== 'active') {
+        return next(new AppError('Only active jobs can be published', 400));
+      }
+      job.isPublished = true;
+      job.publishedAt = new Date();
+      job.publishedBy = req.user._id;
+    } else if (job.isPublished) {
+      job.isPublished = false;
+      job.publishedAt = null;
+      job.publishedBy = null;
+    }
+  }
+
   await job.save();
   await job.populate([
     {
@@ -599,7 +714,8 @@ exports.updateJob = catchAsync(async (req, res, next) => {
       populate: { path: 'owner', select: 'email firstName lastName' }
     },
     { path: 'employer', select: 'email firstName lastName userType' },
-    { path: 'createdBy', select: 'email firstName lastName userType' }
+    { path: 'createdBy', select: 'email firstName lastName userType' },
+    { path: 'publishedBy', select: 'email firstName lastName userType' }
   ]);
   const responseData = await buildJobResponse(job, req.user);
   res.status(200).json({ status: 'success', data: responseData });
@@ -623,7 +739,8 @@ exports.updateJobStatus = catchAsync(async (req, res, next) => {
       populate: { path: 'owner', select: 'email firstName lastName' }
     },
     { path: 'employer', select: 'email firstName lastName userType' },
-    { path: 'createdBy', select: 'email firstName lastName userType' }
+    { path: 'createdBy', select: 'email firstName lastName userType' },
+    { path: 'publishedBy', select: 'email firstName lastName userType' }
   ]);
   const responseData = await buildJobResponse(job, req.user);
   res.status(200).json({ status: 'success', data: responseData });
@@ -649,7 +766,8 @@ exports.listApplicationsForJob = catchAsync(async (req, res, next) => {
     {
       path: 'business',
       populate: { path: 'owner', select: 'email firstName lastName' }
-    }
+    },
+    { path: 'publishedBy', select: 'email firstName lastName userType' }
   ]);
 
   const applications = await Application.find({ job: job._id })
