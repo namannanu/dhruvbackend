@@ -26,7 +26,6 @@ const locationSchema = new mongoose.Schema(
       min: -180,
       max: 180
     },
-    
     // Geofencing and validation
     allowedRadius: {
       type: Number,
@@ -50,6 +49,35 @@ const locationSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const logoAssetSchema = new mongoose.Schema(
+  {
+    url: { type: String, trim: true },
+    mimeType: { type: String, trim: true },
+    size: Number, // bytes
+    width: Number,
+    height: Number,
+    storageKey: { type: String, trim: true }, // e.g. S3 key or CDN path
+    uploadedAt: { type: Date, default: Date.now },
+    source: {
+      type: String,
+      enum: ['url', 'upload', 'generated'],
+      default: 'url',
+    },
+  },
+  { _id: false }
+);
+
+const logoSchema = new mongoose.Schema(
+  {
+    original: logoAssetSchema,
+    square: logoAssetSchema,
+    dominantColor: { type: String, trim: true },
+    altText: { type: String, trim: true },
+    updatedAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 const businessSchema = new mongoose.Schema(
   {
     owner: {
@@ -62,6 +90,8 @@ const businessSchema = new mongoose.Schema(
     type: { type: String, trim: true },
     phone: { type: String, trim: true },
     email: { type: String, trim: true },
+    logoUrl: { type: String, trim: true },
+    logo: logoSchema,
     location: locationSchema,
     isActive: { type: Boolean, default: true },
     stats: {

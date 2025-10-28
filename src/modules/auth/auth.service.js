@@ -5,6 +5,18 @@ const EmployerProfile = require('../employers/employerProfile.model');
 const Business = require('../businesses/business.model');
 const AppError = require('../../shared/utils/appError');
 
+const resolveBusinessLogoUrl = (business) => {
+  if (!business) return null;
+  const payload =
+    typeof business.toObject === 'function' ? business.toObject() : business;
+  return (
+    payload?.logo?.square?.url ||
+    payload?.logo?.original?.url ||
+    payload?.logoUrl ||
+    null
+  );
+};
+
 const ensureJwtSecret = () => {
   if (!process.env.JWT_SECRET) {
     throw new AppError('JWT secret is not configured on the server', 500);
@@ -30,15 +42,15 @@ const buildBusinessCollections = async (userId) => {
   }
 
   const [ownedBusinesses, teamMemberships, teamAccessRecords] = await Promise.all([
-    Business.find({ owner: userId }).select('name industry createdAt'),
+    Business.find({ owner: userId }).select('name industry createdAt logoUrl logo'),
     TeamMember.find({ user: userId, active: true })
-      .populate('business', 'name industry createdAt')
+      .populate('business', 'name industry createdAt logoUrl logo')
       .sort({ createdAt: -1 }),
     TeamAccess.find({ 
       userEmail: user.email.toLowerCase(), 
       status: 'active' 
     })
-      .populate('businessContext.businessId', 'name industry createdAt')
+      .populate('businessContext.businessId', 'name industry createdAt logoUrl logo')
       .sort({ createdAt: -1 })
   ]);
 
@@ -53,6 +65,7 @@ const buildBusinessCollections = async (userId) => {
         businessId: membership.business._id,
         businessName: membership.business.name,
         industry: membership.business.industry || null,
+        logoUrl: resolveBusinessLogoUrl(membership.business),
         role: membership.role,
         permissions: membership.permissions,
         joinedAt: membership.createdAt,
@@ -70,6 +83,7 @@ const buildBusinessCollections = async (userId) => {
           businessId: business._id,
           businessName: business.name,
           industry: business.industry || null,
+          logoUrl: resolveBusinessLogoUrl(business),
           role: access.role,
           accessLevel: access.accessLevel,
           permissions: access.permissions,
@@ -97,7 +111,8 @@ const buildBusinessCollections = async (userId) => {
       businessId: business._id,
       businessName: business.name,
       industry: business.industry || null,
-      createdAt: business.createdAt
+      createdAt: business.createdAt,
+      logoUrl: resolveBusinessLogoUrl(business)
     })),
     teamBusinesses: uniqueTeamBusinesses,
     teamMemberships: teamMemberships,
@@ -134,6 +149,7 @@ const buildUserResponse = async (user, includeTeamContext = true) => {
         response.businessContext = {
           businessId: teamMember.business._id,
           businessName: teamMember.business.name,
+          logoUrl: resolveBusinessLogoUrl(teamMember.business),
           role: teamMember.role,
           permissions: teamMember.permissions
         };
@@ -142,6 +158,7 @@ const buildUserResponse = async (user, includeTeamContext = true) => {
         response.businessContext = {
           businessId: teamAccess.businessContext.businessId._id,
           businessName: teamAccess.businessContext.businessId.name,
+          logoUrl: resolveBusinessLogoUrl(teamAccess.businessContext.businessId),
           role: teamAccess.role,
           accessLevel: teamAccess.accessLevel,
           permissions: teamAccess.permissions
@@ -304,7 +321,7 @@ exports.switchBusinessContext = async (userId, businessId) => {
     user: userId, 
     business: businessId, 
     active: true 
-  }).populate('business', 'name industry');
+  }).populate('business', 'name industry logoUrl logo');
 
   if (!teamMember) {
     throw new AppError('You are not a member of this business', 403);
@@ -316,6 +333,7 @@ exports.switchBusinessContext = async (userId, businessId) => {
   response.businessContext = {
     businessId: teamMember.business._id,
     businessName: teamMember.business.name,
+    logoUrl: resolveBusinessLogoUrl(teamMember.business),
     role: teamMember.role,
     permissions: teamMember.permissions
   };

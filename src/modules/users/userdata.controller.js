@@ -114,7 +114,7 @@ exports.getAllUserDataByUserId = catchAsync(async (req, res) => {
     const jobs = await Job.find(jobFilter)
       .populate('employer', 'userId firstName lastName email')
       .populate('hiredWorker', 'userId firstName lastName email')
-      .populate('business', 'name address')
+      .populate('business', 'name address logoUrl logo')
       .sort({ createdAt: -1 });
 
     userData.jobs = {
@@ -186,7 +186,7 @@ exports.getAllUserDataByUserId = catchAsync(async (req, res) => {
       .populate('worker', 'userId firstName lastName email')
       .populate('employer', 'userId firstName lastName email')
       .populate('job', 'title description hourlyRate')
-      .populate('business', 'name address')
+      .populate('business', 'name address logoUrl logo')
       .sort({ scheduledStart: -1 });
 
     const workerAttendance = attendanceRecords.filter(record => 
@@ -233,7 +233,7 @@ exports.getAllUserDataByUserId = catchAsync(async (req, res) => {
     const employmentRecords = await WorkerEmployment.find(employmentFilter)
       .populate('worker', 'userId firstName lastName email')
       .populate('employer', 'userId firstName lastName email')
-      .populate('business', 'name address')
+      .populate('business', 'name address logoUrl logo')
       .populate('job', 'title description hourlyRate')
       .sort({ hireDate: -1 });
 

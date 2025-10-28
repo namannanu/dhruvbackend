@@ -138,7 +138,7 @@ attendanceSchema.statics.findByUserId = function(userId) {
     .populate('worker', 'userId firstName lastName email')
     .populate('employer', 'userId firstName lastName email')
     .populate('job', 'title description hourlyRate')
-    .populate('business', 'name address')
+    .populate('business', 'name address logoUrl')
     .then(records => {
       return records.filter(record => 
         record.worker?.userId === userId || 

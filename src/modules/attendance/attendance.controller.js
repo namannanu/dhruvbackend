@@ -304,14 +304,14 @@ exports.listAttendance = catchAsync(async (req, res, next) => {
         { path: 'employer', select: 'email firstName lastName userType' },
         {
           path: 'business',
-          select: 'businessName name owner',
+          select: 'businessName name logoUrl owner',
           populate: { path: 'owner', select: 'email firstName lastName' }
         }
       ]
     })
     .populate({
       path: 'business',
-      select: 'businessName name owner',
+      select: 'businessName name logoUrl owner',
       populate: { path: 'owner', select: 'email firstName lastName' }
     })
     .populate('employer', 'email firstName lastName userType')
@@ -1087,7 +1087,7 @@ exports.searchWorkersByName = catchAsync(async (req, res, next) => {
     worker: { $in: workerIds }
   })
     .populate('employer', 'firstName lastName email')
-    .populate('business', 'name address')
+    .populate('business', 'name address logoUrl')
     .populate('job', 'title description hourlyRate startDate endDate')
     .sort({ hireDate: -1 });
 
@@ -1098,7 +1098,7 @@ exports.searchWorkersByName = catchAsync(async (req, res, next) => {
       worker: { $in: workerIds }
     })
       .populate('job', 'title hourlyRate')
-      .populate('business', 'name')
+      .populate('business', 'name logoUrl')
       .sort({ scheduledStart: -1 })
       .limit(50); // Limit to recent 50 records per worker
   }
@@ -1160,7 +1160,7 @@ exports.getWorkerEmploymentTimeline = catchAsync(async (req, res, next) => {
   const employmentFilter = { worker: workerId };
   const employmentRecords = await WorkerEmployment.find(employmentFilter)
     .populate('employer', 'firstName lastName email')
-    .populate('business', 'name address contactInfo')
+    .populate('business', 'name address logoUrl contactInfo')
     .populate('job', 'title description hourlyRate startDate endDate workDays workingHours')
     .sort({ hireDate: -1 });
 
@@ -1187,7 +1187,7 @@ exports.getWorkerEmploymentTimeline = catchAsync(async (req, res, next) => {
 
   const attendanceRecords = await AttendanceRecord.find(attendanceFilter)
     .populate('job', 'title hourlyRate')
-    .populate('business', 'name')
+    .populate('business', 'name logoUrl')
     .sort({ scheduledStart: -1 });
 
   // Create timeline data
@@ -1263,7 +1263,7 @@ exports.getWorkersEmployedOnDate = catchAsync(async (req, res, next) => {
   })
     .populate('worker', 'firstName lastName email phone')
     .populate('employer', 'firstName lastName email')
-    .populate('business', 'name address')
+    .populate('business', 'name address logoUrl')
     .populate('job', 'title description hourlyRate');
 
   let workersData = employmentRecords.map(emp => ({
@@ -1290,7 +1290,7 @@ exports.getWorkersEmployedOnDate = catchAsync(async (req, res, next) => {
     const scheduleRecords = await AttendanceRecord.find({
       worker: { $in: workerIds },
       scheduledStart: { $gte: dateRange.start, $lte: dateRange.end }
-    }).populate('job', 'title').populate('business', 'name');
+    }).populate('job', 'title').populate('business', 'name logoUrl');
 
     // Add schedule info to each worker
     workersData = workersData.map(workerData => ({
@@ -1364,7 +1364,7 @@ exports.getAttendanceByUserId = catchAsync(async (req, res) => {
     .populate('worker', 'userId firstName lastName email')
     .populate('employer', 'userId firstName lastName email')
     .populate('job', 'title description hourlyRate')
-    .populate('business', 'name address')
+    .populate('business', 'name address logoUrl')
     .sort({ scheduledStart: -1 });
 
   // Categorize attendance records

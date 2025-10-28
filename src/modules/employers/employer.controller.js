@@ -6,6 +6,7 @@ const Application = require('../applications/application.model');
 const AttendanceRecord = require('../attendance/attendance.model');
 const WorkerEmployment = require('../workers/workerEmployment.model');
 const WorkerProfile = require('../workers/workerProfile.model');
+const User = require('../users/user.model');
 const catchAsync = require('../../shared/utils/catchAsync');
 const AppError = require('../../shared/utils/appError');
 const {
@@ -106,6 +107,8 @@ exports.updateEmployerProfile = catchAsync(async (req, res, next) => {
   res.status(200).json({ status: 'success', data: profile });
 });
 
+const JOB_FREE_QUOTA = 2;
+
 exports.getDashboard = catchAsync(async (req, res, next) => {
   const { business, employerId } = await resolveEmployerContext(req);
 
@@ -118,39 +121,120 @@ exports.getDashboard = catchAsync(async (req, res, next) => {
     ? { business: business._id }
     : { employer: employerId };
 
-  const [jobs, applications, businesses, attendance] = await Promise.all([
-    Job.find(jobFilter).sort({ createdAt: -1 }).limit(10),
-    Application.find()
-      .populate('job')
-      .populate('worker')
-      .where('job')
-      .in(await Job.find(jobFilter).distinct('_id')),
-    Business.find(businessFilter),
+  const [jobIds, recentJobs, businesses, attendance, employerUser] = await Promise.all([
+    Job.find(jobFilter).distinct('_id'),
+    Job.find(jobFilter)
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .limit(10)
+      .populate('business', 'businessName name logoUrl logo')
+      .populate('createdBy', 'firstName lastName email'),
+    Business.find(businessFilter)
+      .select('businessName name address city state postalCode stats owner logoUrl logo')
+      .populate('owner', 'firstName lastName email userType'),
     AttendanceRecord.find(attendanceFilter)
       .sort({ scheduledStart: -1 })
-      .limit(10),
+      .limit(10)
+      .populate('worker', 'firstName lastName email'),
+    User.findById(employerId).select('freeJobsPosted premium'),
   ]);
 
-  const totalJobs = jobs.length;
+  const applications = jobIds.length
+    ? await Application.find({ job: { $in: jobIds } })
+        .populate('worker', 'firstName lastName email')
+        .populate({
+          path: 'job',
+          select: 'title status business',
+          populate: { path: 'business', select: 'businessName name logoUrl logo owner' }
+        })
+        .sort({ createdAt: -1 })
+    : [];
+
+  const [totalJobsCount, openJobsCount, filledJobsCount] = await Promise.all([
+    Job.countDocuments(jobFilter),
+    Job.countDocuments({ ...jobFilter, status: 'active' }),
+    Job.countDocuments({ ...jobFilter, status: 'filled' }),
+  ]);
+
   const totalApplicants = applications.length;
-  const hires = applications.filter((app) => app.status === 'hired').length;
-  const filledJobs = jobs.filter((job) => job.status === 'filled').length;
+  const totalHires = applications.filter((app) => app.status === 'hired').length;
+
+  const responseDurations = applications
+    .map((app) => {
+      const decisionAt = app.hiredAt || app.rejectedAt;
+      if (!decisionAt) return null;
+      const createdAt = app.createdAt instanceof Date
+        ? app.createdAt
+        : new Date(app.createdAt);
+      const decisionDate = decisionAt instanceof Date
+        ? decisionAt
+        : new Date(decisionAt);
+      const diffHours = (decisionDate.getTime() - createdAt.getTime()) / 36e5;
+      return Number.isFinite(diffHours) ? diffHours : null;
+    })
+    .filter((value) => value !== null);
+
+  const averageResponseTimeHours = responseDurations.length
+    ? Number(
+        (
+          responseDurations.reduce((sum, hours) => sum + hours, 0) /
+          responseDurations.length
+        ).toFixed(2)
+      )
+    : 0;
+
+  const freeJobsRemaining = Math.max(
+    0,
+    JOB_FREE_QUOTA - Number(employerUser?.freeJobsPosted || 0)
+  );
+  const premiumActive = Boolean(employerUser?.premium);
+
+  const applicationSummary = new Map();
+  applications.forEach((application) => {
+    const rawJob = application.job;
+    const jobId = rawJob && rawJob._id ? rawJob._id.toString() : rawJob?.toString?.() || null;
+    if (!jobId) return;
+    if (!applicationSummary.has(jobId)) {
+      applicationSummary.set(jobId, { applicants: 0, hires: 0 });
+    }
+    const record = applicationSummary.get(jobId);
+    record.applicants += 1;
+    if (application.status === 'hired') {
+      record.hires += 1;
+    }
+  });
+
+  const recentJobSummaries = recentJobs.map((job) => {
+    const jobId = job._id.toString();
+    const counts = applicationSummary.get(jobId) || { applicants: 0, hires: 0 };
+    return {
+      jobId,
+      title: job.title,
+      status: job.status,
+      applicants: counts.applicants,
+      hires: counts.hires,
+      updatedAt: job.updatedAt || job.createdAt,
+    };
+  });
 
   res.status(200).json({
     status: 'success',
     data: {
       metrics: {
-        totalJobs,
+        openJobs: openJobsCount,
         totalApplicants,
-        hires,
-        filledJobs,
-        freeJobsRemaining: Math.max(0, 2 - req.user.freeJobsPosted)
+        totalHires,
+        averageResponseTimeHours,
+        freePostingsRemaining: freeJobsRemaining,
+        premiumActive,
+        recentJobSummaries,
+        totalJobs: totalJobsCount,
+        filledJobs: filledJobsCount,
       },
-      recentJobs: jobs,
+      recentJobs,
       recentApplications: applications.slice(0, 10),
       businesses,
-      attendance
-    }
+      attendance,
+    },
   });
 });
 
@@ -252,7 +336,7 @@ exports.listEmployerApplications = catchAsync(async (req, res, next) => {
         { path: 'employer', select: 'email firstName lastName userType' },
         {
           path: 'business',
-          select: 'businessName owner',
+          select: 'businessName name logoUrl logo owner',
           populate: { path: 'owner', select: 'email firstName lastName' }
         }
       ]
@@ -367,7 +451,7 @@ exports.getMyWorkers = catchAsync(async (req, res, next) => {
 
   const workers = await WorkerEmployment.find(filter)
     .populate('worker', 'firstName lastName email phone')
-    .populate('business', 'name')
+    .populate('business', 'name logoUrl logo')
     .populate('job', 'title')
     .sort({ hireDate: -1 });
 
@@ -385,7 +469,7 @@ exports.updateEmploymentWorkLocation = catchAsync(async (req, res, next) => {
     _id: employmentId,
     worker: workerId
   })
-    .populate('business', 'name owner')
+    .populate('business', 'name logoUrl logo owner')
     .populate('worker', 'firstName lastName email');
 
   if (!employment) {
@@ -479,7 +563,7 @@ exports.getWorkerEmploymentHistory = catchAsync(async (req, res, next) => {
     worker: workerId,
     employer: req.user._id
   })
-    .populate('business', 'name address')
+    .populate('business', 'name address logoUrl logo')
     .populate('job', 'title description hourlyRate')
     .sort({ hireDate: -1 });
 
@@ -506,7 +590,7 @@ exports.getWorkersScheduledDates = catchAsync(async (req, res, next) => {
   const workers = await WorkerEmployment.find(filter)
     .populate('worker', 'firstName lastName email')
     .populate('job', 'title startDate endDate workDays workingHours')
-    .populate('business', 'name');
+    .populate('business', 'name logoUrl logo');
 
   // Group by worker and extract scheduled dates
   const workerSchedules = workers.map(employment => {

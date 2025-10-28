@@ -6,6 +6,7 @@ const Application = require('../applications/application.model');
 const AttendanceRecord = require('../attendance/attendance.model');
 const Shift = require('../shifts/shift.model');
 const SwapRequest = require('../shifts/swapRequest.model');
+const Job = require('../jobs/job.model');
 const catchAsync = require('../../shared/utils/catchAsync');
 const AppError = require('../../shared/utils/appError');
 
@@ -440,6 +441,59 @@ exports.getWorkerDashboardMetrics = catchAsync(async (req, res, next) => {
     return acc;
   }, {});
 
+  const [availableJobsCount, upcomingShiftsCount, completedHoursAgg, weeklyEarningsAgg] = await Promise.all([
+    Job.countDocuments({ status: 'active', isPublished: true }),
+    Shift.countDocuments({
+      worker: workerId,
+      scheduledStart: { $gte: now },
+    }),
+    AttendanceRecord.aggregate([
+      {
+        $match: {
+          worker: new mongoose.Types.ObjectId(workerId),
+          status: 'completed',
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalHours: { $sum: { $ifNull: ['$totalHours', 0] } },
+        },
+      },
+    ]),
+    AttendanceRecord.aggregate([
+      {
+        $match: {
+          worker: new mongoose.Types.ObjectId(workerId),
+          status: 'completed',
+          scheduledStart: { $gte: startOfWeek },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalEarnings: {
+            $sum: {
+              $cond: [
+                { $gt: [{ $ifNull: ['$earnings', 0] }, 0] },
+                { $ifNull: ['$earnings', 0] },
+                {
+                  $multiply: [
+                    { $ifNull: ['$totalHours', 0] },
+                    { $ifNull: ['$hourlyRate', 0] },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      },
+    ]),
+  ]);
+
+  const completedHours = completedHoursAgg?.[0]?.totalHours || 0;
+  const earningsThisWeek = weeklyEarningsAgg?.[0]?.totalEarnings || 0;
+
   // Calculate profile completeness
   let profileCompleteness = 0;
   const profileFields = [
@@ -468,7 +522,7 @@ exports.getWorkerDashboardMetrics = catchAsync(async (req, res, next) => {
   const freeTierData = {
     jobApplicationsUsed: user.freeApplicationsUsed || 0,
     jobApplicationsLimit: 5, // Default free tier limit
-    remainingApplications: Math.max(0, 5 - (user.freeApplicationsUsed || 0))
+    remainingApplications: Math.max(0, 5 - (user.freeApplicationsUsed || 0)),
   };
 
   const premiumData = {
@@ -488,7 +542,16 @@ exports.getWorkerDashboardMetrics = catchAsync(async (req, res, next) => {
   };
 
   // Build metrics response
+  const activeApplications = applicationStatusCounts.pending || 0;
+
   const metrics = {
+    availableJobs: availableJobsCount,
+    activeApplications,
+    upcomingShifts: upcomingShiftsCount,
+    completedHours: Number(completedHours.toFixed(2)),
+    earningsThisWeek: Number(earningsThisWeek.toFixed(2)),
+    freeApplicationsRemaining: freeTierData.remainingApplications,
+    isPremium: premiumData.isActive,
     // Profile metrics
     profile: {
       completeness: Math.round(profileCompleteness),
@@ -519,12 +582,12 @@ exports.getWorkerDashboardMetrics = catchAsync(async (req, res, next) => {
       total: totalApplications,
       byStatus: {
         pending: applicationStatusCounts.pending || 0,
-        accepted: applicationStatusCounts.accepted || 0,
+        hired: applicationStatusCounts.hired || 0,
         rejected: applicationStatusCounts.rejected || 0,
         withdrawn: applicationStatusCounts.withdrawn || 0
       },
       successRate: totalApplications > 0 ? 
-        Math.round(((applicationStatusCounts.accepted || 0) / totalApplications) * 100) : 0
+        Math.round(((applicationStatusCounts.hired || 0) / totalApplications) * 100) : 0
     },
 
     // Performance metrics
@@ -637,7 +700,7 @@ exports.getCurrentEmployment = catchAsync(async (req, res, next) => {
     employmentStatus: 'active'
   })
     .populate('employer', 'firstName lastName email phone')
-    .populate('business', 'name address contactInfo')
+    .populate('business', 'name address logoUrl contactInfo')
     .populate('job', 'title description hourlyRate workDays workingHours');
 
   if (!currentEmployment) {

@@ -9,6 +9,112 @@ const {
   getAccessibleBusinessIds,
 } = require('../../shared/utils/businessAccess');
 
+const buildLogoAsset = (rawAsset) => {
+  if (!rawAsset) return undefined;
+  const url =
+    typeof rawAsset === 'string'
+      ? rawAsset.trim()
+      : typeof rawAsset.url === 'string'
+        ? rawAsset.url.trim()
+        : '';
+  if (!url) {
+    return undefined;
+  }
+
+  const asset = { url };
+
+  const fields = [
+    ['mimeType', 'mimeType'],
+    ['storageKey', 'storageKey'],
+    ['altText', 'altText'],
+    ['source', 'source'],
+  ];
+  for (const [key, prop] of fields) {
+    const value =
+      rawAsset && typeof rawAsset[prop] === 'string'
+        ? rawAsset[prop].trim()
+        : undefined;
+    if (value) {
+      asset[prop] = value;
+    }
+  }
+
+  const numericFields = ['size', 'width', 'height'];
+  for (const prop of numericFields) {
+    const value =
+      rawAsset && typeof rawAsset[prop] === 'number'
+        ? rawAsset[prop]
+        : Number.isFinite(rawAsset?.[prop])
+          ? Number(rawAsset[prop])
+          : undefined;
+    if (value !== undefined && !Number.isNaN(value)) {
+      asset[prop] = value;
+    }
+  }
+
+  if (rawAsset?.uploadedAt) {
+    const uploadedAt = new Date(rawAsset.uploadedAt);
+    if (!Number.isNaN(uploadedAt.valueOf())) {
+      asset.uploadedAt = uploadedAt;
+    }
+  }
+
+  return asset;
+};
+
+const normalizeLogoInput = ({ logo, logoUrl }) => {
+  const updates = {};
+  let originalAsset;
+  let squareAsset;
+
+  if (typeof logo === 'string') {
+    originalAsset = buildLogoAsset(logo);
+  } else if (logo && typeof logo === 'object') {
+    originalAsset = buildLogoAsset(logo.original ?? logo.url ?? logo);
+    squareAsset = buildLogoAsset(logo.square);
+  }
+
+  let fallbackUrl =
+    typeof logoUrl === 'string' ? logoUrl.trim() : undefined;
+  if (!fallbackUrl && !originalAsset && typeof logo === 'string') {
+    fallbackUrl = logo.trim();
+  }
+
+  if (!originalAsset && !squareAsset && fallbackUrl) {
+    originalAsset = buildLogoAsset({ url: fallbackUrl });
+  }
+
+  if (logo === null || logo === undefined || logo === '') {
+    updates.logo = undefined;
+  } else if (originalAsset || squareAsset) {
+    updates.logo = {
+      updatedAt: new Date(),
+    };
+    if (originalAsset) {
+      updates.logo.original = originalAsset;
+      fallbackUrl = fallbackUrl || originalAsset.url;
+    }
+    if (squareAsset) {
+      updates.logo.square = squareAsset;
+      fallbackUrl = squareAsset.url || fallbackUrl;
+    }
+    if (logo?.dominantColor) {
+      updates.logo.dominantColor = logo.dominantColor.trim();
+    }
+    if (logo?.altText) {
+      updates.logo.altText = logo.altText.trim();
+    }
+  }
+
+  if (logoUrl === null || logoUrl === undefined || logoUrl === '') {
+    updates.logoUrl = undefined;
+  } else if (fallbackUrl) {
+    updates.logoUrl = fallbackUrl;
+  }
+
+  return updates;
+};
+
 exports.listBusinesses = catchAsync(async (req, res) => {
   let filter = {};
 
@@ -75,6 +181,32 @@ exports.createBusiness = catchAsync(async (req, res) => {
     location: locationData
   };
 
+  const logoUpdates = normalizeLogoInput({
+    logo: req.body.logo,
+    logoUrl: req.body.logoUrl,
+  });
+
+  if (Object.prototype.hasOwnProperty.call(businessData, 'logo')) {
+    delete businessData.logo;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(businessData, 'logoUrl')) {
+    delete businessData.logoUrl;
+  }
+
+  if ('logo' in logoUpdates) {
+    if (logoUpdates.logo) {
+      businessData.logo = logoUpdates.logo;
+    }
+  }
+  if ('logoUrl' in logoUpdates) {
+    if (logoUpdates.logoUrl) {
+      businessData.logoUrl = logoUpdates.logoUrl;
+    } else {
+      delete businessData.logoUrl;
+    }
+  }
+
   const business = await Business.create(businessData);
   
   res.status(201).json({ 
@@ -123,7 +255,30 @@ exports.updateBusiness = catchAsync(async (req, res) => {
     updateData.location = locationData;
   }
 
+  const logoUpdates = normalizeLogoInput({
+    logo: updateData.logo,
+    logoUrl: updateData.logoUrl,
+  });
+
+  if (Object.prototype.hasOwnProperty.call(updateData, 'logo')) {
+    delete updateData.logo;
+  }
+  if (Object.prototype.hasOwnProperty.call(updateData, 'logoUrl')) {
+    delete updateData.logoUrl;
+  }
+
   Object.assign(business, updateData);
+
+  if ('logo' in logoUpdates) {
+    business.logo = logoUpdates.logo;
+    if (business.logo) {
+      business.logo.updatedAt = new Date();
+    }
+  }
+  if ('logoUrl' in logoUpdates) {
+    business.logoUrl = logoUpdates.logoUrl || undefined;
+  }
+
   await business.save();
   
   res.status(200).json({ 

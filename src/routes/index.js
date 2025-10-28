@@ -17,6 +17,7 @@ const conversationRoutes = require('../modules/conversations/conversation.routes
 const budgetRoutes = require('../modules/budgets/budget.routes');
 const paymentRoutes = require('../modules/payments/payment.routes');
 const subscriptionRoutes = require('../modules/subscriptions/subscription.routes');
+const feedbackRoutes = require('../modules/feedback/workerFeedback.routes');
 
 const router = express.Router();
 const shiftsRouter = express.Router();
@@ -43,5 +44,6 @@ router.use('/conversations', conversationRoutes);
 router.use('/budget', budgetRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/subscriptions', subscriptionRoutes);
+router.use('/feedback', feedbackRoutes);
 
 module.exports = router;

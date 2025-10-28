@@ -80,8 +80,34 @@ const buildJobResponse = async (job, currentUser) => {
   if (jobObj.business && typeof jobObj.business === 'object' && jobObj.business._id) {
     jobObj.businessDetails = jobObj.business;
     jobObj.businessId = jobObj.business._id.toString();
+    jobObj.businessName =
+      jobObj.business.businessName ||
+      jobObj.business.name ||
+      jobObj.businessName ||
+      null;
+    const resolvedLogoUrl =
+      jobObj.business.logo?.square?.url ||
+      jobObj.business.logo?.original?.url ||
+      jobObj.business.logoUrl ||
+      jobObj.businessLogoUrl ||
+      null;
+    jobObj.businessLogoUrl = resolvedLogoUrl;
+    if (!jobObj.businessLogo && jobObj.business.logo) {
+      jobObj.businessLogo = jobObj.business.logo;
+    }
     if (!currentUser || currentUser.userType !== 'employer') {
       jobObj.business = jobObj.business._id.toString();
+    }
+  } else {
+    if (!jobObj.businessLogoUrl && jobObj.businessDetails?.logo?.square?.url) {
+      jobObj.businessLogoUrl = jobObj.businessDetails.logo.square.url;
+    } else if (!jobObj.businessLogoUrl && jobObj.businessDetails?.logo?.original?.url) {
+      jobObj.businessLogoUrl = jobObj.businessDetails.logo.original.url;
+    } else if (!jobObj.businessLogoUrl && jobObj.businessDetails?.logoUrl) {
+      jobObj.businessLogoUrl = jobObj.businessDetails.logoUrl;
+    }
+    if (!jobObj.businessLogo && jobObj.businessDetails?.logo) {
+      jobObj.businessLogo = jobObj.businessDetails.logo;
     }
   }
 
@@ -153,11 +179,18 @@ exports.listJobs = catchAsync(async (req, res) => {
     // Get detailed business information for transparency
     const businessDetails = await Business.find({
       _id: { $in: Array.from(accessibleBusinesses) }
-    }).select('_id businessName owner').populate('owner', 'email firstName lastName');
+    })
+      .select('_id businessName logoUrl owner')
+      .populate('owner', 'email firstName lastName');
 
     accessContext.accessibleBusinesses = businessDetails.map(b => ({
       businessId: b._id,
       businessName: b.businessName,
+      logoUrl:
+        b.logo?.square?.url ||
+        b.logo?.original?.url ||
+        b.logoUrl ||
+        null,
       owner: {
         id: b.owner._id,
         email: b.owner.email,
@@ -191,7 +224,7 @@ exports.listJobs = catchAsync(async (req, res) => {
 
     if (req.query.businessId) {
       if (!accessibleBusinesses.has(req.query.businessId)) {
-        const requestedBusiness = await Business.findById(req.query.businessId).select('businessName owner');
+        const requestedBusiness = await Business.findById(req.query.businessId).select('businessName owner logoUrl logo');
         accessContext.accessSource = 'no_access_to_requested_business';
         accessContext.requestedBusiness = requestedBusiness ? {
           businessId: requestedBusiness._id,
@@ -275,13 +308,24 @@ exports.listJobs = catchAsync(async (req, res) => {
     filter.tags = { $in: req.query.tags.split(',').map((tag) => tag.trim()) };
   }
 
-  let jobQuery = Job.find(filter).sort({ createdAt: -1 });
+  const businessPopulate =
+    req.user.userType === 'employer'
+      ? {
+          path: 'business',
+          select: 'businessName name logoUrl logo owner',
+          populate: { path: 'owner', select: 'email firstName lastName' },
+        }
+      : {
+          path: 'business',
+          select: 'businessName name logoUrl logo',
+        };
+
+  let jobQuery = Job.find(filter)
+    .sort({ createdAt: -1 })
+    .populate(businessPopulate);
+
   if (req.user.userType === 'employer') {
     jobQuery = jobQuery
-      .populate({
-        path: 'business',
-        populate: { path: 'owner', select: 'email firstName lastName' }
-      })
       .populate('employer', 'email firstName lastName userType')
       .populate('createdBy', 'email firstName lastName userType')
       .populate('publishedBy', 'email firstName lastName userType');
@@ -377,9 +421,19 @@ exports.listJobs = catchAsync(async (req, res) => {
     filtered.forEach(job => {
       const businessId = job.business._id.toString();
       if (!jobsByBusiness[businessId]) {
+        const businessName =
+          job.business.businessName ||
+          job.business.name ||
+          job.businessName ||
+          null;
         jobsByBusiness[businessId] = {
           businessId: businessId,
-          businessName: job.business.businessName,
+          businessName,
+          logoUrl:
+            job.business.logo?.square?.url ||
+            job.business.logo?.original?.url ||
+            job.business.logoUrl ||
+            null,
           owner: job.employer,
           jobCount: 0
         };
@@ -473,13 +527,23 @@ exports.getJobAccessContext = catchAsync(async (req, res) => {
 });
 
 exports.getJob = catchAsync(async (req, res, next) => {
-  let jobQuery = Job.findById(req.params.jobId);
+  const businessPopulateForDetail =
+    req.user.userType === 'employer'
+      ? {
+          path: 'business',
+          select: 'businessName name logoUrl logo owner',
+          populate: { path: 'owner', select: 'email firstName lastName' },
+        }
+      : {
+          path: 'business',
+          select: 'businessName name logoUrl logo',
+        };
+
+  let jobQuery = Job.findById(req.params.jobId).populate(
+    businessPopulateForDetail
+  );
   if (req.user.userType === 'employer') {
     jobQuery = jobQuery
-      .populate({
-        path: 'business',
-        populate: { path: 'owner', select: 'email firstName lastName' }
-      })
       .populate('employer', 'email firstName lastName userType')
       .populate('createdBy', 'email firstName lastName userType')
       .populate('publishedBy', 'email firstName lastName userType');
@@ -987,7 +1051,7 @@ exports.getJobsByUserId = catchAsync(async (req, res) => {
   })
   .populate('employer', 'userId firstName lastName email')
   .populate('hiredWorker', 'userId firstName lastName email')
-  .populate('business', 'name address')
+  .populate('business', 'name address logoUrl')
   .sort({ createdAt: -1 });
 
   // Categorize jobs

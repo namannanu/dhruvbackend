@@ -194,7 +194,7 @@ workerEmploymentSchema.statics.findActiveEmployments = function (filters = {}) {
   })
     .populate('worker', 'firstName lastName email phone')
     .populate('employer', 'firstName lastName email')
-    .populate('business', 'name address')
+    .populate('business', 'name address logoUrl logo')
     .populate('job', 'title description');
 };
 
@@ -202,7 +202,7 @@ workerEmploymentSchema.statics.findActiveEmployments = function (filters = {}) {
 workerEmploymentSchema.statics.getWorkerHistory = function (workerId) {
   return this.find({ worker: workerId })
     .populate('employer', 'firstName lastName email')
-    .populate('business', 'name address')
+    .populate('business', 'name address logoUrl logo')
     .populate('job', 'title description hourlyRate')
     .sort({ hireDate: -1 });
 };
@@ -219,7 +219,7 @@ workerEmploymentSchema.statics.findWorkersEmployedOnDate = function (date) {
   })
     .populate('worker', 'firstName lastName email phone')
     .populate('employer', 'firstName lastName email')
-    .populate('business', 'name address')
+    .populate('business', 'name address logoUrl logo')
     .populate('job', 'title description');
 };
 
@@ -280,7 +280,7 @@ workerEmploymentSchema.statics.findByUserId = function(userId) {
   return this.find()
     .populate('worker', 'userId firstName lastName email')
     .populate('employer', 'userId firstName lastName email')
-    .populate('business', 'name address')
+    .populate('business', 'name address logoUrl')
     .populate('job', 'title description hourlyRate')
     .then(records => {
       return records.filter(record => 

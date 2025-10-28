@@ -110,7 +110,7 @@ const buildJobLookupMap = async (payments) => {
 
   const jobs = await Job.find({ _id: { $in: jobIds } })
     .select('title business')
-    .populate('business', 'businessName name');
+    .populate('business', 'businessName name logoUrl logo');
 
   const lookup = new Map();
   jobs.forEach((job) => {
@@ -120,9 +120,22 @@ const buildJobLookupMap = async (payments) => {
       id: job._id.toString(),
       title: job.title,
       businessName,
+      businessLogoUrl: resolveBusinessLogoUrl(job.business),
     });
   });
   return lookup;
+};
+
+const resolveBusinessLogoUrl = (business) => {
+  if (!business) return null;
+  const payload =
+    typeof business.toObject === 'function' ? business.toObject() : business;
+  return (
+    payload?.logo?.square?.url ||
+    payload?.logo?.original?.url ||
+    payload?.logoUrl ||
+    null
+  );
 };
 
 const findJobWithPaymentAccess = async ({

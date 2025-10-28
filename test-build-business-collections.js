@@ -32,15 +32,15 @@ async function testBuildBusinessCollections() {
       }
 
       const [ownedBusinesses, teamMemberships, teamAccessRecords] = await Promise.all([
-        Business.find({ owner: userId }).select('name industry createdAt'),
+        Business.find({ owner: userId }).select('name industry createdAt logoUrl'),
         TeamMember.find({ user: userId, active: true })
-          .populate('business', 'name industry createdAt')
+          .populate('business', 'name industry createdAt logoUrl')
           .sort({ createdAt: -1 }),
         TeamAccess.find({ 
           userEmail: user.email.toLowerCase(), 
           status: 'active' 
         })
-          .populate('businessContext.businessId', 'name industry createdAt')
+          .populate('businessContext.businessId', 'name industry createdAt logoUrl')
           .sort({ createdAt: -1 })
       ]);
 
@@ -61,6 +61,7 @@ async function testBuildBusinessCollections() {
             businessId: membership.business._id,
             businessName: membership.business.name,
             industry: membership.business.industry || null,
+            logoUrl: membership.business.logoUrl || null,
             role: membership.role,
             permissions: membership.permissions,
             joinedAt: membership.createdAt,
@@ -79,6 +80,7 @@ async function testBuildBusinessCollections() {
               businessId: business._id,
               businessName: business.name,
               industry: business.industry || null,
+              logoUrl: business.logoUrl || null,
               role: access.role,
               accessLevel: access.accessLevel,
               permissions: access.permissions,
@@ -106,7 +108,8 @@ async function testBuildBusinessCollections() {
           businessId: business._id,
           businessName: business.name,
           industry: business.industry || null,
-          createdAt: business.createdAt
+          createdAt: business.createdAt,
+          logoUrl: business.logoUrl || null
         })),
         teamBusinesses: uniqueTeamBusinesses,
         teamMemberships: teamMemberships,

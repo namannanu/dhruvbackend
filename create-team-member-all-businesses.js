@@ -70,7 +70,7 @@ async function createTeamMemberForAllBusinesses() {
     console.log(`\n🎉 Finished processing all businesses for ${user.email}`);
     
     // Show summary
-    const allTeamMembers = await TeamMember.find({ user: userId }).populate('business', 'name');
+    const allTeamMembers = await TeamMember.find({ user: userId }).populate('business', 'name logoUrl');
     console.log(`\n📋 Summary: User ${user.email} is now a team member in ${allTeamMembers.length} businesses:`);
     allTeamMembers.forEach(member => {
       console.log(`   - ${member.business.name}: ${member.role} (Active: ${member.active})`);
