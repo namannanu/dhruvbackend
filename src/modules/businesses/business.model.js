@@ -63,6 +63,10 @@ const logoAssetSchema = new mongoose.Schema(
       enum: ['url', 'upload', 'generated'],
       default: 'url',
     },
+    data: {
+      type: Buffer,
+      select: false,
+    },
   },
   { _id: false }
 );

@@ -9,48 +9,165 @@ const {
   getAccessibleBusinessIds,
 } = require('../../shared/utils/businessAccess');
 
+const resolveString = (value) =>
+  typeof value === 'string' && value.trim().length ? value.trim() : undefined;
+
+function buildDataUrl({ buffer, mimeType }) {
+  if (!buffer || !mimeType) return undefined;
+  return `data:${mimeType};base64,${buffer.toString('base64')}`;
+}
+
+const bufferFromUnknown = (value) => {
+  if (!value) return undefined;
+  if (Buffer.isBuffer(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed.length) {
+      return undefined;
+    }
+    const dataUrlMatch = trimmed.match(/^data:(.*?);base64,(.*)$/);
+    if (dataUrlMatch) {
+      return Buffer.from(dataUrlMatch[2], 'base64');
+    }
+    const normalized = trimmed.replace(/\s+/g, '');
+    if (/^[a-z0-9+/=]+$/i.test(normalized)) {
+      try {
+        return Buffer.from(normalized, 'base64');
+      } catch (error) {
+        return undefined;
+      }
+    }
+    return undefined;
+  }
+  if (Array.isArray(value)) {
+    return Buffer.from(value);
+  }
+  if (value?.type === 'Buffer' && Array.isArray(value.data)) {
+    return Buffer.from(value.data);
+  }
+  if (value?.buffer && Buffer.isBuffer(value.buffer)) {
+    return value.buffer;
+  }
+  return undefined;
+};
+
+const sanitizeLogoAssetForResponse = (asset) => {
+  if (!asset) return undefined;
+  const sanitized = { ...asset };
+  const buffer = bufferFromUnknown(asset.data);
+  if (buffer) {
+    const mime =
+      resolveString(sanitized.mimeType) ||
+      resolveString(sanitized.contentType) ||
+      'image/png';
+
+    sanitized.mimeType = mime;
+    sanitized.size = sanitized.size ?? buffer.length;
+
+    if (!sanitized.url) {
+      sanitized.url = buildDataUrl({ buffer, mimeType: mime });
+    }
+  }
+
+  delete sanitized.data;
+  delete sanitized.contentType;
+
+  return sanitized;
+};
+
+const serializeBusiness = (businessDoc) => {
+  if (!businessDoc) return businessDoc;
+
+  const business =
+    typeof businessDoc.toObject === 'function'
+      ? businessDoc.toObject({ getters: true, virtuals: true })
+      : { ...businessDoc };
+
+  if (business.logo) {
+    business.logo = { ...business.logo };
+    if (business.logo.original) {
+      business.logo.original = sanitizeLogoAssetForResponse(
+        business.logo.original
+      );
+    }
+    if (business.logo.square) {
+      business.logo.square = sanitizeLogoAssetForResponse(
+        business.logo.square
+      );
+    }
+  }
+
+  business.logoUrl =
+    business.logo?.square?.url ||
+    business.logo?.original?.url ||
+    business.logoUrl ||
+    null;
+
+  return business;
+};
+
 const buildLogoAsset = (rawAsset) => {
   if (!rawAsset) return undefined;
-  const url =
-    typeof rawAsset === 'string'
-      ? rawAsset.trim()
-      : typeof rawAsset.url === 'string'
-        ? rawAsset.url.trim()
-        : '';
-  if (!url) {
+
+  let url = resolveString(
+    typeof rawAsset === 'string' ? rawAsset : rawAsset?.url
+  );
+
+  const dataBuffer =
+    bufferFromUnknown(rawAsset?.data) ||
+    bufferFromUnknown(rawAsset?.buffer) ||
+    bufferFromUnknown(rawAsset?.base64);
+
+  if (!url && dataBuffer) {
+    const mime =
+      resolveString(rawAsset?.mimeType) ||
+      resolveString(rawAsset?.contentType) ||
+      'image/png';
+    url = buildDataUrl({ buffer: dataBuffer, mimeType: mime });
+  }
+
+  if (!url && !dataBuffer) {
     return undefined;
   }
 
-  const asset = { url };
+  const asset = {};
+  if (url) {
+    asset.url = url;
+  }
+  if (dataBuffer) {
+    asset.data = dataBuffer;
+    asset.size = dataBuffer.length;
+  }
 
-  const fields = [
-    ['mimeType', 'mimeType'],
-    ['storageKey', 'storageKey'],
-    ['altText', 'altText'],
-    ['source', 'source'],
+  const stringProps = [
+    ['mimeType', ['mimeType', 'contentType']],
+    ['storageKey', ['storageKey']],
+    ['altText', ['altText']],
+    ['source', ['source']],
   ];
-  for (const [key, prop] of fields) {
-    const value =
-      rawAsset && typeof rawAsset[prop] === 'string'
-        ? rawAsset[prop].trim()
-        : undefined;
-    if (value) {
-      asset[prop] = value;
+
+  stringProps.forEach(([target, keys]) => {
+    for (const key of keys) {
+      const value = resolveString(rawAsset?.[key]);
+      if (value) {
+        asset[target] = value;
+        break;
+      }
     }
+  });
+
+  if (!asset.source) {
+    asset.source = dataBuffer ? 'upload' : 'url';
   }
 
-  const numericFields = ['size', 'width', 'height'];
-  for (const prop of numericFields) {
-    const value =
-      rawAsset && typeof rawAsset[prop] === 'number'
-        ? rawAsset[prop]
-        : Number.isFinite(rawAsset?.[prop])
-          ? Number(rawAsset[prop])
-          : undefined;
-    if (value !== undefined && !Number.isNaN(value)) {
-      asset[prop] = value;
+  ['size', 'width', 'height'].forEach((prop) => {
+    const rawValue = rawAsset?.[prop];
+    if (Number.isFinite(rawValue)) {
+      asset[prop] = Number(rawValue);
     }
-  }
+  });
 
   if (rawAsset?.uploadedAt) {
     const uploadedAt = new Date(rawAsset.uploadedAt);
@@ -132,11 +249,12 @@ exports.listBusinesses = catchAsync(async (req, res) => {
   }
 
   const businesses = await Business.find(filter);
+  const responseBusinesses = businesses.map(serializeBusiness);
 
   res.status(200).json({
     status: 'success',
-    results: businesses.length,
-    data: businesses
+    results: responseBusinesses.length,
+    data: responseBusinesses,
   });
 });
 
@@ -208,10 +326,11 @@ exports.createBusiness = catchAsync(async (req, res) => {
   }
 
   const business = await Business.create(businessData);
-  
-  res.status(201).json({ 
-    status: 'success', 
-    data: business,
+  const responseBusiness = serializeBusiness(business);
+
+  res.status(201).json({
+    status: 'success',
+    data: responseBusiness,
     message: locationData?.latitude && locationData?.longitude 
       ? 'Business created with GPS location for attendance tracking'
       : 'Business created successfully'
@@ -280,13 +399,139 @@ exports.updateBusiness = catchAsync(async (req, res) => {
   }
 
   await business.save();
-  
-  res.status(200).json({ 
-    status: 'success', 
-    data: business,
+
+  const responseBusiness = serializeBusiness(business);
+
+  res.status(200).json({
+    status: 'success',
+    data: responseBusiness,
     message: business.location?.latitude && business.location?.longitude 
       ? 'Business updated with GPS location for attendance tracking'
       : 'Business updated successfully'
+  });
+});
+
+exports.uploadBusinessLogo = catchAsync(async (req, res, next) => {
+  if (!req.file) {
+    throw new AppError('Logo file is required', 400);
+  }
+
+  const { business } = await ensureBusinessAccess({
+    user: req.user,
+    businessId: req.params.businessId,
+    requiredPermissions: 'edit_business',
+  });
+
+  const { buffer, mimetype, size } = req.file;
+  if (!mimetype.startsWith('image/')) {
+    throw new AppError('Only image uploads are supported', 400);
+  }
+
+  const dataUrl = buildDataUrl({ buffer, mimeType: mimetype });
+
+  business.logo = business.logo || {};
+  business.logo.original = {
+    data: buffer,
+    mimeType: mimetype,
+    size,
+    source: 'upload',
+    uploadedAt: new Date(),
+    url: dataUrl,
+  };
+  business.logo.square = undefined;
+  business.logo.updatedAt = new Date();
+  business.logoUrl = dataUrl;
+
+  await business.save();
+
+  const responseLogo = sanitizeLogoAssetForResponse(
+    business.logo?.original?.toObject?.() ?? business.logo?.original
+  );
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      logo: responseLogo,
+    },
+    message: 'Logo uploaded successfully',
+  });
+});
+
+exports.getBusinessLogo = catchAsync(async (req, res) => {
+  const variant =
+    req.query.variant && req.query.variant.toLowerCase() === 'square'
+      ? 'square'
+      : 'original';
+
+  const business = await Business.findById(req.params.businessId).select(
+    '+logo.original.data +logo.square.data +logo.original.mimeType +logo.square.mimeType +logo.original.url +logo.square.url +logo.original.size +logo.square.size +logo.original.source +logo.square.source +logoUrl'
+  );
+
+  if (!business?.logo) {
+    throw new AppError('Logo not found for this business', 404);
+  }
+
+  const asset =
+    variant === 'square'
+      ? business.logo.square || business.logo.original
+      : business.logo.original || business.logo.square;
+
+  if (!asset) {
+    throw new AppError('Logo not found for this business', 404);
+  }
+
+  let buffer = bufferFromUnknown(asset.data) || bufferFromUnknown(asset.url);
+  const mime =
+    resolveString(asset.mimeType) ||
+    resolveString(asset.contentType) ||
+    'image/png';
+
+  const dataUrl =
+    asset.url ||
+    (buffer ? buildDataUrl({ buffer, mimeType: mime }) : business.logoUrl);
+
+  const size = asset.size ?? (buffer ? buffer.length : undefined);
+  const source = asset.source || (buffer ? 'upload' : 'url');
+
+  const prefersRaw =
+    req.query.format === 'raw' ||
+    (req.accepts('image/*') && !req.accepts('application/json'));
+
+  if (prefersRaw && buffer) {
+    res.set('Content-Type', mime);
+    if (size) {
+      res.set('Content-Length', size);
+    }
+    return res.send(buffer);
+  }
+
+  if (prefersRaw && !buffer && dataUrl && /^https?:\/\//i.test(dataUrl)) {
+    return res.redirect(dataUrl);
+  }
+
+  // As a fallback for raw requests without stored buffer, try to decode from inline data URL
+  if (prefersRaw && !buffer && dataUrl) {
+    buffer = bufferFromUnknown(dataUrl);
+    if (buffer) {
+      res.set('Content-Type', mime);
+      res.set('Content-Length', buffer.length);
+      return res.send(buffer);
+    }
+  }
+
+  const payloadLogo = sanitizeLogoAssetForResponse(
+    asset.toObject?.() ?? asset
+  );
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      url: payloadLogo?.url || null,
+      mimeType: payloadLogo?.mimeType || mime || null,
+      size: payloadLogo?.size ?? size ?? null,
+      source,
+      variant,
+    },
   });
 });
 
@@ -312,7 +557,10 @@ exports.selectBusiness = catchAsync(async (req, res) => {
     businessId: req.params.businessId,
     requiredPermissions: 'view_business_profile',
   });
-  res.status(200).json({ status: 'success', data: { selectedBusiness: business } });
+  const responseBusiness = serializeBusiness(business);
+  res
+    .status(200)
+    .json({ status: 'success', data: { selectedBusiness: responseBusiness } });
 });
 
 exports.manageTeamMember = {
