@@ -67,7 +67,7 @@ app.use(cookieParser());
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'success',
-    message: 'WorkConnect API is healthy',
+    message: 'WorkConnect API is healthy - Premium payments enabled',
     timestamp: new Date().toISOString()
   });
 });
