@@ -651,7 +651,11 @@ exports.clockIn = catchAsync(async (req, res, next) => {
   }
 
   await record.populate([
-    { path: 'job', select: 'hourlyRate location title' },
+    { 
+      path: 'job', 
+      select: 'hourlyRate location title business',
+      populate: { path: 'business', select: 'name logoUrl logo' }
+    },
     { path: 'worker', select: 'firstName lastName email' }
   ]);
   
@@ -923,7 +927,11 @@ exports.clockOut = catchAsync(async (req, res, next) => {
   }
 
   await record.populate([
-    { path: 'job', select: 'hourlyRate location title' },
+    { 
+      path: 'job', 
+      select: 'hourlyRate location title business',
+      populate: { path: 'business', select: 'name logoUrl logo' }
+    },
     { path: 'worker', select: 'firstName lastName email' }
   ]);
   
