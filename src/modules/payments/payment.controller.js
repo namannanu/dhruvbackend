@@ -602,3 +602,182 @@ exports.processJobPayment = catchAsync(async (req, res, next) => {
 
   res.status(200).json({ status: 'success', data: { payment, job } });
 });
+
+// Premium plan pricing
+const PLAN_PRICING = {
+  monthly: 29900, // ₹299 in paise
+  yearly: 299900, // ₹2999 in paise
+};
+
+/**
+ * Create Razorpay order for premium plan
+ */
+exports.createPremiumOrder = catchAsync(async (req, res, next) => {
+  const { amount, currency, planType, receipt, notes } = req.body;
+  const userId = req.user.id;
+
+  // Validate plan type and amount
+  if (!PLAN_PRICING[planType] || PLAN_PRICING[planType] !== amount) {
+    return next(new AppError('Invalid plan type or amount', 400));
+  }
+
+  // Create Razorpay order
+  const options = {
+    amount: amount,
+    currency: currency || 'INR',
+    receipt: receipt,
+    notes: {
+      ...notes,
+      user_id: userId,
+      plan_type: planType,
+    },
+  };
+
+  try {
+    const order = await createRazorpayRequest(
+      options,
+      process.env.RAZORPAY_KEY_ID,
+      process.env.RAZORPAY_KEY_SECRET
+    );
+
+    res.status(201).json({
+      status: 'success',
+      data: {
+        order: {
+          id: order.id,
+          amount: order.amount,
+          currency: order.currency,
+          receipt: order.receipt,
+        },
+      },
+    });
+  } catch (error) {
+    console.error('Error creating premium order:', error);
+    return next(new AppError('Failed to create premium order', 500));
+  }
+});
+
+/**
+ * Verify premium plan payment and activate premium
+ */
+exports.verifyPremiumPayment = catchAsync(async (req, res, next) => {
+  const {
+    orderId,
+    paymentId,
+    signature,
+    planType,
+    amount,
+    status,
+    userId,
+  } = req.body;
+
+  const currentUserId = req.user.id;
+
+  // Ensure user can only activate premium for themselves
+  if (userId !== currentUserId) {
+    return next(new AppError('Unauthorized to activate premium for another user', 403));
+  }
+
+  // Verify Razorpay signature
+  const body = orderId + '|' + paymentId;
+  const expectedSignature = crypto
+    .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+    .update(body.toString())
+    .digest('hex');
+
+  if (expectedSignature !== signature) {
+    return next(new AppError('Invalid payment signature', 400));
+  }
+
+  // Validate plan type and amount
+  if (!PLAN_PRICING[planType] || PLAN_PRICING[planType] !== amount) {
+    return next(new AppError('Invalid plan type or amount', 400));
+  }
+
+  // Calculate premium expiry date
+  const now = new Date();
+  const expiryDate = new Date(now);
+  
+  if (planType === 'monthly') {
+    expiryDate.setMonth(expiryDate.getMonth() + 1);
+  } else if (planType === 'yearly') {
+    expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+  }
+
+  // Update user premium status
+  const user = await User.findByIdAndUpdate(
+    currentUserId,
+    {
+      isPremium: true,
+      premiumExpiresAt: expiryDate,
+      premiumPlan: planType,
+      $push: {
+        premiumPayments: {
+          orderId,
+          paymentId,
+          amount,
+          planType,
+          activatedAt: now,
+          expiresAt: expiryDate,
+        },
+      },
+    },
+    { new: true }
+  );
+
+  if (!user) {
+    return next(new AppError('User not found', 404));
+  }
+
+  res.status(200).json({
+    status: 'success',
+    message: 'Premium plan activated successfully',
+    data: {
+      user: {
+        isPremium: user.isPremium,
+        premiumExpiresAt: user.premiumExpiresAt,
+        premiumPlan: user.premiumPlan,
+      },
+    },
+  });
+});
+
+/**
+ * Get user's premium status
+ */
+exports.getPremiumStatus = catchAsync(async (req, res, next) => {
+  const userId = req.user.id;
+  const user = await User.findById(userId).select('isPremium premiumExpiresAt premiumPlan');
+
+  if (!user) {
+    return next(new AppError('User not found', 404));
+  }
+
+  // Check if premium has expired
+  const now = new Date();
+  if (user.isPremium && user.premiumExpiresAt && user.premiumExpiresAt < now) {
+    // Premium has expired, update user
+    await User.findByIdAndUpdate(userId, {
+      isPremium: false,
+      premiumPlan: null,
+    });
+
+    return res.json({
+      status: 'success',
+      data: {
+        isPremium: false,
+        premiumExpiresAt: null,
+        premiumPlan: null,
+      },
+    });
+  }
+
+  res.json({
+    status: 'success',
+    data: {
+      isPremium: user.isPremium,
+      premiumExpiresAt: user.premiumExpiresAt,
+      premiumPlan: user.premiumPlan,
+    },
+  });
+});

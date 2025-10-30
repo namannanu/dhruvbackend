@@ -30,4 +30,9 @@ router.get(
   controller.listJobPayments
 );
 
+// Premium payment routes (no special permissions required, just authentication)
+router.post('/premium/order', controller.createPremiumOrder);
+router.post('/premium/verify', controller.verifyPremiumPayment);
+router.get('/premium/status', controller.getPremiumStatus);
+
 module.exports = router;
