@@ -266,11 +266,26 @@ exports.createBusiness = catchAsync(async (req, res) => {
     throw new AppError('Only employers can create businesses', 403);
   }
 
+  // Process address data from frontend
+  let addressData = {};
+  if (req.body.address) {
+    const addr = req.body.address;
+    addressData = {
+      line1: addr.street || addr.line1,
+      city: addr.city,
+      state: addr.state,
+      postalCode: addr.zip || addr.postalCode,
+      country: addr.country || 'US' // Default to US
+    };
+  }
+
   // Process location data if provided
   let locationData = null;
   if (req.body.location) {
     locationData = {
       ...req.body.location,
+      // Merge address data into location for consistency
+      ...addressData,
       setBy: req.user._id,
       setAt: new Date()
     };
@@ -291,6 +306,13 @@ exports.createBusiness = catchAsync(async (req, res) => {
         throw new AppError('Allowed radius must be between 10 and 5000 meters', 400);
       }
     }
+  } else if (Object.keys(addressData).length > 0) {
+    // If no location but we have address data, create basic location
+    locationData = {
+      ...addressData,
+      setBy: req.user._id,
+      setAt: new Date()
+    };
   }
 
   const businessData = {
@@ -298,6 +320,9 @@ exports.createBusiness = catchAsync(async (req, res) => {
     owner: req.user._id,
     location: locationData
   };
+
+  // Remove the nested address object since we've processed it
+  delete businessData.address;
 
   const logoUpdates = normalizeLogoInput({
     logo: req.body.logo,
@@ -344,12 +369,27 @@ exports.updateBusiness = catchAsync(async (req, res) => {
     requiredPermissions: 'edit_business',
   });
 
+  // Process address data from frontend
+  let addressData = {};
+  if (req.body.address) {
+    const addr = req.body.address;
+    addressData = {
+      line1: addr.street || addr.line1,
+      city: addr.city,
+      state: addr.state,
+      postalCode: addr.zip || addr.postalCode,
+      country: addr.country || 'US' // Default to US
+    };
+  }
+
   // Process location data if being updated
   let updateData = { ...req.body };
   
   if (req.body.location) {
     const locationData = {
       ...req.body.location,
+      // Merge address data into location for consistency
+      ...addressData,
       setBy: req.user._id,
       setAt: new Date()
     };
@@ -372,7 +412,18 @@ exports.updateBusiness = catchAsync(async (req, res) => {
     }
 
     updateData.location = locationData;
+  } else if (Object.keys(addressData).length > 0) {
+    // If no location but we have address data, merge with existing location
+    updateData.location = {
+      ...business.location?.toObject(),
+      ...addressData,
+      setBy: req.user._id,
+      setAt: new Date()
+    };
   }
+
+  // Remove the nested address object since we've processed it
+  delete updateData.address;
 
   const logoUpdates = normalizeLogoInput({
     logo: updateData.logo,
