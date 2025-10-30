@@ -29,7 +29,12 @@ const userSchema = new mongoose.Schema(
     freeJobsPosted: { type: Number, default: 0 },
     freeApplicationsUsed: { type: Number, default: 0 },
     lastLoginAt: Date,
-    passwordChangedAt: Date
+    passwordChangedAt: Date,
+    
+    // Push notification fields
+    fcmToken: { type: String, select: false },
+    platform: { type: String, enum: ['android', 'ios', 'web', 'unknown'], default: 'unknown' },
+    fcmTokenUpdatedAt: Date
   },
   { timestamps: true }
 );
