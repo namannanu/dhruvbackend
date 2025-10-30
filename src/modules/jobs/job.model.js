@@ -39,6 +39,11 @@ const jobSchema = new mongoose.Schema(
       ref: 'Business',
       required: true // Jobs must belong to a business
     },
+    // Maintain legacy `business` field for compatibility with existing controllers
+    business: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Business'
+    },
     title: { type: String, required: true, trim: true },
     description: { type: String, required: true },
     hourlyRate: { type: Number, required: true },
@@ -77,6 +82,65 @@ const jobSchema = new mongoose.Schema(
     toObject: { virtuals: true }
   }
 );
+
+/**
+ * Keep `business` and `businessId` in sync so legacy codepaths that rely on
+ * `job.business` continue to work while `businessId` remains the source of truth.
+ */
+function syncBusinessFields(doc) {
+  if (!doc) {
+    return;
+  }
+  if (doc.business && !doc.businessId) {
+    doc.businessId = doc.business;
+  } else if (doc.businessId && !doc.business) {
+    doc.business = doc.businessId;
+  }
+}
+
+jobSchema.pre('validate', function(next) {
+  syncBusinessFields(this);
+  next();
+});
+
+jobSchema.pre('save', function(next) {
+  syncBusinessFields(this);
+  next();
+});
+
+function syncBusinessFieldsOnUpdate(update) {
+  if (!update) {
+    return;
+  }
+
+  const direct = update;
+  const set = update.$set;
+
+  if (direct) {
+    if (direct.business && !direct.businessId) {
+      direct.businessId = direct.business;
+    } else if (direct.businessId && !direct.business) {
+      direct.business = direct.businessId;
+    }
+  }
+
+  if (set) {
+    if (set.business && !set.businessId) {
+      set.businessId = set.business;
+    } else if (set.businessId && !set.business) {
+      set.business = set.businessId;
+    }
+  }
+}
+
+jobSchema.pre(['findOneAndUpdate', 'updateOne', 'updateMany'], function(next) {
+  syncBusinessFieldsOnUpdate(this.getUpdate());
+  next();
+});
+
+jobSchema.post('init', function(doc) {
+  syncBusinessFields(doc);
+});
 
 // Virtual to access employer userId
 jobSchema.virtual('employerUserId', {

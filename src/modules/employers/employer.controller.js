@@ -126,10 +126,10 @@ exports.getDashboard = catchAsync(async (req, res, next) => {
     Job.find(jobFilter)
       .sort({ updatedAt: -1, createdAt: -1 })
       .limit(10)
-      .populate('business', 'businessName name logoUrl logo')
+      .populate('business', 'name logoUrl logo')
       .populate('createdBy', 'firstName lastName email'),
     Business.find(businessFilter)
-      .select('businessName name address city state postalCode stats owner logoUrl logo')
+      .select('name address city state postalCode stats owner logoUrl logo')
       .populate('owner', 'firstName lastName email userType'),
     AttendanceRecord.find(attendanceFilter)
       .sort({ scheduledStart: -1 })
@@ -144,7 +144,7 @@ exports.getDashboard = catchAsync(async (req, res, next) => {
         .populate({
           path: 'job',
           select: 'title status business',
-          populate: { path: 'business', select: 'businessName name logoUrl logo owner' }
+          populate: { path: 'business', select: 'name logoUrl logo owner' }
         })
         .sort({ createdAt: -1 })
     : [];
@@ -336,7 +336,7 @@ exports.listEmployerApplications = catchAsync(async (req, res, next) => {
         { path: 'employer', select: 'email firstName lastName userType' },
         {
           path: 'business',
-          select: 'businessName name logoUrl logo owner',
+          select: 'name logoUrl logo owner',
           populate: { path: 'owner', select: 'email firstName lastName' }
         }
       ]
