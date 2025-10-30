@@ -56,7 +56,22 @@ const workerProfileSchema = new mongoose.Schema(
     weeklyEarnings: { type: Number, default: 0 },
     preferredRadiusMiles: { type: Number, default: 25 },
     notificationsEnabled: { type: Boolean, default: true },
+    emailNotificationsEnabled: { type: Boolean, default: true },
     isVerified: { type: Boolean, default: false },
+    
+    // Work preferences
+    minimumPay: { type: Number },
+    maxTravelDistance: { type: Number },
+    availableForFullTime: { type: Boolean, default: false },
+    availableForPartTime: { type: Boolean, default: true },
+    availableForTemporary: { type: Boolean, default: true },
+    weekAvailability: { type: String, default: 'All week' },
+    
+    // Privacy settings
+    isVisible: { type: Boolean, default: true },
+    locationEnabled: { type: Boolean, default: true },
+    shareWorkHistory: { type: Boolean, default: true },
+    
     availability: {
       type: [dailyAvailabilitySchema],
       default: function() {

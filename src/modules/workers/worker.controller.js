@@ -232,7 +232,10 @@ exports.updateWorkerProfile = catchAsync(async (req, res, next) => {
   // Handle profile fields
   const profileFields = [
     'bio', 'skills', 'experience', 'languages', 'availability',
-    'preferredRadiusMiles', 'notificationsEnabled'
+    'preferredRadiusMiles', 'notificationsEnabled', 'emailNotificationsEnabled',
+    'minimumPay', 'maxTravelDistance', 'availableForFullTime', 'availableForPartTime', 
+    'availableForTemporary', 'weekAvailability', 'isVisible', 'locationEnabled', 
+    'shareWorkHistory'
   ];
   
   const updateData = {};
