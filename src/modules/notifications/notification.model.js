@@ -23,7 +23,8 @@ const notificationSchema = new mongoose.Schema(
         'message',
         'system',
         'team_invite',
-        'team_update'
+        'team_update',
+        'attendance'
       ],
       required: true
     },

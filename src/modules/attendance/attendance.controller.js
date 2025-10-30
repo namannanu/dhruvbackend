@@ -16,6 +16,7 @@ const {
   buildLocationLabel: sharedBuildLocationLabel
 } = require('../../shared/utils/location');
 const { resolveOwnershipTag } = require('../../shared/utils/ownershipTag');
+const notificationService = require('../notifications/notification.service');
 
 const HOURS_IN_MS = 1000 * 60 * 60;
 
@@ -703,6 +704,98 @@ exports.clockIn = catchAsync(async (req, res, next) => {
     distance: record.clockInDistance,
     allowedRadius: record.jobLocation?.allowedRadius
   });
+
+  // Send notifications for clock-in
+  try {
+    const workerName = record.worker.firstName && record.worker.lastName 
+      ? `${record.worker.firstName} ${record.worker.lastName}`
+      : record.worker.email;
+    const jobTitle = record.jobTitleSnapshot || 'your shift';
+    const timeStr = record.clockInAt.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: true 
+    });
+    
+    // Get business ID for employer notification
+    let businessId = null;
+    if (record.business) {
+      businessId = record.business._id || record.business;
+    } else if (record.job) {
+      await record.populate('job');
+      businessId = record.job.business;
+    }
+
+    // Notification to worker confirming clock-in
+    await notificationService.sendSafeNotification({
+      recipient: record.worker._id,
+      type: 'attendance',
+      priority: record.isLate ? 'medium' : 'low',
+      title: record.isLate ? 'Clocked in (Late)' : 'Clocked in successfully',
+      message: record.isLate 
+        ? `You clocked in late at ${timeStr} for ${jobTitle}. Please be on time for future shifts.`
+        : `You successfully clocked in at ${timeStr} for ${jobTitle}.`,
+      metadata: {
+        attendanceId: record._id,
+        action: 'clock_in',
+        isLate: record.isLate,
+        clockInTime: record.clockInAt,
+        distance: record.clockInDistance,
+        jobTitle: record.jobTitleSnapshot,
+        businessId
+      }
+    });
+
+    // Notification to employer about worker clock-in
+    if (record.employer) {
+      await notificationService.sendSafeNotification({
+        recipient: record.employer._id || record.employer,
+        type: 'attendance',
+        priority: record.isLate ? 'medium' : 'low',
+        title: record.isLate ? `${workerName} clocked in late` : `${workerName} clocked in`,
+        message: record.isLate
+          ? `${workerName} clocked in late at ${timeStr} for ${jobTitle}.`
+          : `${workerName} clocked in at ${timeStr} for ${jobTitle}.`,
+        metadata: {
+          attendanceId: record._id,
+          action: 'clock_in',
+          workerId: record.worker._id,
+          workerName,
+          isLate: record.isLate,
+          clockInTime: record.clockInAt,
+          distance: record.clockInDistance,
+          jobTitle: record.jobTitleSnapshot,
+          businessId
+        },
+        senderUserId: record.worker._id
+      });
+    }
+
+    // Additional notification for location validation issues
+    if (record.clockInDistance > (record.jobLocation?.allowedRadius * 0.8)) {
+      await notificationService.sendSafeNotification({
+        recipient: record.employer._id || record.employer,
+        type: 'attendance',
+        priority: 'medium',
+        title: `${workerName} clocked in at edge of location`,
+        message: `${workerName} clocked in ${Math.round(record.clockInDistance)}m from the designated location (allowed: ${record.jobLocation?.allowedRadius}m).`,
+        metadata: {
+          attendanceId: record._id,
+          action: 'clock_in_location_warning',
+          workerId: record.worker._id,
+          workerName,
+          distance: record.clockInDistance,
+          allowedRadius: record.jobLocation?.allowedRadius,
+          businessId
+        },
+        senderUserId: record.worker._id
+      });
+    }
+  } catch (notificationError) {
+    console.error('[ATTENDANCE] Failed to send clock-in notifications:', notificationError);
+    // Don't fail the clock-in if notifications fail
+  }
+
   res.status(200).json({ status: 'success', data: record });
 });
 
@@ -889,6 +982,99 @@ exports.clockOut = catchAsync(async (req, res, next) => {
     hourlyRate: record.hourlyRate,
     earnings: record.earnings
   });
+
+  // Send notifications for clock-out
+  try {
+    const workerName = record.worker.firstName && record.worker.lastName 
+      ? `${record.worker.firstName} ${record.worker.lastName}`
+      : record.worker.email;
+    const jobTitle = record.jobTitleSnapshot || 'your shift';
+    const timeStr = record.clockOutAt.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: true 
+    });
+    const hoursWorked = record.totalHours ? `${record.totalHours.toFixed(2)} hours` : 'your shift';
+    const earnings = record.earnings ? `$${record.earnings.toFixed(2)}` : '';
+    
+    // Get business ID for employer notification
+    let businessId = null;
+    if (record.business) {
+      businessId = record.business._id || record.business;
+    } else if (record.job) {
+      await record.populate('job');
+      businessId = record.job.business;
+    }
+
+    // Notification to worker confirming clock-out
+    await notificationService.sendSafeNotification({
+      recipient: record.worker._id,
+      type: 'attendance',
+      priority: 'low',
+      title: 'Clocked out successfully',
+      message: `You clocked out at ${timeStr} from ${jobTitle}. You worked ${hoursWorked}${earnings ? ` and earned ${earnings}` : ''}.`,
+      metadata: {
+        attendanceId: record._id,
+        action: 'clock_out',
+        clockOutTime: record.clockOutAt,
+        totalHours: record.totalHours,
+        earnings: record.earnings,
+        distance: record.clockOutDistance,
+        jobTitle: record.jobTitleSnapshot,
+        businessId
+      }
+    });
+
+    // Notification to employer about worker clock-out
+    if (record.employer) {
+      await notificationService.sendSafeNotification({
+        recipient: record.employer._id || record.employer,
+        type: 'attendance',
+        priority: 'low',
+        title: `${workerName} clocked out`,
+        message: `${workerName} clocked out at ${timeStr} from ${jobTitle}. They worked ${hoursWorked}${earnings ? ` and earned ${earnings}` : ''}.`,
+        metadata: {
+          attendanceId: record._id,
+          action: 'clock_out',
+          workerId: record.worker._id,
+          workerName,
+          clockOutTime: record.clockOutAt,
+          totalHours: record.totalHours,
+          earnings: record.earnings,
+          distance: record.clockOutDistance,
+          jobTitle: record.jobTitleSnapshot,
+          businessId
+        },
+        senderUserId: record.worker._id
+      });
+    }
+
+    // Notification for overtime if applicable (over 8 hours)
+    if (record.totalHours && record.totalHours > 8) {
+      await notificationService.sendSafeNotification({
+        recipient: record.employer._id || record.employer,
+        type: 'attendance',
+        priority: 'medium',
+        title: `${workerName} worked overtime`,
+        message: `${workerName} worked ${record.totalHours.toFixed(2)} hours for ${jobTitle}, which is ${(record.totalHours - 8).toFixed(2)} hours overtime.`,
+        metadata: {
+          attendanceId: record._id,
+          action: 'overtime_alert',
+          workerId: record.worker._id,
+          workerName,
+          totalHours: record.totalHours,
+          overtimeHours: record.totalHours - 8,
+          jobTitle: record.jobTitleSnapshot,
+          businessId
+        },
+        senderUserId: record.worker._id
+      });
+    }
+  } catch (notificationError) {
+    console.error('[ATTENDANCE] Failed to send clock-out notifications:', notificationError);
+    // Don't fail the clock-out if notifications fail
+  }
+
   res.status(200).json({ status: 'success', data: record });
 });
 
@@ -1311,7 +1497,7 @@ exports.getWorkersEmployedOnDate = catchAsync(async (req, res, next) => {
 
 // Get all attendance records by userId (for both worker and employer)
 exports.getAttendanceByUserId = catchAsync(async (req, res) => {
-  const { userId } = req.params;
+  const userId = req.params.userId || req.params.id;
   const { startDate, endDate, status } = req.query;
   
   if (!userId) {
