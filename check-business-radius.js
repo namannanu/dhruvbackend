@@ -1,0 +1,34 @@
+const mongoose = require('mongoose');
+require('dotenv').config();
+
+// Connect to MongoDB
+mongoose.connect(process.env.DATABASE_URL || process.env.MONGODB_URI);
+
+const Business = require('./src/modules/businesses/business.model');
+
+async function checkBusinessRadius() {
+  try {
+    console.log('🔍 Checking business allowedRadius in database...');
+    
+    const businesses = await Business.find({}).limit(5);
+    
+    console.log(`Found ${businesses.length} businesses:`);
+    businesses.forEach((business, index) => {
+      console.log(`\n${index + 1}. Business: ${business.name}`);
+      console.log(`   ID: ${business._id}`);
+      console.log(`   Location exists: ${!!business.location}`);
+      if (business.location) {
+        console.log(`   Coordinates: ${business.location.latitude}, ${business.location.longitude}`);
+        console.log(`   allowedRadius: ${business.location.allowedRadius}`);
+        console.log(`   setAt: ${business.location.setAt}`);
+      }
+    });
+    
+    process.exit(0);
+  } catch (error) {
+    console.error('Error:', error);
+    process.exit(1);
+  }
+}
+
+checkBusinessRadius();
