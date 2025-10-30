@@ -363,10 +363,6 @@ exports.createBusiness = catchAsync(async (req, res) => {
 });
 
 exports.updateBusiness = catchAsync(async (req, res) => {
-  console.log('🔍 Backend Debug: updateBusiness called');
-  console.log('🔍 Request body:', JSON.stringify(req.body, null, 2));
-  console.log('🔍 Business ID:', req.params.businessId);
-  
   const { business } = await ensureBusinessAccess({
     user: req.user,
     businessId: req.params.businessId,
@@ -389,9 +385,6 @@ exports.updateBusiness = catchAsync(async (req, res) => {
   // Process location data if being updated
   let updateData = { ...req.body };
   
-  console.log('🔍 Processing location data...');
-  console.log('🔍 req.body.location:', req.body.location);
-  
   if (req.body.location) {
     const locationData = {
       ...req.body.location,
@@ -400,8 +393,6 @@ exports.updateBusiness = catchAsync(async (req, res) => {
       setBy: req.user._id,
       setAt: new Date()
     };
-
-    console.log('🔍 Processed locationData:', JSON.stringify(locationData, null, 2));
 
     // Validate GPS coordinates if provided
     if (locationData.latitude && locationData.longitude) {
@@ -415,11 +406,9 @@ exports.updateBusiness = catchAsync(async (req, res) => {
 
     // Validate allowed radius if provided
     if (locationData.allowedRadius !== undefined) {
-      console.log('🔍 Validating allowedRadius:', locationData.allowedRadius);
       if (locationData.allowedRadius < 10 || locationData.allowedRadius > 5000) {
         throw new AppError('Allowed radius must be between 10 and 5000 meters', 400);
       }
-      console.log('✅ allowedRadius validation passed');
     }
 
     updateData.location = locationData;
@@ -460,14 +449,7 @@ exports.updateBusiness = catchAsync(async (req, res) => {
     business.logoUrl = logoUpdates.logoUrl || undefined;
   }
 
-  console.log('🔍 Final business object before save:');
-  console.log('🔍 business.location.allowedRadius:', business.location?.allowedRadius);
-  console.log('🔍 business.location:', JSON.stringify(business.location, null, 2));
-
   await business.save();
-  
-  console.log('✅ Business saved successfully');
-  console.log('🔍 Saved business.location.allowedRadius:', business.location?.allowedRadius);
 
   const responseBusiness = serializeBusiness(business);
 

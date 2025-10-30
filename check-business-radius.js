@@ -1,8 +1,18 @@
 const mongoose = require('mongoose');
-require('dotenv').config();
+const path = require('path');
+const dotenv = require('dotenv');
+
+// Load environment variables from the correct path
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+dotenv.config({ path: path.join(__dirname, 'src', 'config', 'config.env') });
 
 // Connect to MongoDB
-mongoose.connect(process.env.DATABASE_URL || process.env.MONGODB_URI);
+if (!process.env.MONGO_URI) {
+  console.error('❌ MONGO_URI environment variable is not set');
+  process.exit(1);
+}
+
+mongoose.connect(process.env.MONGO_URI);
 
 const Business = require('./src/modules/businesses/business.model');
 

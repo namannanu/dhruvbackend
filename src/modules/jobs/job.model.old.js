@@ -23,6 +23,15 @@ const overtimeSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const locationSchema = new mongoose.Schema(
+  {
+    // DEPRECATED: Jobs should inherit location from business
+    // This schema is kept for backward compatibility but should not be used
+    // Use business.location instead
+  },
+  { _id: false }
+);
+
 const jobSchema = new mongoose.Schema(
   {
     employer: {
@@ -39,6 +48,10 @@ const jobSchema = new mongoose.Schema(
       ref: 'Business',
       required: true // Jobs must belong to a business
     },
+    business: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Business'
+    },
     title: { type: String, required: true, trim: true },
     description: { type: String, required: true },
     hourlyRate: { type: Number, required: true },
@@ -46,7 +59,7 @@ const jobSchema = new mongoose.Schema(
     urgency: { type: String, enum: ['low', 'medium', 'high'], default: 'low' },
     tags: { type: [String], default: [] },
     schedule: scheduleSchema,
-    // Location data is inherited from business.location
+    // location: locationSchema, // REMOVED: Jobs inherit location from business
     verificationRequired: { type: Boolean, default: false },
     premiumRequired: { type: Boolean, default: false },
     status: {
@@ -113,36 +126,20 @@ jobSchema.statics.findByUserId = function(userId) {
     });
 };
 
-// Instance method to validate worker location against business location
-jobSchema.methods.validateWorkerLocation = async function(workerLocation) {
-  // Populate business if not already populated
-  if (!this.populated('businessId')) {
-    await this.populate('businessId');
-  }
-  
-  const business = this.businessId;
-  if (!business || !business.location) {
+// Instance method to validate worker location against job location
+jobSchema.methods.validateWorkerLocation = function(workerLocation) {
+  if (!this.location || !this.location.latitude || !this.location.longitude) {
     return {
-      isValid: true, // No location restrictions if business location not set
-      reason: 'No location validation required - business location not configured',
+      isValid: true, // No location restrictions if job location not set
+      reason: 'No location validation required',
       distance: null
     };
   }
 
-  const businessLocation = business.location;
-  
-  if (!businessLocation.latitude || !businessLocation.longitude) {
+  if (!this.location.isActive) {
     return {
       isValid: false,
-      reason: 'Business location coordinates not set',
-      distance: null
-    };
-  }
-
-  if (!businessLocation.isActive) {
-    return {
-      isValid: false,
-      reason: 'Business location is currently disabled for attendance',
+      reason: 'Location is currently disabled for attendance',
       distance: null
     };
   }
@@ -155,40 +152,38 @@ jobSchema.methods.validateWorkerLocation = async function(workerLocation) {
     };
   }
 
-  const distance = this.calculateDistanceToBusinessLocation(workerLocation);
-  const allowedRadius = businessLocation.allowedRadius || 150;
+  const distance = this.calculateDistanceToLocation(workerLocation);
+  const allowedRadius = this.location.allowedRadius || 150;
 
   if (distance <= allowedRadius) {
     return {
       isValid: true,
       reason: 'Worker is within allowed radius',
-      distance: Math.round(distance * 100) / 100,
-      allowedRadius: allowedRadius
+      distance: Math.round(distance * 100) / 100, // Round to 2 decimal places
+      allowedRadius
     };
   } else {
     return {
       isValid: false,
       reason: `Worker is ${Math.round(distance)}m away from job location (max allowed: ${allowedRadius}m)`,
       distance: Math.round(distance * 100) / 100,
-      allowedRadius: allowedRadius
+      allowedRadius
     };
   }
 };
 
 // Instance method to calculate distance using Haversine formula
-jobSchema.methods.calculateDistanceToBusinessLocation = function(workerLocation) {
-  const business = this.businessId;
-  if (!business?.location?.latitude || !business?.location?.longitude || 
+jobSchema.methods.calculateDistanceToLocation = function(workerLocation) {
+  if (!this.location?.latitude || !this.location?.longitude || 
       !workerLocation?.latitude || !workerLocation?.longitude) {
     return Infinity;
   }
 
-  const businessLocation = business.location;
   const earthRadius = 6371000; // Earth's radius in meters
-  const lat1Rad = businessLocation.latitude * Math.PI / 180;
+  const lat1Rad = this.location.latitude * Math.PI / 180;
   const lat2Rad = workerLocation.latitude * Math.PI / 180;
-  const deltaLatRad = (workerLocation.latitude - businessLocation.latitude) * Math.PI / 180;
-  const deltaLngRad = (workerLocation.longitude - businessLocation.longitude) * Math.PI / 180;
+  const deltaLatRad = (workerLocation.latitude - this.location.latitude) * Math.PI / 180;
+  const deltaLngRad = (workerLocation.longitude - this.location.longitude) * Math.PI / 180;
 
   const a = Math.sin(deltaLatRad / 2) * Math.sin(deltaLatRad / 2) +
       Math.cos(lat1Rad) * Math.cos(lat2Rad) *
@@ -198,27 +193,25 @@ jobSchema.methods.calculateDistanceToBusinessLocation = function(workerLocation)
   return earthRadius * c; // Distance in meters
 };
 
-// Virtual to get business location info
-jobSchema.virtual('businessLocationInfo').get(function() {
-  const business = this.businessId;
-  if (!business?.location) return null;
+// Virtual to get formatted location info
+jobSchema.virtual('locationInfo').get(function() {
+  if (!this.location) return null;
   
-  const businessLocation = business.location;
   return {
-    hasGPS: Boolean(businessLocation.latitude && businessLocation.longitude),
-    formattedAddress: businessLocation.formattedAddress || businessLocation.line1,
-    businessName: business.name,
-    allowedRadius: businessLocation.allowedRadius || 150,
-    isActive: businessLocation.isActive !== false,
-    coordinates: businessLocation.latitude && businessLocation.longitude ? {
-      latitude: businessLocation.latitude,
-      longitude: businessLocation.longitude
+    hasGPS: Boolean(this.location.latitude && this.location.longitude),
+    formattedAddress: this.location.formattedAddress || this.location.address,
+    name: this.location.name,
+    allowedRadius: this.location.allowedRadius || 150,
+    isActive: this.location.isActive !== false,
+    coordinates: this.location.latitude && this.location.longitude ? {
+      latitude: this.location.latitude,
+      longitude: this.location.longitude
     } : null
   };
 });
 
 jobSchema.index({ employer: 1, status: 1 });
-jobSchema.index({ businessId: 1, status: 1 });
+jobSchema.index({ 'location.latitude': 1, 'location.longitude': 1 });
 jobSchema.index({ isPublished: 1, status: 1 });
 
 module.exports = mongoose.model('Job', jobSchema);
