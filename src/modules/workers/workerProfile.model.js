@@ -38,6 +38,39 @@ const dailyAvailabilitySchema = new mongoose.Schema({
   timeSlots: [timeSlotSchema]
 }, { _id: false });
 
+// Profile picture asset schema (similar to business logo)
+const profilePictureAssetSchema = new mongoose.Schema(
+  {
+    url: { type: String, trim: true },
+    mimeType: { type: String, trim: true },
+    size: Number, // bytes
+    width: Number,
+    height: Number,
+    storageKey: { type: String, trim: true }, // e.g. S3 key or CDN path
+    uploadedAt: { type: Date, default: Date.now },
+    source: {
+      type: String,
+      enum: ['url', 'upload', 'generated'],
+      default: 'url',
+    },
+    data: {
+      type: Buffer,
+      select: false,
+    },
+  },
+  { _id: false }
+);
+
+const profilePictureSchema = new mongoose.Schema(
+  {
+    original: profilePictureAssetSchema,
+    square: profilePictureAssetSchema,
+    altText: { type: String, trim: true },
+    updatedAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 const workerProfileSchema = new mongoose.Schema(
   {
     user: {
@@ -54,6 +87,11 @@ const workerProfileSchema = new mongoose.Schema(
     completedJobs: { type: Number, default: 0 },
     totalEarnings: { type: Number, default: 0 },
     weeklyEarnings: { type: Number, default: 0 },
+    
+    // Profile picture fields
+    profilePictureUrl: { type: String, trim: true },
+    profilePicture: profilePictureSchema,
+    
     preferredRadiusMiles: { type: Number, default: 25 },
     notificationsEnabled: { type: Boolean, default: true },
     emailNotificationsEnabled: { type: Boolean, default: true },
