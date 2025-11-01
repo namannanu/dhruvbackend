@@ -41,6 +41,11 @@ exports.refreshToken = catchAsync(async (req, res) => {
   await authService.issueAuthResponse(res, data, 200);
 });
 
+exports.getUserBusinesses = catchAsync(async (req, res) => {
+  const businesses = await authService.getUserBusinesses(req.user._id);
+  res.status(200).json({ status: 'success', data: businesses });
+});
+
 exports.getUserPermissions = catchAsync(async (req, res) => {
   const { businessId } = req.query;
   

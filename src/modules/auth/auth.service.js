@@ -120,6 +120,30 @@ const buildBusinessCollections = async (userId) => {
   };
 };
 
+const buildFastUserResponse = async (user) => {
+  const base = user.toObject({ getters: true });
+  delete base.password;
+
+  let response = { user: base };
+
+  if (base.userType === 'worker') {
+    // For workers, load profile quickly with lean query
+    const profile = await WorkerProfile.findOne({ user: user._id }).lean();
+    response.workerProfile = profile;
+  } else {
+    // For employers, defer business loading to improve login speed
+    const profile = await EmployerProfile.findOne({ user: user._id }).lean();
+    response.employerProfile = profile;
+    
+    // Return minimal business data for fast login
+    response.ownedBusinesses = [];
+    response.teamBusinesses = [];
+    response.needsBusinessLoad = true; // Flag for client to load businesses separately
+  }
+
+  return response;
+};
+
 const buildUserResponse = async (user, includeTeamContext = true) => {
   const base = user.toObject({ getters: true });
   delete base.password;
@@ -221,7 +245,9 @@ exports.login = async ({ email, password }) => {
   }
   user.lastLoginAt = new Date();
   await user.save();
-  return buildUserResponse(user);
+  
+  // Use fast login response for immediate authentication
+  return buildFastUserResponse(user);
 };
 
 exports.issueAuthResponse = async (res, data, statusCode = 200) => {
