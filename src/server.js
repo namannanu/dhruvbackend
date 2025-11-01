@@ -18,6 +18,8 @@ const ensureDatabaseConnection = () => {
   return connectionPromise;
 };
 
+
+
 const startServer = async () => {
   try {
     console.log('WorkConnect backend starting...');
