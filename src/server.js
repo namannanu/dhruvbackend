@@ -1,11 +1,17 @@
 const dotenv = require('dotenv');
 const path = require('path');
+
+// Load environment variables with explicit paths
+const envPath = path.resolve(__dirname, '..', '.env');
+const configEnvPath = path.join(__dirname, 'config', 'config.env');
+
+// Load .env first (higher priority)
+dotenv.config({ path: envPath });
+// Then load config.env as fallback
+dotenv.config({ path: configEnvPath });
+
 const connectDB = require('./config/db');
 const app = require('./app');
-
-// Load environment variables, prioritising project-level .env if present.
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-dotenv.config({ path: path.join(__dirname, 'config', 'config.env') });
 
 const PORT = process.env.PORT || 3000;
 
