@@ -3,7 +3,6 @@ const WorkerProfile = require('./workerProfile.model');
 const WorkerEmployment = require('./workerEmployment.model');
 const User = require('../users/user.model');
 const Application = require('../applications/application.model');
-const { buildDataUrl } = require('../../shared/utils/image');
 const AttendanceRecord = require('../attendance/attendance.model');
 const Shift = require('../shifts/shift.model');
 const SwapRequest = require('../shifts/swapRequest.model');
