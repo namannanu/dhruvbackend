@@ -29,13 +29,15 @@ mongoose.connection.on('disconnected', () => {
   cached.promise = null;
 });
 
-const connectDB = async () => {
+const connectDB = async (retryCount = 0) => {
+  const MAX_RETRIES = 3;
+  
   if (!MONGODB_URI) {
     throw new Error('MONGO_URI environment variable is not set. Please check your .env file.');
   }
 
-  // Return existing connection if available
-  if (cached.conn) {
+  // Return existing connection if available and not stale
+  if (cached.conn && cached.conn.readyState === 1) {
     return cached.conn;
   }
 
@@ -43,28 +45,55 @@ const connectDB = async () => {
     if (!cached.promise) {
       const opts = {
         bufferCommands: false,
-        maxPoolSize: 2,
-        serverSelectionTimeoutMS: 5000,
-        socketTimeoutMS: 45000,
+        maxPoolSize: 1, // Reduced for serverless
+        minPoolSize: 0,
+        maxIdleTimeMS: 10000, // Close connections after 10 seconds of inactivity
+        serverSelectionTimeoutMS: 8000, // Increased for better reliability
+        socketTimeoutMS: 0, // Disable socket timeout
+        connectTimeoutMS: 8000, // Increased for better reliability
         family: 4,
-        connectTimeoutMS: 10000,
         retryWrites: true,
+        retryReads: true,
         w: 'majority',
-        autoIndex: process.env.NODE_ENV !== 'production'
+        heartbeatFrequencyMS: 10000,
+        autoIndex: process.env.NODE_ENV !== 'production',
+        // Additional serverless optimizations
+        keepAlive: true,
+        keepAliveInitialDelay: 0,
+        directConnection: false,
+        compressors: ['snappy', 'zlib']
       };
 
       // Store the promise, not the await result
       cached.promise = mongoose.connect(MONGODB_URI, opts);
     }
 
-    // Await the cached promise
-    cached.conn = await cached.promise;
+    // Await the cached promise with timeout
+    cached.conn = await Promise.race([
+      cached.promise,
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Connection timeout')), 10000)
+      )
+    ]);
+    
     console.log('✅ MongoDB connected successfully');
     return cached.conn;
   } catch (error) {
+    console.error('❌ MongoDB connection error:', error);
     cached.promise = null;
     cached.conn = null;
-    console.error('❌ MongoDB connection error:', error);
+    
+    // Retry logic for serverless environments
+    if (retryCount < MAX_RETRIES && (
+      error.message.includes('timeout') || 
+      error.message.includes('ENOTFOUND') ||
+      error.message.includes('MongoNetworkTimeoutError')
+    )) {
+      console.log(`Retrying connection... Attempt ${retryCount + 1}/${MAX_RETRIES}`);
+      await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1))); // Exponential backoff
+      return connectDB(retryCount + 1);
+    }
+    
     throw error;
   }
 };

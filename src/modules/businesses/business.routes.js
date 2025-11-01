@@ -2,6 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const controller = require('./business.controller');
 const { protect, restrictTo } = require('../../shared/middlewares/auth.middleware');
+const dbHealthCheck = require('../../shared/middlewares/dbHealthCheck');
 const AppError = require('../../shared/utils/appError');
 
 const router = express.Router();
@@ -17,6 +18,8 @@ const upload = multer({
   }
 });
 
+// Apply database health check to all routes
+router.use(dbHealthCheck);
 router.use(protect);
 
 // Permission checks removed per user request

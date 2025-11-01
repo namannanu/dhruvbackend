@@ -4,6 +4,7 @@ const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
 const AppError = require('./shared/utils/appError');
 const globalErrorHandler = require('./shared/middlewares/globalErrorHandler');
+const requestTimeout = require('./shared/middlewares/requestTimeout');
 const routes = require('./routes');
 
 const app = express();
@@ -63,6 +64,11 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
+
+// Add request timeout middleware for serverless environments
+if (process.env.NODE_ENV === 'production') {
+  app.use(requestTimeout(25000)); // 25 second timeout for Vercel
+}
 
 app.get('/health', (req, res) => {
   res.status(200).json({

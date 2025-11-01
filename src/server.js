@@ -47,11 +47,37 @@ const startServer = async () => {
 // Serverless handler for Vercel
 const handler = async (req, res) => {
   try {
-    // Connect to MongoDB
+    // Set timeout for the entire request
+    req.setTimeout = req.setTimeout || function() {};
+    res.setTimeout = res.setTimeout || function() {};
+    
+    // Connect to MongoDB with error handling
     await connectDB();
+    
+    // Set CORS headers for serverless
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Business-Id');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    
+    // Handle preflight requests
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
+    }
+    
     return app(req, res);
   } catch (error) {
     console.error('Server error:', error);
+    
+    // Handle specific MongoDB timeout errors
+    if (error.message.includes('timeout') || error.name === 'MongoNetworkTimeoutError') {
+      return res.status(503).json({
+        status: 'error',
+        message: 'Database connection timeout. Please try again.',
+        code: 'DB_TIMEOUT'
+      });
+    }
+    
     return res.status(500).json({
       status: 'error',
       message: error.message || 'Internal server error'
