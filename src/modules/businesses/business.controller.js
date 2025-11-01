@@ -9,15 +9,223 @@ const {
   getAccessibleBusinessIds,
 } = require('../../shared/utils/businessAccess');
 
+const sharp = require('sharp');
+
 const resolveString = (value) =>
   typeof value === 'string' && value.trim().length ? value.trim() : undefined;
 
-const sharp = require('sharp');
+const MAX_LOGO_DIMENSION = 512;
+const SQUARE_LOGO_DIMENSION = 256;
+const TARGET_JPEG_QUALITY = 80;
+const MIN_OPTIMIZATION_DELTA = 512; // Require at least 0.5 KB savings
+const MIN_OPTIMIZATION_SIZE = 10 * 1024; // Skip tiny images (<10 KB)
 
 function buildDataUrl({ buffer, mimeType }) {
   if (!buffer || !mimeType) return undefined;
   return `data:${mimeType};base64,${buffer.toString('base64')}`;
 }
+
+const normalizeMimeType = (mimeTypeOrFormat, hasAlpha) => {
+  const normalized = resolveString(mimeTypeOrFormat)?.toLowerCase();
+  if (!normalized) return hasAlpha ? 'image/png' : 'image/jpeg';
+  if (normalized.startsWith('image/')) return normalized;
+
+  switch (normalized) {
+    case 'jpeg':
+    case 'jpg':
+      return 'image/jpeg';
+    case 'png':
+      return 'image/png';
+    case 'webp':
+      return 'image/webp';
+    case 'gif':
+      return hasAlpha ? 'image/png' : 'image/gif';
+    case 'avif':
+      return 'image/avif';
+    default:
+      return hasAlpha ? 'image/png' : 'image/jpeg';
+  }
+};
+
+const optimizeImageBuffer = async (buffer, mimeType) => {
+  if (!Buffer.isBuffer(buffer) || buffer.length < MIN_OPTIMIZATION_SIZE) {
+    return { buffer, mimeType };
+  }
+
+  try {
+    const baseInstance = sharp(buffer, { failOnError: false });
+    const metadata = await baseInstance.metadata();
+
+    const hasAlpha = Boolean(metadata.hasAlpha);
+    const normalizedMime = normalizeMimeType(
+      mimeType ?? metadata.format,
+      hasAlpha
+    );
+
+    let pipeline = sharp(buffer, { failOnError: false });
+    if (
+      metadata.width &&
+      metadata.height &&
+      (metadata.width > MAX_LOGO_DIMENSION ||
+        metadata.height > MAX_LOGO_DIMENSION)
+    ) {
+      pipeline = pipeline.resize({
+        width: MAX_LOGO_DIMENSION,
+        height: MAX_LOGO_DIMENSION,
+        fit: 'inside',
+        withoutEnlargement: true,
+      });
+    }
+
+    let optimizedBuffer;
+    let optimizedMime = normalizedMime;
+
+    if (normalizedMime.includes('svg')) {
+      // Vector data should stay as-is
+      return { buffer, mimeType: normalizedMime };
+    }
+
+    if (normalizedMime.includes('png') || hasAlpha) {
+      optimizedBuffer = await pipeline
+        .webp({
+          quality: TARGET_JPEG_QUALITY,
+          smartSubsample: true,
+          alphaQuality: TARGET_JPEG_QUALITY,
+        })
+        .toBuffer();
+      optimizedMime = 'image/webp';
+    } else if (normalizedMime.includes('webp')) {
+      optimizedBuffer = await pipeline
+        .webp({
+          quality: TARGET_JPEG_QUALITY,
+          smartSubsample: true,
+        })
+        .toBuffer();
+      optimizedMime = 'image/webp';
+    } else if (normalizedMime.includes('gif')) {
+      optimizedBuffer = await pipeline
+        .webp({
+          quality: TARGET_JPEG_QUALITY,
+          smartSubsample: true,
+        })
+        .toBuffer();
+      optimizedMime = 'image/webp';
+    } else if (normalizedMime.includes('avif')) {
+      optimizedBuffer = await pipeline
+        .avif({
+          quality: TARGET_JPEG_QUALITY,
+        })
+        .toBuffer();
+      optimizedMime = 'image/avif';
+    } else {
+      optimizedBuffer = await pipeline
+        .jpeg({
+          quality: TARGET_JPEG_QUALITY,
+          mozjpeg: true,
+        })
+        .toBuffer();
+      optimizedMime = 'image/jpeg';
+    }
+
+    if (
+      !optimizedBuffer ||
+      optimizedBuffer.length + MIN_OPTIMIZATION_DELTA >= buffer.length
+    ) {
+      return { buffer, mimeType: normalizedMime };
+    }
+
+    return { buffer: optimizedBuffer, mimeType: optimizedMime };
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn('⚠️ Logo optimization skipped due to error:', error);
+    return { buffer, mimeType };
+  }
+};
+
+const optimizeLogoAsset = async (asset) => {
+  if (!asset?.data || !Buffer.isBuffer(asset.data)) {
+    return asset;
+  }
+
+  const currentMime =
+    resolveString(asset.mimeType) ||
+    resolveString(asset.contentType) ||
+    'image/png';
+
+  const { buffer: optimizedBuffer, mimeType: optimizedMime } =
+    await optimizeImageBuffer(asset.data, currentMime);
+
+  if (optimizedBuffer === asset.data) {
+    if (!asset.url) {
+      asset.url = buildDataUrl({ buffer: asset.data, mimeType: currentMime });
+    }
+    return asset;
+  }
+
+  asset.data = optimizedBuffer;
+  asset.size = optimizedBuffer.length;
+  asset.mimeType = optimizedMime;
+  asset.url = buildDataUrl({
+    buffer: optimizedBuffer,
+    mimeType: optimizedMime,
+  });
+
+  return asset;
+};
+
+const optimizeLogoUpdates = async (updates) => {
+  if (!updates?.logo) return;
+
+  const originalAsset = updates.logo.original;
+  if (originalAsset) {
+    await optimizeLogoAsset(originalAsset);
+    if (
+      originalAsset.url &&
+      (!updates.logoUrl || updates.logoUrl.startsWith('data:'))
+    ) {
+      updates.logoUrl = originalAsset.url;
+    }
+
+    if (!updates.logo.square && Buffer.isBuffer(originalAsset.data)) {
+      try {
+        const squareBuffer = await sharp(originalAsset.data, {
+          failOnError: false,
+        })
+          .resize({
+            width: SQUARE_LOGO_DIMENSION,
+            height: SQUARE_LOGO_DIMENSION,
+            fit: 'cover',
+            position: 'centre',
+          })
+          .toBuffer();
+
+        const squareMime =
+          resolveString(originalAsset.mimeType) ||
+          resolveString(originalAsset.contentType) ||
+          'image/png';
+
+        updates.logo.square = {
+          data: squareBuffer,
+          mimeType: squareMime,
+          size: squareBuffer.length,
+          source: originalAsset.source || 'upload',
+          uploadedAt: originalAsset.uploadedAt || new Date(),
+          url: buildDataUrl({
+            buffer: squareBuffer,
+            mimeType: squareMime,
+          }),
+        };
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.warn('⚠️ Failed to create square logo variant:', error);
+      }
+    }
+  }
+
+  if (updates.logo.square) {
+    await optimizeLogoAsset(updates.logo.square);
+  }
+};
 
 const bufferFromUnknown = (value) => {
   if (!value) return undefined;
@@ -120,7 +328,9 @@ const buildLogoAsset = (rawAsset) => {
   const dataBuffer =
     bufferFromUnknown(rawAsset?.data) ||
     bufferFromUnknown(rawAsset?.buffer) ||
-    bufferFromUnknown(rawAsset?.base64);
+    bufferFromUnknown(rawAsset?.base64) ||
+    (typeof rawAsset === 'string' ? bufferFromUnknown(rawAsset) : undefined) ||
+    bufferFromUnknown(rawAsset?.url);
 
   if (!url && dataBuffer) {
     const mime =
@@ -331,6 +541,8 @@ exports.createBusiness = catchAsync(async (req, res) => {
     logoUrl: req.body.logoUrl,
   });
 
+  await optimizeLogoUpdates(logoUpdates);
+
   if (Object.prototype.hasOwnProperty.call(businessData, 'logo')) {
     delete businessData.logo;
   }
@@ -431,6 +643,8 @@ exports.updateBusiness = catchAsync(async (req, res) => {
     logo: updateData.logo,
     logoUrl: updateData.logoUrl,
   });
+
+  await optimizeLogoUpdates(logoUpdates);
 
   if (Object.prototype.hasOwnProperty.call(updateData, 'logo')) {
     delete updateData.logo;
