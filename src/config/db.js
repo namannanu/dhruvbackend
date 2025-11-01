@@ -1,41 +1,62 @@
 const mongoose = require('mongoose');
 
-let isConnected = false; // track connection state
+let cachedConnection = null;
 
 const connectDB = async () => {
-  if (isConnected) {
-    return;
+  if (cachedConnection) {
+    console.log('Using cached database connection');
+    return cachedConnection;
   }
 
   if (!process.env.MONGO_URI) {
     throw new Error('MONGO_URI environment variable is not set');
   }
 
-  mongoose.set('strictQuery', true);
-  mongoose.set('strictPopulate', false);
+  try {
+    console.log('Creating new database connection...');
+    
+    // Serverless-friendly options
+    const opts = {
+      bufferCommands: false,
+      maxPoolSize: 2,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      family: 4,
+      connectTimeoutMS: 10000,
+      keepAlive: true,
+      keepAliveInitialDelay: 300000,
+      retryWrites: true,
+      w: 'majority',
+      autoIndex: false
+    };
 
-  // Handle connection errors
-  mongoose.connection.on('error', (err) => {
-    console.error('MongoDB connection error:', err);
-    isConnected = false;
-  });
+    // Create connection
+    const connection = await mongoose.connect(process.env.MONGO_URI, opts);
+    
+    // Cache the connection
+    cachedConnection = connection;
+    
+    // Handle connection events
+    mongoose.connection.on('connected', () => {
+      console.log('MongoDB connected successfully');
+    });
 
-  mongoose.connection.on('disconnected', () => {
-    console.log('MongoDB disconnected');
-    isConnected = false;
-  });
+    mongoose.connection.on('error', (err) => {
+      console.error('MongoDB connection error:', err);
+      cachedConnection = null;
+    });
 
-  // Handle process termination
-  process.on('SIGINT', async () => {
-    try {
-      await mongoose.connection.close();
-      console.log('MongoDB connection closed through app termination');
-      process.exit(0);
-    } catch (err) {
-      console.error('Error during MongoDB connection closure:', err);
-      process.exit(1);
-    }
-  });
+    mongoose.connection.on('disconnected', () => {
+      console.log('MongoDB disconnected');
+      cachedConnection = null;
+    });
+
+    // Return the connection
+    return connection;
+  } catch (error) {
+    console.error('MongoDB connection error:', error);
+    throw error;
+  }
 
   try {
     await mongoose.connect(process.env.MONGO_URI, {
