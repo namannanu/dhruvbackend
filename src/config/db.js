@@ -1,21 +1,26 @@
 const mongoose = require('mongoose');
 
-let cachedConnection = null;
+// Cache the database connection
+const MONGODB_URI = process.env.MONGO_URI;
+let cached = global.mongoose;
+
+if (!cached) {
+  cached = global.mongoose = { conn: null, promise: null };
+}
 
 const connectDB = async () => {
-  if (cachedConnection) {
+  if (cached.conn) {
     console.log('Using cached database connection');
-    return cachedConnection;
+    return cached.conn;
   }
 
-  if (!process.env.MONGO_URI) {
+  if (!MONGODB_URI) {
     throw new Error('MONGO_URI environment variable is not set');
   }
 
-  try {
+  if (!cached.promise) {
     console.log('Creating new database connection...');
     
-    // Serverless-friendly options
     const opts = {
       bufferCommands: false,
       maxPoolSize: 2,
@@ -30,31 +35,23 @@ const connectDB = async () => {
       autoIndex: false
     };
 
-    // Create connection
-    const connection = await mongoose.connect(process.env.MONGO_URI, opts);
-    
-    // Cache the connection
-    cachedConnection = connection;
-    
-    // Handle connection events
-    mongoose.connection.on('connected', () => {
-      console.log('MongoDB connected successfully');
-    });
+    cached.promise = mongoose.connect(MONGODB_URI, opts)
+      .then((mongoose) => {
+        console.log('MongoDB connected successfully');
+        return mongoose;
+      })
+      .catch((err) => {
+        console.error('MongoDB connection error:', err);
+        cached.promise = null;
+        throw err;
+      });
+  }
 
-    mongoose.connection.on('error', (err) => {
-      console.error('MongoDB connection error:', err);
-      cachedConnection = null;
-    });
-
-    mongoose.connection.on('disconnected', () => {
-      console.log('MongoDB disconnected');
-      cachedConnection = null;
-    });
-
-    // Return the connection
-    return connection;
+  try {
+    cached.conn = await cached.promise;
+    return cached.conn;
   } catch (error) {
-    console.error('MongoDB connection error:', error);
+    cached.promise = null;
     throw error;
   }
 

@@ -38,22 +38,34 @@ const startServer = async () => {
   }
 };
 
+// Serverless handler for Vercel
 const handler = async (req, res) => {
   try {
-    await ensureDatabaseConnection();
+    // Connect to MongoDB if not already connected
+    await connectDB().catch(err => {
+      console.error('Failed to connect to MongoDB:', err);
+      throw err;
+    });
+    
+    // Handle the request
     return app(req, res);
   } catch (error) {
-    console.error('Failed to initialise MongoDB connection:', error.message);
-    res
-      .status(500)
-      .json({ status: 'error', message: 'Database connection failed' });
+    console.error('Server error:', error);
+    return res.status(500).json({ 
+      status: 'error', 
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
+// Start server if running directly (not in serverless environment)
 if (require.main === module) {
-  startServer();
+  startServer().catch(err => {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  });
 }
 
+// Export handler for serverless
 module.exports = handler;
-module.exports.ensureDatabaseConnection = ensureDatabaseConnection;
-module.exports.app = app;
