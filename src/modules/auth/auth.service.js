@@ -131,17 +131,97 @@ const buildFastUserResponse = async (user) => {
     const profile = await WorkerProfile.findOne({ user: user._id }).lean();
     response.workerProfile = profile;
   } else {
-    // For employers, defer business loading to improve login speed
+    // For employers, load profile and minimal business context for permissions
     const profile = await EmployerProfile.findOne({ user: user._id }).lean();
     response.employerProfile = profile;
     
-    // Return minimal business data for fast login
-    response.ownedBusinesses = [];
-    response.teamBusinesses = [];
-    response.needsBusinessLoad = true; // Flag for client to load businesses separately
+    // Load minimal business context needed for JWT permissions
+    const minimalBusinessContext = await buildMinimalBusinessContext(user._id);
+    response.ownedBusinesses = minimalBusinessContext.ownedBusinesses;
+    response.teamBusinesses = minimalBusinessContext.teamBusinesses;
+    
+    // Set business context for JWT if available
+    if (minimalBusinessContext.businessContext) {
+      response.businessContext = minimalBusinessContext.businessContext;
+    }
+    
+    response.needsFullBusinessLoad = true; // Flag for client to load full business data separately
   }
 
   return response;
+};
+
+const buildMinimalBusinessContext = async (userId) => {
+  const TeamMember = require('../businesses/teamMember.model');
+  const TeamAccess = require('../team/teamAccess.model');
+  const User = require('../users/user.model');
+
+  // Get user email for TeamAccess query
+  const user = await User.findById(userId).select('email').lean();
+  if (!user) {
+    throw new AppError('User not found', 404);
+  }
+
+  // Load only essential business context - just IDs and basic info for permissions
+  const [ownedBusinesses, firstTeamMember, firstTeamAccess] = await Promise.all([
+    Business.find({ owner: userId }).select('_id name').limit(5).lean(),
+    TeamMember.findOne({ user: userId, active: true })
+      .populate('business', '_id name')
+      .lean(),
+    TeamAccess.findOne({ 
+      userEmail: user.email.toLowerCase(), 
+      status: 'active' 
+    })
+      .populate('businessContext.businessId', '_id name')
+      .lean()
+  ]);
+
+  const result = {
+    ownedBusinesses: ownedBusinesses.map((business) => ({
+      businessId: business._id,
+      businessName: business.name,
+    })),
+    teamBusinesses: [],
+    businessContext: null
+  };
+
+  // Add minimal team business context for JWT permissions
+  if (firstTeamMember && firstTeamMember.business) {
+    result.teamBusinesses.push({
+      businessId: firstTeamMember.business._id,
+      businessName: firstTeamMember.business.name,
+      role: firstTeamMember.role,
+      permissions: firstTeamMember.permissions,
+      source: 'teamMember'
+    });
+    
+    result.businessContext = {
+      businessId: firstTeamMember.business._id,
+      businessName: firstTeamMember.business.name,
+      role: firstTeamMember.role,
+      permissions: firstTeamMember.permissions
+    };
+  } else if (firstTeamAccess && firstTeamAccess.businessContext?.businessId) {
+    const business = firstTeamAccess.businessContext.businessId;
+    result.teamBusinesses.push({
+      businessId: business._id,
+      businessName: business.name,
+      role: firstTeamAccess.role,
+      accessLevel: firstTeamAccess.accessLevel,
+      permissions: firstTeamAccess.permissions,
+      source: 'teamAccess'
+    });
+    
+    result.businessContext = {
+      businessId: business._id,
+      businessName: business.name,
+      role: firstTeamAccess.role,
+      accessLevel: firstTeamAccess.accessLevel,
+      permissions: firstTeamAccess.permissions
+    };
+  }
+
+  return result;
 };
 
 const buildUserResponse = async (user, includeTeamContext = true) => {

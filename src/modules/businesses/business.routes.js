@@ -2,7 +2,6 @@ const express = require('express');
 const multer = require('multer');
 const controller = require('./business.controller');
 const { protect, restrictTo } = require('../../shared/middlewares/auth.middleware');
-const { requirePermissions } = require('../../shared/middlewares/permissionMiddleware');
 const AppError = require('../../shared/utils/appError');
 
 const router = express.Router();
@@ -20,35 +19,32 @@ const upload = multer({
 
 router.use(protect);
 
-// Business management routes - create business without permission barriers for own businesses
-router.get('/', controller.listBusinesses); // No specific permission needed - users can see their businesses
-router.post('/', restrictTo('employer'), controller.createBusiness); // Direct creation for own businesses - no permission check needed
-router.patch('/:businessId', requirePermissions('edit_business'), controller.updateBusiness);
-router.delete('/:businessId', requirePermissions('delete_business'), controller.deleteBusiness);
-router.post('/:businessId/select', restrictTo('employer'), controller.selectBusiness); // No specific permission needed
+// Permission checks removed per user request
+// Business management routes 
+router.get('/', controller.listBusinesses);
+router.post('/', restrictTo('employer'), controller.createBusiness);
+router.patch('/:businessId', controller.updateBusiness);
+router.delete('/:businessId', controller.deleteBusiness);
+router.post('/:businessId/select', restrictTo('employer'), controller.selectBusiness);
 router.post(
   '/:businessId/logo',
-  requirePermissions('edit_business'),
   upload.single('logo'),
   controller.uploadBusinessLogo
 );
 router.get(
   '/:businessId/logo',
-  requirePermissions('view_business_profile'),
   controller.getBusinessLogo
 );
 
-// Team management routes with permission protection
-router.get('/:businessId/team-members', requirePermissions(['view_team_members']), controller.manageTeamMember.list);
-router.post('/:businessId/team-members', requirePermissions('invite_team_members'), controller.manageTeamMember.create);
+// Team management routes
+router.get('/:businessId/team-members', controller.manageTeamMember.list);
+router.post('/:businessId/team-members', controller.manageTeamMember.create);
 router.patch(
   '/:businessId/team-members/:memberId',
-  requirePermissions('edit_team_members'),
   controller.manageTeamMember.update
 );
 router.delete(
   '/:businessId/team-members/:memberId',
-  requirePermissions('remove_team_members'),
   controller.manageTeamMember.remove
 );
 
