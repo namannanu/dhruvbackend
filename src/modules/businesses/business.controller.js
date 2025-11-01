@@ -12,6 +12,8 @@ const {
 const resolveString = (value) =>
   typeof value === 'string' && value.trim().length ? value.trim() : undefined;
 
+const sharp = require('sharp');
+
 function buildDataUrl({ buffer, mimeType }) {
   if (!buffer || !mimeType) return undefined;
   return `data:${mimeType};base64,${buffer.toString('base64')}`;
@@ -473,39 +475,68 @@ exports.uploadBusinessLogo = catchAsync(async (req, res, next) => {
     requiredPermissions: 'edit_business',
   });
 
-  const { buffer, mimetype, size } = req.file;
+  const { buffer, mimetype } = req.file;
   if (!mimetype.startsWith('image/')) {
     throw new AppError('Only image uploads are supported', 400);
   }
 
-  const dataUrl = buildDataUrl({ buffer, mimeType: mimetype });
+  // Create optimized original and a square variant
+  try {
+    // Optimized original: resize down to max width 1024 while preserving aspect
+    const optimizedOriginalBuffer = await sharp(buffer)
+      .rotate()
+      .resize({ width: 1024, withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toBuffer();
 
-  business.logo = business.logo || {};
-  business.logo.original = {
-    data: buffer,
-    mimeType: mimetype,
-    size,
-    source: 'upload',
-    uploadedAt: new Date(),
-    url: dataUrl,
-  };
-  business.logo.square = undefined;
-  business.logo.updatedAt = new Date();
-  business.logoUrl = dataUrl;
+    // Square variant for avatars/cards
+    const squareBuffer = await sharp(buffer)
+      .rotate()
+      .resize(256, 256, { fit: 'cover' })
+      .webp({ quality: 80 })
+      .toBuffer();
 
-  await business.save();
+    const now = new Date();
 
-  const responseLogo = sanitizeLogoAssetForResponse(
-    business.logo?.original?.toObject?.() ?? business.logo?.original
-  );
+    business.logo = business.logo || {};
+    business.logo.original = {
+      data: optimizedOriginalBuffer,
+      mimeType: 'image/webp',
+      size: optimizedOriginalBuffer.length,
+      source: 'upload',
+      uploadedAt: now,
+      url: buildDataUrl({ buffer: optimizedOriginalBuffer, mimeType: 'image/webp' }),
+    };
 
-  res.status(200).json({
-    status: 'success',
-    data: {
-      logo: responseLogo,
-    },
-    message: 'Logo uploaded successfully',
-  });
+    business.logo.square = {
+      data: squareBuffer,
+      mimeType: 'image/webp',
+      size: squareBuffer.length,
+      source: 'upload',
+      uploadedAt: now,
+      url: buildDataUrl({ buffer: squareBuffer, mimeType: 'image/webp' }),
+    };
+
+    business.logo.updatedAt = now;
+    business.logoUrl = business.logo.square.url;
+
+    await business.save();
+
+    const responseLogo = sanitizeLogoAssetForResponse(
+      business.logo?.square?.toObject?.() ?? business.logo?.square
+    );
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        logo: responseLogo,
+      },
+      message: 'Logo uploaded and optimized successfully',
+    });
+  } catch (err) {
+    console.error('Error processing logo upload:', err);
+    throw new AppError('Failed to process uploaded image', 500);
+  }
 });
 
 exports.getBusinessLogo = catchAsync(async (req, res) => {
