@@ -41,24 +41,14 @@ const startServer = async () => {
 // Serverless handler for Vercel
 const handler = async (req, res) => {
   try {
-    // Connect to MongoDB if not already connected
+    // Connect to MongoDB
     await connectDB();
-    
-    // Handle the request
     return app(req, res);
   } catch (error) {
     console.error('Server error:', error);
-    
-    // Send appropriate error response
-    const statusCode = error.name === 'MongoParseError' ? 503 : 500;
-    const errorMessage = process.env.NODE_ENV === 'development' 
-      ? error.message 
-      : 'Internal server error';
-    
-    return res.status(statusCode).json({ 
-      status: 'error', 
-      message: errorMessage,
-      code: error.name || 'InternalError'
+    return res.status(500).json({
+      status: 'error',
+      message: error.message || 'Internal server error'
     });
   }
 };

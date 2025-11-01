@@ -1,32 +1,64 @@
 const mongoose = require('mongoose');
 
-const MONGODB_URI = process.env.MONGO_URI;
+let cachedDb = null;
 
-// Connection caching
-let cached = {
-  conn: null,
-  promise: null
+const connectToDatabase = async () => {
+    if (cachedDb) {
+        return cachedDb;
+    }
+
+    if (!process.env.MONGO_URI) {
+        throw new Error('MONGO_URI environment variable is not defined');
+    }
+
+    try {
+        const opts = {
+            bufferCommands: false,
+            maxPoolSize: 2,
+            serverSelectionTimeoutMS: 5000,
+            socketTimeoutMS: 45000,
+            family: 4,
+            connectTimeoutMS: 10000,
+            retryWrites: true,
+            w: 'majority'
+        };
+
+        const client = await mongoose.connect(process.env.MONGO_URI, opts);
+        cachedDb = client;
+        return client;
+    } catch (error) {
+        console.error('MongoDB connection failed:', error);
+        cachedDb = null;
+        throw error;
+    }
 };
 
 // Monitor the connection
-mongoose.connection.on('connected', () => {
-  console.log('MongoDB connection established');
-});
-
 mongoose.connection.on('error', (err) => {
-  console.error('MongoDB connection error:', err);
-  cached.conn = null;
-  cached.promise = null;
+    console.error('MongoDB connection error:', err);
+    cachedDb = null;
 });
 
 mongoose.connection.on('disconnected', () => {
-  console.log('MongoDB disconnected');
-  cached.conn = null;
-  cached.promise = null;
+    console.log('MongoDB disconnected');
+    cachedDb = null;
 });
 
+// Clean up on app termination
+process.on('SIGTERM', () => {
+    if (mongoose.connection.readyState === 1) {
+        mongoose.connection.close()
+            .then(() => process.exit(0))
+            .catch(() => process.exit(1));
+    } else {
+        process.exit(0);
+    }
+});
+
+module.exports = connectToDatabase;
+
 const connectDB = async () => {
-  if (!MONGODB_URI) {
+  if (!config.uri) {
     throw new Error('MONGO_URI environment variable is not set');
   }
 
@@ -34,38 +66,32 @@ const connectDB = async () => {
     return cached.conn;
   }
 
-  try {
-    if (!cached.promise) {
-      const opts = {
-        bufferCommands: false,
-        maxPoolSize: 2,
-        serverSelectionTimeoutMS: 5000,
-        socketTimeoutMS: 45000,
-        family: 4,
-        connectTimeoutMS: 10000,
-        retryWrites: true,
-        w: 'majority'
-      };
-
-      cached.promise = mongoose.connect(MONGODB_URI, opts);
-    }
-
-    cached.conn = await cached.promise;
-    return cached.conn;
-  } catch (error) {
-    cached.promise = null;
-    cached.conn = null;
-    console.error('MongoDB connection failed:', error);
-    throw error;
+  if (!cached.promise) {
+    cached.promise = mongoose.connect(config.uri, config.options)
+      .then((mongoose) => {
+        cached.conn = mongoose;
+        return mongoose;
+      })
+      .catch((error) => {
+        cached.promise = null;
+        cached.conn = null;
+        console.error('MongoDB connection failed:', error);
+        throw error;
+      });
   }
+
+  return cached.promise;
 };
 
 // Clean up on app termination
-process.on('SIGTERM', async () => {
-  if (cached.conn) {
-    await mongoose.connection.close();
+process.on('SIGTERM', () => {
+  if (mongoose.connection.readyState === 1) {
+    mongoose.connection.close()
+      .then(() => process.exit(0))
+      .catch(() => process.exit(1));
+  } else {
+    process.exit(0);
   }
-  process.exit(0);
 });
 
 module.exports = connectDB;
