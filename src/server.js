@@ -42,19 +42,23 @@ const startServer = async () => {
 const handler = async (req, res) => {
   try {
     // Connect to MongoDB if not already connected
-    await connectDB().catch(err => {
-      console.error('Failed to connect to MongoDB:', err);
-      throw err;
-    });
+    await connectDB();
     
     // Handle the request
     return app(req, res);
   } catch (error) {
     console.error('Server error:', error);
-    return res.status(500).json({ 
+    
+    // Send appropriate error response
+    const statusCode = error.name === 'MongoParseError' ? 503 : 500;
+    const errorMessage = process.env.NODE_ENV === 'development' 
+      ? error.message 
+      : 'Internal server error';
+    
+    return res.status(statusCode).json({ 
       status: 'error', 
-      message: 'Internal server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: errorMessage,
+      code: error.name || 'InternalError'
     });
   }
 };
