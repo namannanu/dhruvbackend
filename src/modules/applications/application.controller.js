@@ -364,8 +364,7 @@ exports.getApplicationsByUserId = catchAsync(async (req, res) => {
         select: 'userId firstName lastName email'
       }
     })
-    .then(apps => apps.filter(app => app.job !== null))
-    .sort({ createdAt: -1 });
+    .then(apps => apps.filter(app => app.job !== null).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
 
   // Categorize applications
   const categorizedApplications = {
