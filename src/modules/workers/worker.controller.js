@@ -3,6 +3,7 @@ const WorkerProfile = require('./workerProfile.model');
 const WorkerEmployment = require('./workerEmployment.model');
 const User = require('../users/user.model');
 const Application = require('../applications/application.model');
+const { buildDataUrl } = require('../../shared/utils/image');
 const AttendanceRecord = require('../attendance/attendance.model');
 const Shift = require('../shifts/shift.model');
 const SwapRequest = require('../shifts/swapRequest.model');
@@ -235,7 +236,7 @@ exports.updateWorkerProfile = catchAsync(async (req, res, next) => {
     'preferredRadiusMiles', 'notificationsEnabled', 'emailNotificationsEnabled',
     'minimumPay', 'maxTravelDistance', 'availableForFullTime', 'availableForPartTime', 
     'availableForTemporary', 'weekAvailability', 'isVisible', 'locationEnabled', 
-    'shareWorkHistory'
+    'shareWorkHistory', 'profilePictureUrl'
   ];
   
   const updateData = {};
@@ -278,6 +279,33 @@ exports.updateWorkerProfile = catchAsync(async (req, res, next) => {
           });
 
           updateData[field] = validatedAvailability;
+        }
+      } else if (field === 'profilePictureUrl') {
+        // Handle profile picture URL similar to business logoUrl
+        const profilePictureUrl = req.body[field];
+        if (profilePictureUrl === null || profilePictureUrl === undefined || profilePictureUrl === '') {
+          updateData.profilePicture = undefined;
+          updateData.profilePictureUrl = undefined;
+        } else if (typeof profilePictureUrl === 'string' && profilePictureUrl.trim()) {
+          updateData.profilePictureUrl = profilePictureUrl.trim();
+          // If it's a data URL, we could potentially parse and store it
+          const trimmed = profilePictureUrl.trim();
+          const dataUrlMatch = trimmed.match(/^data:(.*?);base64,(.*)$/);
+          if (dataUrlMatch) {
+            const mimeType = dataUrlMatch[1];
+            const buffer = Buffer.from(dataUrlMatch[2], 'base64');
+            updateData.profilePicture = {
+              original: {
+                data: buffer,
+                mimeType: mimeType,
+                size: buffer.length,
+                source: 'url',
+                uploadedAt: new Date(),
+                url: trimmed,
+              },
+              updatedAt: new Date()
+            };
+          }
         }
       } else {
         updateData[field] = req.body[field];
@@ -740,5 +768,202 @@ exports.endMyEmployment = catchAsync(async (req, res, next) => {
     status: 'success',
     message: 'Employment ended successfully',
     data: currentEmployment
+  });
+});
+
+// Helper functions for profile picture handling
+const resolveString = (value) =>
+  typeof value === 'string' && value.trim().length ? value.trim() : undefined;
+
+function buildDataUrl({ buffer, mimeType }) {
+  if (!buffer || !mimeType) return undefined;
+  return `data:${mimeType};base64,${buffer.toString('base64')}`;
+}
+
+const bufferFromUnknown = (value) => {
+  if (!value) return undefined;
+  if (Buffer.isBuffer(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed.length) {
+      return undefined;
+    }
+    const dataUrlMatch = trimmed.match(/^data:(.*?);base64,(.*)$/);
+    if (dataUrlMatch) {
+      return Buffer.from(dataUrlMatch[2], 'base64');
+    }
+    const normalized = trimmed.replace(/\s+/g, '');
+    if (/^[a-z0-9+/=]+$/i.test(normalized)) {
+      try {
+        return Buffer.from(normalized, 'base64');
+      } catch (error) {
+        return undefined;
+      }
+    }
+    return undefined;
+  }
+  if (Array.isArray(value)) {
+    return Buffer.from(value);
+  }
+  if (value?.type === 'Buffer' && Array.isArray(value.data)) {
+    return Buffer.from(value.data);
+  }
+  if (value?.buffer && Buffer.isBuffer(value.buffer)) {
+    return value.buffer;
+  }
+  return undefined;
+};
+
+const sanitizeProfilePictureAssetForResponse = (asset) => {
+  if (!asset) return undefined;
+  const sanitized = { ...asset };
+  const buffer = bufferFromUnknown(asset.data);
+  if (buffer) {
+    const mime =
+      resolveString(sanitized.mimeType) ||
+      resolveString(sanitized.contentType) ||
+      'image/png';
+
+    sanitized.mimeType = mime;
+    sanitized.size = sanitized.size ?? buffer.length;
+
+    if (!sanitized.url) {
+      sanitized.url = buildDataUrl({ buffer, mimeType: mime });
+    }
+  }
+
+  delete sanitized.data;
+  delete sanitized.contentType;
+
+  return sanitized;
+};
+
+// Profile picture upload controller
+exports.uploadProfilePicture = catchAsync(async (req, res, next) => {
+  if (!req.file) {
+    throw new AppError('Profile picture file is required', 400);
+  }
+
+  const workerId = req.user._id;
+  let profile = await WorkerProfile.findOne({ user: workerId });
+  
+  if (!profile) {
+    profile = await WorkerProfile.create({ user: workerId });
+  }
+
+  const { buffer, mimetype, size } = req.file;
+  if (!mimetype.startsWith('image/')) {
+    throw new AppError('Only image uploads are supported', 400);
+  }
+
+  const dataUrl = buildDataUrl({ buffer, mimeType: mimetype });
+
+  profile.profilePicture = profile.profilePicture || {};
+  profile.profilePicture.original = {
+    data: buffer,
+    mimeType: mimetype,
+    size,
+    source: 'upload',
+    uploadedAt: new Date(),
+    url: dataUrl,
+  };
+  profile.profilePicture.square = undefined;
+  profile.profilePicture.updatedAt = new Date();
+  profile.profilePictureUrl = dataUrl;
+
+  await profile.save();
+
+  const responseProfilePicture = sanitizeProfilePictureAssetForResponse(
+    profile.profilePicture?.original?.toObject?.() ?? profile.profilePicture?.original
+  );
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      profilePicture: responseProfilePicture,
+    },
+    message: 'Profile picture uploaded successfully',
+  });
+});
+
+// Get profile picture controller
+exports.getProfilePicture = catchAsync(async (req, res) => {
+  const workerId = req.params.workerId || req.user._id;
+  const variant =
+    req.query.variant && req.query.variant.toLowerCase() === 'square'
+      ? 'square'
+      : 'original';
+
+  const profile = await WorkerProfile.findOne({ user: workerId }).select(
+    '+profilePicture.original.data +profilePicture.square.data +profilePicture.original.mimeType +profilePicture.square.mimeType +profilePicture.original.url +profilePicture.square.url +profilePicture.original.size +profilePicture.square.size +profilePicture.original.source +profilePicture.square.source +profilePictureUrl'
+  );
+
+  if (!profile?.profilePicture) {
+    throw new AppError('Profile picture not found for this worker', 404);
+  }
+
+  const asset =
+    variant === 'square'
+      ? profile.profilePicture.square || profile.profilePicture.original
+      : profile.profilePicture.original || profile.profilePicture.square;
+
+  if (!asset) {
+    throw new AppError('Profile picture not found for this worker', 404);
+  }
+
+  let buffer = bufferFromUnknown(asset.data) || bufferFromUnknown(asset.url);
+  const mime =
+    resolveString(asset.mimeType) ||
+    resolveString(asset.contentType) ||
+    'image/png';
+
+  const dataUrl =
+    asset.url ||
+    (buffer ? buildDataUrl({ buffer, mimeType: mime }) : profile.profilePictureUrl);
+
+  const size = asset.size ?? (buffer ? buffer.length : undefined);
+  const source = asset.source || (buffer ? 'upload' : 'url');
+
+  const prefersRaw =
+    req.query.format === 'raw' ||
+    (req.accepts('image/*') && !req.accepts('application/json'));
+
+  if (prefersRaw && buffer) {
+    res.set('Content-Type', mime);
+    if (size) {
+      res.set('Content-Length', size);
+    }
+    return res.send(buffer);
+  }
+
+  if (prefersRaw && !buffer && dataUrl && /^https?:\/\//i.test(dataUrl)) {
+    return res.redirect(dataUrl);
+  }
+
+  // As a fallback for raw requests without stored buffer, try to decode from inline data URL
+  if (prefersRaw && !buffer && dataUrl) {
+    buffer = bufferFromUnknown(dataUrl);
+    if (buffer) {
+      res.set('Content-Type', mime);
+      res.set('Content-Length', buffer.length);
+      return res.send(buffer);
+    }
+  }
+
+  const payloadProfilePicture = sanitizeProfilePictureAssetForResponse(
+    asset.toObject?.() ?? asset
+  );
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      url: payloadProfilePicture?.url || null,
+      mimeType: payloadProfilePicture?.mimeType || mime || null,
+      size: payloadProfilePicture?.size ?? size ?? null,
+      source,
+      variant,
+    },
   });
 });
