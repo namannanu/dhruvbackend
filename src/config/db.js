@@ -57,11 +57,19 @@ const connectDB = async (retryCount = 0) => {
         w: 'majority',
         heartbeatFrequencyMS: 10000,
         autoIndex: process.env.NODE_ENV !== 'production',
+        // SSL/TLS Configuration for Atlas
+        ssl: true,
+        sslValidate: true,
+        sslCA: undefined, // Use default CA bundle
+        tlsAllowInvalidCertificates: false,
+        tlsAllowInvalidHostnames: false,
         // Additional serverless optimizations
         keepAlive: true,
         keepAliveInitialDelay: 0,
         directConnection: false,
-        compressors: ['snappy', 'zlib']
+        // Remove compression for Atlas compatibility
+        authSource: 'admin',
+        readPreference: 'primary'
       };
 
       // Store the promise, not the await result
@@ -83,11 +91,23 @@ const connectDB = async (retryCount = 0) => {
     cached.promise = null;
     cached.conn = null;
     
+    // Handle specific Atlas errors
+    if (error.message.includes('IP whitelist') || error.message.includes('not whitelisted')) {
+      console.error('🚨 IP Whitelist Error: Add 0.0.0.0/0 to your MongoDB Atlas Network Access');
+      throw new Error('Database connection failed: IP not whitelisted. Please add 0.0.0.0/0 to MongoDB Atlas Network Access.');
+    }
+    
+    if (error.message.includes('SSL') || error.message.includes('TLS')) {
+      console.error('🚨 SSL/TLS Error: MongoDB Atlas SSL connection failed');
+      throw new Error('Database connection failed: SSL/TLS error. Please check MongoDB Atlas configuration.');
+    }
+    
     // Retry logic for serverless environments
     if (retryCount < MAX_RETRIES && (
       error.message.includes('timeout') || 
       error.message.includes('ENOTFOUND') ||
-      error.message.includes('MongoNetworkTimeoutError')
+      error.message.includes('MongoNetworkTimeoutError') ||
+      error.message.includes('MongoServerSelectionError')
     )) {
       console.log(`Retrying connection... Attempt ${retryCount + 1}/${MAX_RETRIES}`);
       await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1))); // Exponential backoff

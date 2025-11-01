@@ -69,6 +69,23 @@ const handler = async (req, res) => {
   } catch (error) {
     console.error('Server error:', error);
     
+    // Handle specific MongoDB Atlas errors
+    if (error.message.includes('IP whitelist') || error.message.includes('not whitelisted')) {
+      return res.status(503).json({
+        status: 'error',
+        message: 'Database access restricted. Please contact administrator.',
+        code: 'DB_ACCESS_DENIED'
+      });
+    }
+    
+    if (error.message.includes('SSL') || error.message.includes('TLS')) {
+      return res.status(503).json({
+        status: 'error',
+        message: 'Database connection security error. Please try again.',
+        code: 'DB_SSL_ERROR'
+      });
+    }
+    
     // Handle specific MongoDB timeout errors
     if (error.message.includes('timeout') || error.name === 'MongoNetworkTimeoutError') {
       return res.status(503).json({
