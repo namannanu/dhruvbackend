@@ -154,14 +154,6 @@ const resolveAddressValue = (address) => {
 };
 
 const deriveBusinessAddress = ({ providedAddress, location, business }) => {
-  const trimmed =
-    typeof providedAddress === 'string'
-      ? providedAddress.trim()
-      : undefined;
-  if (trimmed) {
-    return trimmed;
-  }
-
   const businessObj = business ? toPlainObject(business) : null;
   const businessLocation = businessObj && businessObj.location
     ? toPlainObject(businessObj.location)
@@ -175,9 +167,21 @@ const deriveBusinessAddress = ({ providedAddress, location, business }) => {
     // Build full address from all components: formattedAddress + line1 + city + state + postalCode + country
     const addressParts = [];
     
-    if (plain.formattedAddress && plain.formattedAddress.trim()) {
-      addressParts.push(plain.formattedAddress.trim());
+    // First, add employer-provided formattedAddress if available
+    const trimmedProvidedAddress = typeof providedAddress === 'string' ? providedAddress.trim() : undefined;
+    if (trimmedProvidedAddress) {
+      addressParts.push(trimmedProvidedAddress);
     }
+    
+    // Then add business location formattedAddress if available and different from provided address
+    if (plain.formattedAddress && plain.formattedAddress.trim()) {
+      const businessFormatted = plain.formattedAddress.trim();
+      if (!trimmedProvidedAddress || businessFormatted !== trimmedProvidedAddress) {
+        addressParts.push(businessFormatted);
+      }
+    }
+    
+    // Add remaining location components
     if (plain.line1 && plain.line1.trim()) {
       addressParts.push(plain.line1.trim());
     }
