@@ -135,6 +135,51 @@ const buildJobResponse = async (job, currentUser) => {
     return buildLocationLabel(parts);
   };
 
+  const resolveAddressValue = (address) => {
+    if (!address) {
+      return null;
+    }
+    if (typeof address === 'string') {
+      const trimmed = address.trim();
+      return trimmed.length ? trimmed : null;
+    }
+    if (typeof address === 'object') {
+      const normalize = (value) => {
+        if (!value) return null;
+        const str = value.toString().trim();
+        return str.length ? str : null;
+      };
+      const line1 =
+        normalize(address.line1) ||
+        normalize(address.street) ||
+        normalize(address.street1) ||
+        normalize(address.address1);
+      const line2 =
+        normalize(address.line2) ||
+        normalize(address.street2) ||
+        normalize(address.address2);
+      const city = normalize(address.city);
+      const state = normalize(address.state);
+      const postal =
+        normalize(address.postalCode) ||
+        normalize(address.zip) ||
+        normalize(address.postal_code);
+
+      const parts = [];
+      if (line1) parts.push(line1);
+      if (line2) parts.push(line2);
+      const cityState = [city, state].filter(Boolean).join(', ');
+      if (cityState) {
+        parts.push(postal ? `${cityState} ${postal}` : cityState);
+      } else if (postal) {
+        parts.push(postal);
+      }
+      const joined = parts.join(', ').trim();
+      return joined.length ? joined : null;
+    }
+    return null;
+  };
+
   if (jobObj.business && typeof jobObj.business === 'object' && jobObj.business._id) {
     jobObj.businessDetails = jobObj.business;
     jobObj.businessId = jobObj.business._id.toString();
@@ -201,6 +246,21 @@ const buildJobResponse = async (job, currentUser) => {
     ];
     for (const source of locationSources) {
       const label = resolveLocationLabel(source);
+      if (label) {
+        jobObj.businessAddress = label;
+        break;
+      }
+    }
+  }
+
+  if (!jobObj.businessAddress) {
+    const addressSources = [
+      jobObj.business?.address,
+      jobObj.businessDetails?.address,
+      jobObj.businessId?.address,
+    ];
+    for (const source of addressSources) {
+      const label = resolveAddressValue(source);
       if (label) {
         jobObj.businessAddress = label;
         break;
