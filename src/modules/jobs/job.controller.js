@@ -894,6 +894,12 @@ exports.createJob = catchAsync(async (req, res, next) => {
       setAt: new Date()
     };
     
+    // Override with employer-provided formattedAddress if provided
+    if (employerProvidedAddress) {
+      console.log(`📝 Employer provided custom address: "${employerProvidedAddress}"`);
+      jobLocation.formattedAddress = employerProvidedAddress;
+    }
+    
     console.log(`📍 Job location set to: ${jobLocation.formattedAddress || jobLocation.line1 || 'Unknown'}`);
   } else if (jobLocation && employerProvidedAddress) {
     // If location exists but employer provided a custom address, override it
@@ -931,13 +937,12 @@ exports.createJob = catchAsync(async (req, res, next) => {
   delete jobData.businessAddress;
 
   const jobBusinessAddress = deriveBusinessAddress({
-    providedAddress: employerProvidedAddress || providedBusinessAddress, // Use employer formattedAddress first
+    providedAddress: providedBusinessAddress,
     location: jobLocation,
     business,
   });
 
   console.log(`🏢 DEBUG: Derived business address: "${jobBusinessAddress}"`);
-  console.log(`🏢 DEBUG: Employer provided address: "${employerProvidedAddress}"`);
   console.log(`🏢 DEBUG: From location formattedAddress: "${jobLocation?.formattedAddress}"`);
   console.log(`🏢 DEBUG: From location city: "${jobLocation?.city}"`);
   console.log(`🏢 DEBUG: From location state: "${jobLocation?.state}"`);
@@ -1328,11 +1333,10 @@ exports.createJobsBulk = catchAsync(async (req, res) => {
       console.log(`[Bulk Job ${i}] Employer-provided formattedAddress:`, jobData.formattedAddress);
       console.log(`[Bulk Job ${i}] Business location:`, business.location);
 
-      const businessAddress = deriveBusinessAddress({
-        providedAddress: jobData.formattedAddress, // Employer-provided address
-        location: business.location,
-        business
-      });
+      const businessAddress = deriveBusinessAddress(
+        business.location, 
+        jobData.formattedAddress // Pass employer-provided address for override
+      );
       
       console.log(`[Bulk Job ${i}] Final derived address:`, businessAddress);
 
