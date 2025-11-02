@@ -42,7 +42,7 @@ const formatApplicationResponse = (applicationDoc, currentUser) => {
   return plain;
 };
 
-const APPLICATION_FREE_QUOTA = 3;
+const APPLICATION_FREE_QUOTA = 2;
 
 exports.createApplication = catchAsync(async (req, res, next) => {
   if (req.user.userType !== 'worker') {

@@ -77,6 +77,26 @@ const buildJobResponse = async (job, currentUser) => {
     jobObj.createdById = null;
   }
 
+  const resolveLocationLabel = (location) => {
+    if (!location) {
+      return null;
+    }
+    const parts = {
+      formattedAddress: location.formattedAddress,
+      label: location.label || location.name,
+      address:
+        location.address ||
+        location.line1 ||
+        location.street ||
+        location.line2 ||
+        null,
+      city: location.city,
+      state: location.state,
+      postalCode: location.postalCode || location.zip,
+    };
+    return buildLocationLabel(parts);
+  };
+
   if (jobObj.business && typeof jobObj.business === 'object' && jobObj.business._id) {
     jobObj.businessDetails = jobObj.business;
     jobObj.businessId = jobObj.business._id.toString();
@@ -108,6 +128,21 @@ const buildJobResponse = async (job, currentUser) => {
     }
     if (!jobObj.businessLogo && jobObj.businessDetails?.logo) {
       jobObj.businessLogo = jobObj.businessDetails.logo;
+    }
+  }
+
+  if (!jobObj.businessAddress) {
+    const locationSources = [
+      jobObj.location,
+      jobObj.business?.location,
+      jobObj.businessDetails?.location
+    ];
+    for (const source of locationSources) {
+      const label = resolveLocationLabel(source);
+      if (label) {
+        jobObj.businessAddress = label;
+        break;
+      }
     }
   }
 
@@ -312,12 +347,12 @@ exports.listJobs = catchAsync(async (req, res) => {
     req.user.userType === 'employer'
       ? {
           path: 'business',
-          select: 'businessName name logoUrl logo owner',
+          select: 'businessName name logoUrl logo owner location',
           populate: { path: 'owner', select: 'email firstName lastName' },
         }
       : {
           path: 'business',
-          select: 'businessName name logoUrl logo',
+          select: 'businessName name logoUrl logo location',
         };
 
   let jobQuery = Job.find(filter)
