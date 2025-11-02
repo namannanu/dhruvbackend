@@ -242,21 +242,39 @@ const buildJobResponse = async (job, currentUser) => {
     console.log(`   jobObj.location:`, jobObj.location ? 'EXISTS' : 'NULL');
     console.log(`   jobObj.business?.location:`, jobObj.business?.location ? 'EXISTS' : 'NULL');
     console.log(`   jobObj.businessDetails?.location:`, jobObj.businessDetails?.location ? 'EXISTS' : 'NULL');
-    console.log(`   jobObj.businessId?.location:`, jobObj.businessId?.location ? 'EXISTS' : 'NULL');
     
+    // Try to get address from various location sources
     const locationSources = [
       jobObj.location,
       jobObj.business?.location,
       jobObj.businessDetails?.location,
-      jobObj.businessId?.location,
     ];
+    
     for (const source of locationSources) {
-      const label = resolveLocationLabel(source);
-      console.log(`   Checking source:`, source ? 'EXISTS' : 'NULL', `-> label:`, label || 'EMPTY');
-      if (label) {
-        jobObj.businessAddress = label;
-        console.log(`   ✅ Set businessAddress to: ${label}`);
-        break;
+      if (source) {
+        let address = null;
+        
+        // Try formattedAddress first
+        if (source.formattedAddress && source.formattedAddress.trim()) {
+          address = source.formattedAddress.trim();
+          console.log(`   Found formattedAddress: ${address}`);
+        }
+        // Try building from components
+        else if (source.line1 || source.city) {
+          const parts = [];
+          if (source.line1) parts.push(source.line1);
+          if (source.city) parts.push(source.city);
+          if (source.state) parts.push(source.state);
+          if (source.postalCode) parts.push(source.postalCode);
+          address = parts.join(', ');
+          console.log(`   Built from components: ${address}`);
+        }
+        
+        if (address) {
+          jobObj.businessAddress = address;
+          console.log(`   ✅ Set businessAddress to: ${address}`);
+          break;
+        }
       }
     }
   }
