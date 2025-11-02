@@ -81,18 +81,56 @@ const buildJobResponse = async (job, currentUser) => {
     if (!location) {
       return null;
     }
+    const format = (value) => {
+      if (!value) return undefined;
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        return trimmed.length ? trimmed : undefined;
+      }
+      return undefined;
+    };
+
+    const normalizeAddressObject = (addr) => {
+      if (!addr || typeof addr !== 'object') {
+        return {};
+      }
+      return {
+        line1:
+          format(addr.line1) ||
+          format(addr.street) ||
+          format(addr.street1) ||
+          format(addr.address1),
+        line2:
+          format(addr.line2) ||
+          format(addr.street2) ||
+          format(addr.address2),
+        city: format(addr.city),
+        state: format(addr.state),
+        postalCode: format(addr.postalCode) || format(addr.zip),
+      };
+    };
+
+    const addressObj =
+      typeof location.address === 'object'
+        ? normalizeAddressObject(location.address)
+        : {};
+
     const parts = {
-      formattedAddress: location.formattedAddress,
-      label: location.label || location.name,
+      formattedAddress: format(location.formattedAddress),
+      label: format(location.label) || format(location.name),
       address:
-        location.address ||
-        location.line1 ||
-        location.street ||
-        location.line2 ||
+        format(location.address) ||
+        addressObj.line1 ||
+        format(location.line1) ||
+        format(location.street) ||
+        format(location.line2) ||
         null,
-      city: location.city,
-      state: location.state,
-      postalCode: location.postalCode || location.zip,
+      city: format(location.city) || addressObj.city,
+      state: format(location.state) || addressObj.state,
+      postalCode:
+        format(location.postalCode) ||
+        format(location.zip) ||
+        addressObj.postalCode,
     };
     return buildLocationLabel(parts);
   };
@@ -131,11 +169,35 @@ const buildJobResponse = async (job, currentUser) => {
     }
   }
 
+  if (
+    (!jobObj.businessDetails || Object.keys(jobObj.businessDetails).length === 0) &&
+    jobObj.businessId &&
+    typeof jobObj.businessId === 'object' &&
+    jobObj.businessId._id
+  ) {
+    jobObj.businessDetails = jobObj.businessId;
+    jobObj.businessId = jobObj.businessId._id.toString();
+    if (!jobObj.businessName) {
+      jobObj.businessName =
+        jobObj.businessDetails.businessName ||
+        jobObj.businessDetails.name ||
+        null;
+    }
+    if (!jobObj.businessLogoUrl) {
+      jobObj.businessLogoUrl =
+        jobObj.businessDetails.logo?.square?.url ||
+        jobObj.businessDetails.logo?.original?.url ||
+        jobObj.businessDetails.logoUrl ||
+        null;
+    }
+  }
+
   if (!jobObj.businessAddress) {
     const locationSources = [
       jobObj.location,
       jobObj.business?.location,
-      jobObj.businessDetails?.location
+      jobObj.businessDetails?.location,
+      jobObj.businessId?.location,
     ];
     for (const source of locationSources) {
       const label = resolveLocationLabel(source);
@@ -144,6 +206,10 @@ const buildJobResponse = async (job, currentUser) => {
         break;
       }
     }
+  }
+
+  if (!jobObj.location && jobObj.businessDetails?.location) {
+    jobObj.location = jobObj.businessDetails.location;
   }
 
   if (jobObj.publishedBy && typeof jobObj.publishedBy === 'object' && jobObj.publishedBy._id) {
@@ -357,7 +423,11 @@ exports.listJobs = catchAsync(async (req, res) => {
 
   let jobQuery = Job.find(filter)
     .sort({ createdAt: -1 })
-    .populate(businessPopulate);
+    .populate(businessPopulate)
+    .populate({
+      path: 'businessId',
+      select: 'businessName name logoUrl logo location'
+    });
 
   if (req.user.userType === 'employer') {
     jobQuery = jobQuery
