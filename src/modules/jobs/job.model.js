@@ -23,6 +23,56 @@ const overtimeSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// Location schema for job-specific location (can override business location)
+const locationSchema = new mongoose.Schema(
+  {
+    // Basic address components
+    line1: String,
+    line2: String,
+    city: String,
+    state: String,
+    postalCode: String,
+    country: String,
+    
+    // Google Places API integration
+    formattedAddress: { type: String, trim: true }, // From Google Places API
+    name: { type: String, trim: true }, // Place name from Google
+    placeId: { type: String, trim: true }, // Google Place ID
+    
+    // GPS Coordinates (required for attendance validation)
+    latitude: {
+      type: Number,
+      min: -90,
+      max: 90
+    },
+    longitude: {
+      type: Number,
+      min: -180,
+      max: 180
+    },
+    // Geofencing and validation
+    allowedRadius: {
+      type: Number,
+      default: 150, // Default 150 meters
+      min: 10,      // Minimum 10 meters
+      max: 5000     // Maximum 5km
+    },
+    
+    // Location metadata
+    notes: { type: String, trim: true }, // Instructions for workers
+    isActive: { type: Boolean, default: true }, // Can workers clock in here?
+    timezone: { type: String, trim: true }, // Location timezone
+    
+    // Audit fields
+    setBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    setAt: { type: Date, default: Date.now }
+  },
+  { _id: false }
+);
+
 const jobSchema = new mongoose.Schema(
   {
     employer: {
@@ -51,7 +101,8 @@ const jobSchema = new mongoose.Schema(
     urgency: { type: String, enum: ['low', 'medium', 'high'], default: 'low' },
     tags: { type: [String], default: [] },
     schedule: scheduleSchema,
-    // Location data is inherited from business.location
+    // Job-specific location (optional, defaults to business location if not set)
+    location: locationSchema,
     verificationRequired: { type: Boolean, default: false },
     premiumRequired: { type: Boolean, default: false },
     status: {
