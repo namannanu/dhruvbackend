@@ -235,25 +235,57 @@ const deriveBusinessAddress = ({ providedAddress, location, business }) => {
     typeof providedAddress === 'string'
       ? providedAddress.trim()
       : undefined;
-  if (trimmed) {
+  
+  // Priority 1: If employer provided a custom address, use it exactly as-is
+  if (trimmed && trimmed.length > 0) {
+    console.log(`📝 Using employer's exact address: "${trimmed}"`);
     return trimmed;
   }
-
+  
   const businessObj = business ? toPlainObject(business) : null;
   const businessLocation = businessObj && businessObj.location
     ? toPlainObject(businessObj.location)
     : null;
   const primaryLocation = location || businessLocation;
 
-  const locationLabel = buildLocationAddressString(primaryLocation);
-  if (locationLabel) {
-    return locationLabel;
+  // Priority 2: Build full address from location components only if no employer override
+  if (primaryLocation) {
+    const plain = toPlainObject(primaryLocation);
+    
+    // Build full address from all components: formattedAddress + line1 + city + state + postalCode + country
+    const addressParts = [];
+    
+    if (plain.formattedAddress && plain.formattedAddress.trim()) {
+      addressParts.push(plain.formattedAddress.trim());
+    }
+    if (plain.line1 && plain.line1.trim()) {
+      addressParts.push(plain.line1.trim());
+    }
+    if (plain.city && plain.city.trim()) {
+      addressParts.push(plain.city.trim());
+    }
+    if (plain.state && plain.state.trim()) {
+      addressParts.push(plain.state.trim());
+    }
+    if (plain.postalCode && plain.postalCode.trim()) {
+      addressParts.push(plain.postalCode.trim());
+    }
+    if (plain.country && plain.country.trim()) {
+      addressParts.push(plain.country.trim());
+    }
+    
+    if (addressParts.length > 0) {
+      console.log(`🏢 Using business location components: "${addressParts.join(', ')}"`);
+      return addressParts.join(', ');
+    }
   }
 
+  // Fallback: if no primary location, try to build from business data directly
   if (businessObj) {
     const addressObj = normalizeAddressObject(businessObj.address);
     const businessFormatted = buildFormattedAddressChain({
       formattedAddress:
+        trimmed ||
         normalizeString(businessObj.formattedAddress) ||
         normalizeString(businessObj.locationFormattedAddress) ||
         normalizeString(
@@ -914,7 +946,17 @@ exports.createJob = catchAsync(async (req, res, next) => {
   let jobLocation = jobData.location;
   
   // Check if employer provided a custom formattedAddress for this job
-  const employerProvidedAddress = jobData.formattedAddress?.trim();
+  // Flutter sends formattedAddress inside location object: { location: { formattedAddress: "..." } }
+  // Also check direct formattedAddress field for backwards compatibility
+  const employerProvidedAddress = 
+    jobData.formattedAddress?.trim() || 
+    (jobLocation && jobLocation.formattedAddress?.trim());
+  
+  console.log(`[Job Creation] Processing address for job: ${jobData.title}`);
+  console.log(`[Job Creation] Raw jobData.location:`, jobLocation);
+  console.log(`[Job Creation] Raw jobData.formattedAddress:`, jobData.formattedAddress);
+  console.log(`[Job Creation] Employer-provided address:`, employerProvidedAddress);
+  console.log(`[Job Creation] Business location:`, business.location);
   
   if (!jobLocation && business.location) {
     console.log(`📍 Copying business location to job for business: ${business.name}`);
@@ -960,10 +1002,12 @@ exports.createJob = catchAsync(async (req, res, next) => {
   // Clean up the formattedAddress from jobData since we've processed it
   delete jobData.formattedAddress;
 
+  // Use employer-provided address from location object or direct businessAddress field
   const providedBusinessAddress =
-    typeof jobData.businessAddress === 'string'
+    employerProvidedAddress ||
+    (typeof jobData.businessAddress === 'string'
       ? jobData.businessAddress.trim()
-      : undefined;
+      : undefined);
   delete jobData.businessAddress;
 
   const jobBusinessAddress = deriveBusinessAddress({
@@ -972,6 +1016,7 @@ exports.createJob = catchAsync(async (req, res, next) => {
     business,
   });
 
+  console.log(`🏢 DEBUG: Final providedBusinessAddress: "${providedBusinessAddress}"`);
   console.log(`🏢 DEBUG: Derived business address: "${jobBusinessAddress}"`);
   console.log(`🏢 DEBUG: From location formattedAddress: "${jobLocation?.formattedAddress}"`);
   console.log(`🏢 DEBUG: From location city: "${jobLocation?.city}"`);
