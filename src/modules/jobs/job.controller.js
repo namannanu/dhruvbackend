@@ -44,6 +44,147 @@ const parsePublishToggle = (value) => {
   return undefined;
 };
 
+const toPlainObject = (value) => {
+  if (!value) return null;
+  if (typeof value.toObject === 'function') {
+    return value.toObject();
+  }
+  return value;
+};
+
+const normalizeString = (value) => {
+  if (value == null) {
+    return undefined;
+  }
+  const str = value.toString().trim();
+  return str.length ? str : undefined;
+};
+
+const normalizeAddressObject = (addr) => {
+  const plain = toPlainObject(addr);
+  if (!plain || typeof plain !== 'object') {
+    return {};
+  }
+  return {
+    line1:
+      normalizeString(plain.line1) ||
+      normalizeString(plain.street) ||
+      normalizeString(plain.street1) ||
+      normalizeString(plain.address1),
+    line2:
+      normalizeString(plain.line2) ||
+      normalizeString(plain.street2) ||
+      normalizeString(plain.address2),
+    city: normalizeString(plain.city),
+    state: normalizeString(plain.state),
+    postalCode:
+      normalizeString(plain.postalCode) ||
+      normalizeString(plain.zip) ||
+      normalizeString(plain.postal_code),
+  };
+};
+
+const resolveLocationLabel = (location) => {
+  const plain = toPlainObject(location);
+  if (!plain || typeof plain !== 'object') {
+    return null;
+  }
+
+  const addressObj = normalizeAddressObject(plain.address);
+  const parts = {
+    formattedAddress: normalizeString(plain.formattedAddress),
+    label: normalizeString(plain.label) || normalizeString(plain.name),
+    address:
+      normalizeString(plain.address) ||
+      addressObj.line1 ||
+      normalizeString(plain.line1) ||
+      normalizeString(plain.street) ||
+      normalizeString(plain.line2) ||
+      null,
+    city: normalizeString(plain.city) || addressObj.city,
+    state: normalizeString(plain.state) || addressObj.state,
+    postalCode:
+      normalizeString(plain.postalCode) ||
+      normalizeString(plain.zip) ||
+      addressObj.postalCode,
+  };
+
+  return buildLocationLabel(parts);
+};
+
+const resolveAddressValue = (address) => {
+  if (!address) {
+    return null;
+  }
+  if (typeof address === 'string') {
+    const trimmed = address.trim();
+    return trimmed.length ? trimmed : null;
+  }
+
+  const plain = toPlainObject(address);
+  if (!plain) {
+    return null;
+  }
+  if (typeof plain === 'string') {
+    const trimmed = plain.trim();
+    return trimmed.length ? trimmed : null;
+  }
+  if (typeof plain !== 'object') {
+    return null;
+  }
+
+  const normalized = normalizeAddressObject(plain);
+  const parts = [];
+  if (normalized.line1) parts.push(normalized.line1);
+  if (normalized.line2) parts.push(normalized.line2);
+
+  const cityState = [normalized.city, normalized.state]
+    .filter(Boolean)
+    .join(', ');
+  if (cityState) {
+    parts.push(
+      normalized.postalCode ? `${cityState} ${normalized.postalCode}` : cityState
+    );
+  } else if (normalized.postalCode) {
+    parts.push(normalized.postalCode);
+  }
+
+  const joined = parts.join(', ').trim();
+  return joined.length ? joined : null;
+};
+
+const deriveBusinessAddress = ({ providedAddress, location, business }) => {
+  const trimmed =
+    typeof providedAddress === 'string'
+      ? providedAddress.trim()
+      : undefined;
+  if (trimmed) {
+    return trimmed;
+  }
+
+  const businessObj = business ? toPlainObject(business) : null;
+  const businessLocation = businessObj && businessObj.location
+    ? toPlainObject(businessObj.location)
+    : null;
+  const primaryLocation = location || businessLocation;
+
+  const locationLabel = resolveLocationLabel(primaryLocation);
+  if (locationLabel) {
+    return locationLabel;
+  }
+
+  if (businessObj) {
+    const fromAddress =
+      resolveAddressValue(businessObj.address) ||
+      resolveAddressValue(businessLocation ? businessLocation.address : null);
+    if (fromAddress) {
+      return fromAddress;
+    }
+  }
+
+  return null;
+};
+
 const buildJobResponse = async (job, currentUser) => {
   const jobObj = job.toObject();
   const requiresPaymentForEmployer = Boolean(job.premiumRequired);
@@ -76,109 +217,6 @@ const buildJobResponse = async (job, currentUser) => {
   } else {
     jobObj.createdById = null;
   }
-
-  const resolveLocationLabel = (location) => {
-    if (!location) {
-      return null;
-    }
-    const format = (value) => {
-      if (!value) return undefined;
-      if (typeof value === 'string') {
-        const trimmed = value.trim();
-        return trimmed.length ? trimmed : undefined;
-      }
-      return undefined;
-    };
-
-    const normalizeAddressObject = (addr) => {
-      if (!addr || typeof addr !== 'object') {
-        return {};
-      }
-      return {
-        line1:
-          format(addr.line1) ||
-          format(addr.street) ||
-          format(addr.street1) ||
-          format(addr.address1),
-        line2:
-          format(addr.line2) ||
-          format(addr.street2) ||
-          format(addr.address2),
-        city: format(addr.city),
-        state: format(addr.state),
-        postalCode: format(addr.postalCode) || format(addr.zip),
-      };
-    };
-
-    const addressObj =
-      typeof location.address === 'object'
-        ? normalizeAddressObject(location.address)
-        : {};
-
-    const parts = {
-      formattedAddress: format(location.formattedAddress),
-      label: format(location.label) || format(location.name),
-      address:
-        format(location.address) ||
-        addressObj.line1 ||
-        format(location.line1) ||
-        format(location.street) ||
-        format(location.line2) ||
-        null,
-      city: format(location.city) || addressObj.city,
-      state: format(location.state) || addressObj.state,
-      postalCode:
-        format(location.postalCode) ||
-        format(location.zip) ||
-        addressObj.postalCode,
-    };
-    return buildLocationLabel(parts);
-  };
-
-  const resolveAddressValue = (address) => {
-    if (!address) {
-      return null;
-    }
-    if (typeof address === 'string') {
-      const trimmed = address.trim();
-      return trimmed.length ? trimmed : null;
-    }
-    if (typeof address === 'object') {
-      const normalize = (value) => {
-        if (!value) return null;
-        const str = value.toString().trim();
-        return str.length ? str : null;
-      };
-      const line1 =
-        normalize(address.line1) ||
-        normalize(address.street) ||
-        normalize(address.street1) ||
-        normalize(address.address1);
-      const line2 =
-        normalize(address.line2) ||
-        normalize(address.street2) ||
-        normalize(address.address2);
-      const city = normalize(address.city);
-      const state = normalize(address.state);
-      const postal =
-        normalize(address.postalCode) ||
-        normalize(address.zip) ||
-        normalize(address.postal_code);
-
-      const parts = [];
-      if (line1) parts.push(line1);
-      if (line2) parts.push(line2);
-      const cityState = [city, state].filter(Boolean).join(', ');
-      if (cityState) {
-        parts.push(postal ? `${cityState} ${postal}` : cityState);
-      } else if (postal) {
-        parts.push(postal);
-      }
-      const joined = parts.join(', ').trim();
-      return joined.length ? joined : null;
-    }
-    return null;
-  };
 
   if (jobObj.business && typeof jobObj.business === 'object' && jobObj.business._id) {
     jobObj.businessDetails = jobObj.business;
@@ -813,12 +851,25 @@ exports.createJob = catchAsync(async (req, res, next) => {
     console.log(`📍 Job location set to: ${jobLocation.formattedAddress || jobLocation.line1 || 'Unknown'}`);
   }
 
+  const providedBusinessAddress =
+    typeof jobData.businessAddress === 'string'
+      ? jobData.businessAddress.trim()
+      : undefined;
+  delete jobData.businessAddress;
+
+  const jobBusinessAddress = deriveBusinessAddress({
+    providedAddress: providedBusinessAddress,
+    location: jobLocation,
+    business,
+  });
+
   const job = await Job.create({
     ...jobData,
     employer: business.owner,
     createdBy: req.user._id,
     business: business._id,
     location: jobLocation, // Include location from business
+    businessAddress: jobBusinessAddress ?? undefined,
     premiumRequired: requiresPayment,
     status: initialStatus,
     isPublished: shouldAutoPublish,
@@ -902,12 +953,25 @@ exports.createJobsBulk = catchAsync(async (req, res, next) => {
       };
     }
 
+    const providedBusinessAddress =
+      typeof sanitizedJob.businessAddress === 'string'
+        ? sanitizedJob.businessAddress.trim()
+        : undefined;
+    delete sanitizedJob.businessAddress;
+
+    const jobBusinessAddress = deriveBusinessAddress({
+      providedAddress: providedBusinessAddress,
+      location: jobLocation,
+      business,
+    });
+
     preparedJobs.push({
       ...sanitizedJob,
       employer: business.owner,
       createdBy: req.user._id,
       business: business._id,
       location: jobLocation, // Include location from business
+      businessAddress: jobBusinessAddress ?? undefined,
       status: job.status || 'active',
     });
   }

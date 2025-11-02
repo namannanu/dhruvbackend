@@ -99,10 +99,11 @@ const jobSchema = new mongoose.Schema(
     hourlyRate: { type: Number, required: true },
     overtime: overtimeSchema,
     urgency: { type: String, enum: ['low', 'medium', 'high'], default: 'low' },
-    tags: { type: [String], default: [] },
-    schedule: scheduleSchema,
-    // Job-specific location (optional, defaults to business location if not set)
-    location: locationSchema,
+  tags: { type: [String], default: [] },
+  schedule: scheduleSchema,
+  // Job-specific location (optional, defaults to business location if not set)
+  location: locationSchema,
+  businessAddress: { type: String, trim: true },
     verificationRequired: { type: Boolean, default: false },
     premiumRequired: { type: Boolean, default: false },
     status: {
