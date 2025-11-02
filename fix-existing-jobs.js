@@ -39,7 +39,20 @@ async function fixExistingJobs() {
     let updatedCount = 0;
     
     for (const job of jobs) {
-      const businessId = typeof job.business === 'object' ? job.business._id : job.business;
+      // Extract business ID more carefully
+      let businessId;
+      if (typeof job.business === 'string') {
+        businessId = job.business;
+      } else if (job.business && job.business._id) {
+        // Handle ObjectId type
+        businessId = job.business._id.toString();
+      } else if (job.businessId) {
+        businessId = typeof job.businessId === 'string' ? job.businessId : job.businessId.toString();
+      } else {
+        console.log(`⚠️  Could not extract business ID for job ${job._id}`);
+        continue;
+      }
+      
       const hasJobLocation = job.location && (job.location.formattedAddress || job.location.line1);
       const businessLocation = businessLocationMap[businessId];
       
