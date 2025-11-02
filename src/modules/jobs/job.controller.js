@@ -168,11 +168,38 @@ const deriveBusinessAddress = ({ providedAddress, location, business }) => {
     : null;
   const primaryLocation = location || businessLocation;
 
-  const locationLabel = resolveLocationLabel(primaryLocation);
-  if (locationLabel) {
-    return locationLabel;
+  // Enhanced address derivation with clean formatting
+  if (primaryLocation) {
+    const plain = toPlainObject(primaryLocation);
+    
+    // Use the clean formattedAddress if available (after our data structure fix)
+    if (plain.formattedAddress && plain.formattedAddress.trim()) {
+      const street = plain.formattedAddress.trim();
+      const city = plain.city;
+      const state = plain.state;
+      
+      // Create clean address: "Street, City, State" format
+      if (city && state) {
+        return `${street}, ${city}, ${state}`;
+      } else if (city) {
+        return `${street}, ${city}`;
+      } else {
+        return street;
+      }
+    }
+    
+    // Fallback: Build from components
+    const parts = [];
+    if (plain.line1) parts.push(plain.line1);
+    if (plain.city) parts.push(plain.city);
+    if (plain.state) parts.push(plain.state);
+    
+    if (parts.length > 0) {
+      return parts.join(', ');
+    }
   }
 
+  // Final fallback: try business address
   if (businessObj) {
     const fromAddress =
       resolveAddressValue(businessObj.address) ||
@@ -863,6 +890,11 @@ exports.createJob = catchAsync(async (req, res, next) => {
     business,
   });
 
+  console.log(`🏢 DEBUG: Derived business address: "${jobBusinessAddress}"`);
+  console.log(`🏢 DEBUG: From location formattedAddress: "${jobLocation?.formattedAddress}"`);
+  console.log(`🏢 DEBUG: From location city: "${jobLocation?.city}"`);
+  console.log(`🏢 DEBUG: From location state: "${jobLocation?.state}"`);
+
   const job = await Job.create({
     ...jobData,
     employer: business.owner,
@@ -908,105 +940,6 @@ exports.createJob = catchAsync(async (req, res, next) => {
   res.status(201).json({ status: 'success', data: responseData });
 });
 
-exports.createJobsBulk = catchAsync(async (req, res, next) => {
-  if (req.user.userType !== 'employer') {
-    return next(new AppError('Only employers can create jobs', 403));
-  }
-  const jobsPayload = Array.isArray(req.body.jobs) ? req.body.jobs : [];
-  if (!jobsPayload.length) {
-    return next(new AppError('Provide at least one job payload', 400));
-  }
-
-  const cost = jobsPayload.length * 50;
-  const preparedJobs = [];
-
-  for (const job of jobsPayload) {
-    const businessId = job.business;
-    if (!businessId) {
-      return next(new AppError('Each job must specify a business', 400));
-    }
-
-    const { business } = await ensureBusinessAccess({
-      user: req.user,
-      businessId,
-      requiredPermissions: 'create_jobs',
-    });
-
-    const sanitizedJob = { ...job };
-    delete sanitizedJob.isPublished;
-    delete sanitizedJob.publish;
-    delete sanitizedJob.publishAfterPayment;
-    delete sanitizedJob.published;
-    delete sanitizedJob.publishedAt;
-    delete sanitizedJob.publishedBy;
-    delete sanitizedJob.publishStatus;
-    delete sanitizedJob.publishActionRequired;
-
-    // Copy business location to job if not provided
-    let jobLocation = sanitizedJob.location;
-    if (!jobLocation && business.location) {
-      console.log(`📍 Bulk: Copying business location to job for business: ${business.name}`);
-      jobLocation = {
-        ...business.location.toObject ? business.location.toObject() : business.location,
-        setBy: req.user._id,
-        setAt: new Date()
-      };
-    }
-
-    const providedBusinessAddress =
-      typeof sanitizedJob.businessAddress === 'string'
-        ? sanitizedJob.businessAddress.trim()
-        : undefined;
-    delete sanitizedJob.businessAddress;
-
-    const jobBusinessAddress = deriveBusinessAddress({
-      providedAddress: providedBusinessAddress,
-      location: jobLocation,
-      business,
-    });
-
-    preparedJobs.push({
-      ...sanitizedJob,
-      employer: business.owner,
-      createdBy: req.user._id,
-      business: business._id,
-      location: jobLocation, // Include location from business
-      businessAddress: jobBusinessAddress ?? undefined,
-      status: job.status || 'active',
-    });
-  }
-
-  const createdJobs = await Job.insertMany(preparedJobs);
-  await Job.populate(createdJobs, [
-    {
-      path: 'business',
-      populate: { path: 'owner', select: 'email firstName lastName' }
-    },
-    { path: 'employer', select: 'email firstName lastName userType' },
-    { path: 'createdBy', select: 'email firstName lastName userType' },
-    { path: 'publishedBy', select: 'email firstName lastName userType' }
-  ]);
-
-  const ownerIncrements = createdJobs.reduce((acc, job) => {
-    const ownerId = job.employer?.toString();
-    if (!ownerId) return acc;
-    acc[ownerId] = (acc[ownerId] || 0) + 1;
-    return acc;
-  }, {});
-
-  await Promise.all(
-    Object.entries(ownerIncrements).map(([ownerId, count]) =>
-      EmployerProfile.updateOne(
-        { user: ownerId },
-        { $inc: { totalJobsPosted: count } }
-      )
-    )
-  );
-
-  const responseJobs = await Promise.all(createdJobs.map((createdJob) => buildJobResponse(createdJob, req.user)));
-
-  res.status(201).json({ status: 'success', data: { jobs: responseJobs, totalCost: cost } });
-});
 
 exports.updateJob = catchAsync(async (req, res, next) => {
   const job = await Job.findById(req.params.jobId).populate([
