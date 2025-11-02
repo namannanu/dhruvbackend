@@ -1403,15 +1403,20 @@ exports.createJobsBulk = catchAsync(async (req, res) => {
         continue;
       }
 
-      // Derive business address with employer override support
+      // Handle employer-provided address for bulk job creation
+      const employerProvidedAddress = 
+        jobData.formattedAddress?.trim() || 
+        (jobData.location && jobData.location.formattedAddress?.trim());
+
       console.log(`[Bulk Job ${i}] Processing address for job: ${jobData.title}`);
-      console.log(`[Bulk Job ${i}] Employer-provided formattedAddress:`, jobData.formattedAddress);
+      console.log(`[Bulk Job ${i}] Employer-provided address:`, employerProvidedAddress);
       console.log(`[Bulk Job ${i}] Business location:`, business.location);
 
-      const businessAddress = deriveBusinessAddress(
-        business.location, 
-        jobData.formattedAddress // Pass employer-provided address for override
-      );
+      const businessAddress = deriveBusinessAddress({
+        providedAddress: employerProvidedAddress,
+        location: jobData.location || business.location,
+        business
+      });
       
       console.log(`[Bulk Job ${i}] Final derived address:`, businessAddress);
 
