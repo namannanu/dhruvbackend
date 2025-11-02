@@ -238,6 +238,12 @@ const buildJobResponse = async (job, currentUser) => {
   }
 
   if (!jobObj.businessAddress) {
+    console.log(`🔍 DEBUG: Resolving business address for job ${jobObj._id}`);
+    console.log(`   jobObj.location:`, jobObj.location ? 'EXISTS' : 'NULL');
+    console.log(`   jobObj.business?.location:`, jobObj.business?.location ? 'EXISTS' : 'NULL');
+    console.log(`   jobObj.businessDetails?.location:`, jobObj.businessDetails?.location ? 'EXISTS' : 'NULL');
+    console.log(`   jobObj.businessId?.location:`, jobObj.businessId?.location ? 'EXISTS' : 'NULL');
+    
     const locationSources = [
       jobObj.location,
       jobObj.business?.location,
@@ -246,14 +252,17 @@ const buildJobResponse = async (job, currentUser) => {
     ];
     for (const source of locationSources) {
       const label = resolveLocationLabel(source);
+      console.log(`   Checking source:`, source ? 'EXISTS' : 'NULL', `-> label:`, label || 'EMPTY');
       if (label) {
         jobObj.businessAddress = label;
+        console.log(`   ✅ Set businessAddress to: ${label}`);
         break;
       }
     }
   }
 
   if (!jobObj.businessAddress) {
+    console.log(`🔍 DEBUG: Trying address sources for job ${jobObj._id}`);
     const addressSources = [
       jobObj.business?.address,
       jobObj.businessDetails?.address,
@@ -261,8 +270,10 @@ const buildJobResponse = async (job, currentUser) => {
     ];
     for (const source of addressSources) {
       const label = resolveAddressValue(source);
+      console.log(`   Address source:`, source ? 'EXISTS' : 'NULL', `-> label:`, label || 'EMPTY');
       if (label) {
         jobObj.businessAddress = label;
+        console.log(`   ✅ Set businessAddress to: ${label}`);
         break;
       }
     }
@@ -772,11 +783,24 @@ exports.createJob = catchAsync(async (req, res, next) => {
 
   const initialStatus = shouldAutoPublish ? 'active' : 'draft';
 
+  // Copy business location to job if not provided
+  let jobLocation = jobData.location;
+  if (!jobLocation && business.location) {
+    console.log(`📍 Copying business location to job for business: ${business.name}`);
+    jobLocation = {
+      ...business.location.toObject ? business.location.toObject() : business.location,
+      setBy: req.user._id,
+      setAt: new Date()
+    };
+    console.log(`📍 Job location set to: ${jobLocation.formattedAddress || jobLocation.line1 || 'Unknown'}`);
+  }
+
   const job = await Job.create({
     ...jobData,
     employer: business.owner,
     createdBy: req.user._id,
     business: business._id,
+    location: jobLocation, // Include location from business
     premiumRequired: requiresPayment,
     status: initialStatus,
     isPublished: shouldAutoPublish,
@@ -849,11 +873,23 @@ exports.createJobsBulk = catchAsync(async (req, res, next) => {
     delete sanitizedJob.publishStatus;
     delete sanitizedJob.publishActionRequired;
 
+    // Copy business location to job if not provided
+    let jobLocation = sanitizedJob.location;
+    if (!jobLocation && business.location) {
+      console.log(`📍 Bulk: Copying business location to job for business: ${business.name}`);
+      jobLocation = {
+        ...business.location.toObject ? business.location.toObject() : business.location,
+        setBy: req.user._id,
+        setAt: new Date()
+      };
+    }
+
     preparedJobs.push({
       ...sanitizedJob,
       employer: business.owner,
       createdBy: req.user._id,
       business: business._id,
+      location: jobLocation, // Include location from business
       status: job.status || 'active',
     });
   }
