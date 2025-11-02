@@ -81,10 +81,69 @@ const normalizeAddressObject = (addr) => {
       normalizeString(plain.postalCode) ||
       normalizeString(plain.zip) ||
       normalizeString(plain.postal_code),
+    country:
+      normalizeString(plain.country) ||
+      normalizeString(plain.countryCode) ||
+      normalizeString(plain.country_name),
   };
 };
 
+const buildFormattedAddressChain = ({
+  formattedAddress,
+  line1,
+  city,
+  state,
+  postalCode,
+  country,
+}) => {
+  const parts = [];
+  const seen = new Set();
+  const addPart = (value) => {
+    const normalized = normalizeString(value);
+    if (!normalized) return;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    parts.push(normalized);
+  };
+
+  addPart(formattedAddress);
+  addPart(line1);
+  addPart(city);
+  addPart(state);
+  addPart(postalCode);
+  addPart(country);
+
+  return parts.length ? parts.join(', ') : null;
+};
+
+const buildLocationAddressString = (location) => {
+  const plain = toPlainObject(location);
+  if (!plain || typeof plain !== 'object') {
+    return null;
+  }
+
+  const addressObj = normalizeAddressObject(plain.address);
+
+  return buildFormattedAddressChain({
+    formattedAddress: plain.formattedAddress,
+    line1:
+      normalizeString(plain.line1) ||
+      normalizeString(plain.address) ||
+      addressObj.line1,
+    city: normalizeString(plain.city) || addressObj.city,
+    state: normalizeString(plain.state) || addressObj.state,
+    postalCode: normalizeString(plain.postalCode) || addressObj.postalCode,
+    country: normalizeString(plain.country) || addressObj.country,
+  });
+};
+
 const resolveLocationLabel = (location) => {
+  const fullAddress = buildLocationAddressString(location);
+  if (fullAddress) {
+    return fullAddress;
+  }
+
   const plain = toPlainObject(location);
   if (!plain || typeof plain !== 'object') {
     return null;
@@ -134,6 +193,21 @@ const resolveAddressValue = (address) => {
   }
 
   const normalized = normalizeAddressObject(plain);
+  const formatted = buildFormattedAddressChain({
+    formattedAddress: normalizeString(plain.formattedAddress),
+    line1:
+      normalizeString(plain.line1) ||
+      normalized.line1,
+    city: normalizeString(plain.city) || normalized.city,
+    state: normalizeString(plain.state) || normalized.state,
+    postalCode: normalizeString(plain.postalCode) || normalized.postalCode,
+    country: normalizeString(plain.country) || normalized.country,
+  });
+
+  if (formatted) {
+    return formatted;
+  }
+
   const parts = [];
   if (normalized.line1) parts.push(normalized.line1);
   if (normalized.line2) parts.push(normalized.line2);
@@ -147,6 +221,9 @@ const resolveAddressValue = (address) => {
     );
   } else if (normalized.postalCode) {
     parts.push(normalized.postalCode);
+  }
+  if (normalized.country) {
+    parts.push(normalized.country);
   }
 
   const joined = parts.join(', ').trim();
@@ -168,49 +245,35 @@ const deriveBusinessAddress = ({ providedAddress, location, business }) => {
     : null;
   const primaryLocation = location || businessLocation;
 
-  // Enhanced address derivation with full component concatenation
-  if (primaryLocation) {
-    const plain = toPlainObject(primaryLocation);
-    
-    // Build full address from all components: formattedAddress + line1 + city + state + postalCode + country
-    const addressParts = [];
-    
-    if (plain.formattedAddress && plain.formattedAddress.trim()) {
-      addressParts.push(plain.formattedAddress.trim());
-    }
-    if (plain.line1 && plain.line1.trim()) {
-      addressParts.push(plain.line1.trim());
-    }
-    if (plain.city && plain.city.trim()) {
-      addressParts.push(plain.city.trim());
-    }
-    if (plain.state && plain.state.trim()) {
-      addressParts.push(plain.state.trim());
-    }
-    if (plain.postalCode && plain.postalCode.trim()) {
-      addressParts.push(plain.postalCode.trim());
-    }
-    if (plain.country && plain.country.trim()) {
-      addressParts.push(plain.country.trim());
-    }
-    
-    if (addressParts.length > 0) {
-      return addressParts.join(', ');
-    }
-    
-    // Fallback: Build from components
-    const parts = [];
-    if (plain.line1) parts.push(plain.line1);
-    if (plain.city) parts.push(plain.city);
-    if (plain.state) parts.push(plain.state);
-    
-    if (parts.length > 0) {
-      return parts.join(', ');
-    }
+  const locationLabel = buildLocationAddressString(primaryLocation);
+  if (locationLabel) {
+    return locationLabel;
   }
 
-  // Final fallback: try business address
   if (businessObj) {
+    const addressObj = normalizeAddressObject(businessObj.address);
+    const businessFormatted = buildFormattedAddressChain({
+      formattedAddress:
+        normalizeString(businessObj.formattedAddress) ||
+        normalizeString(businessObj.locationFormattedAddress) ||
+        normalizeString(
+          businessObj.location && businessObj.location.formattedAddress
+        ),
+      line1:
+        normalizeString(businessObj.line1) ||
+        normalizeString(businessObj.addressLine1) ||
+        addressObj.line1,
+      city: normalizeString(businessObj.city) || addressObj.city,
+      state: normalizeString(businessObj.state) || addressObj.state,
+      postalCode:
+        normalizeString(businessObj.postalCode) || addressObj.postalCode,
+      country: normalizeString(businessObj.country) || addressObj.country,
+    });
+
+    if (businessFormatted) {
+      return businessFormatted;
+    }
+
     const fromAddress =
       resolveAddressValue(businessObj.address) ||
       resolveAddressValue(businessLocation ? businessLocation.address : null);
@@ -313,49 +376,22 @@ const buildJobResponse = async (job, currentUser) => {
   }
 
   if (!jobObj.businessAddress) {
-    console.log(`🔍 DEBUG: Resolving business address for job ${jobObj._id}`);
-    console.log(`   jobObj.location:`, jobObj.location ? 'EXISTS' : 'NULL');
-    console.log(`   jobObj.business?.location:`, jobObj.business?.location ? 'EXISTS' : 'NULL');
-    console.log(`   jobObj.businessDetails?.location:`, jobObj.businessDetails?.location ? 'EXISTS' : 'NULL');
-    
-    // Try to get address from various location sources
     const locationSources = [
       jobObj.location,
       jobObj.business?.location,
       jobObj.businessDetails?.location,
     ];
-    
+
     for (const source of locationSources) {
-      if (source) {
-        let address = null;
-        
-        // Try formattedAddress first
-        if (source.formattedAddress && source.formattedAddress.trim()) {
-          address = source.formattedAddress.trim();
-          console.log(`   Found formattedAddress: ${address}`);
-        }
-        // Try building from components
-        else if (source.line1 || source.city) {
-          const parts = [];
-          if (source.line1) parts.push(source.line1);
-          if (source.city) parts.push(source.city);
-          if (source.state) parts.push(source.state);
-          if (source.postalCode) parts.push(source.postalCode);
-          address = parts.join(', ');
-          console.log(`   Built from components: ${address}`);
-        }
-        
-        if (address) {
-          jobObj.businessAddress = address;
-          console.log(`   ✅ Set businessAddress to: ${address}`);
-          break;
-        }
+      const label = buildLocationAddressString(source);
+      if (label) {
+        jobObj.businessAddress = label;
+        break;
       }
     }
   }
 
   if (!jobObj.businessAddress) {
-    console.log(`🔍 DEBUG: Trying address sources for job ${jobObj._id}`);
     const addressSources = [
       jobObj.business?.address,
       jobObj.businessDetails?.address,
@@ -363,10 +399,8 @@ const buildJobResponse = async (job, currentUser) => {
     ];
     for (const source of addressSources) {
       const label = resolveAddressValue(source);
-      console.log(`   Address source:`, source ? 'EXISTS' : 'NULL', `-> label:`, label || 'EMPTY');
       if (label) {
         jobObj.businessAddress = label;
-        console.log(`   ✅ Set businessAddress to: ${label}`);
         break;
       }
     }
