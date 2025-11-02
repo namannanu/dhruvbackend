@@ -168,24 +168,34 @@ const deriveBusinessAddress = ({ providedAddress, location, business }) => {
     : null;
   const primaryLocation = location || businessLocation;
 
-  // Enhanced address derivation with clean formatting
+  // Enhanced address derivation with full component concatenation
   if (primaryLocation) {
     const plain = toPlainObject(primaryLocation);
     
-    // Use the clean formattedAddress if available (after our data structure fix)
+    // Build full address from all components: formattedAddress + line1 + city + state + postalCode + country
+    const addressParts = [];
+    
     if (plain.formattedAddress && plain.formattedAddress.trim()) {
-      const street = plain.formattedAddress.trim();
-      const city = plain.city;
-      const state = plain.state;
-      
-      // Create clean address: "Street, City, State" format
-      if (city && state) {
-        return `${street}, ${city}, ${state}`;
-      } else if (city) {
-        return `${street}, ${city}`;
-      } else {
-        return street;
-      }
+      addressParts.push(plain.formattedAddress.trim());
+    }
+    if (plain.line1 && plain.line1.trim()) {
+      addressParts.push(plain.line1.trim());
+    }
+    if (plain.city && plain.city.trim()) {
+      addressParts.push(plain.city.trim());
+    }
+    if (plain.state && plain.state.trim()) {
+      addressParts.push(plain.state.trim());
+    }
+    if (plain.postalCode && plain.postalCode.trim()) {
+      addressParts.push(plain.postalCode.trim());
+    }
+    if (plain.country && plain.country.trim()) {
+      addressParts.push(plain.country.trim());
+    }
+    
+    if (addressParts.length > 0) {
+      return addressParts.join(', ');
     }
     
     // Fallback: Build from components
@@ -866,8 +876,12 @@ exports.createJob = catchAsync(async (req, res, next) => {
 
   const initialStatus = shouldAutoPublish ? 'active' : 'draft';
 
-  // Copy business location to job if not provided
+  // Handle employer-provided location and formattedAddress
   let jobLocation = jobData.location;
+  
+  // Check if employer provided a custom formattedAddress for this job
+  const employerProvidedAddress = jobData.formattedAddress?.trim();
+  
   if (!jobLocation && business.location) {
     console.log(`📍 Copying business location to job for business: ${business.name}`);
     jobLocation = {
@@ -875,8 +889,42 @@ exports.createJob = catchAsync(async (req, res, next) => {
       setBy: req.user._id,
       setAt: new Date()
     };
+    
+    // Override with employer-provided formattedAddress if provided
+    if (employerProvidedAddress) {
+      console.log(`📝 Employer provided custom address: "${employerProvidedAddress}"`);
+      jobLocation.formattedAddress = employerProvidedAddress;
+    }
+    
     console.log(`📍 Job location set to: ${jobLocation.formattedAddress || jobLocation.line1 || 'Unknown'}`);
+  } else if (jobLocation && employerProvidedAddress) {
+    // If location exists but employer provided a custom address, override it
+    console.log(`📝 Overriding job location with employer address: "${employerProvidedAddress}"`);
+    jobLocation.formattedAddress = employerProvidedAddress;
+  } else if (!jobLocation && employerProvidedAddress) {
+    // Create new location with employer-provided address and business coordinates
+    console.log(`📝 Creating job location from employer address: "${employerProvidedAddress}"`);
+    jobLocation = {
+      formattedAddress: employerProvidedAddress,
+      // Use business location for coordinates if available
+      ...(business.location ? {
+        line1: business.location.line1,
+        city: business.location.city,
+        state: business.location.state,
+        postalCode: business.location.postalCode,
+        country: business.location.country,
+        latitude: business.location.latitude,
+        longitude: business.location.longitude,
+        allowedRadius: business.location.allowedRadius,
+        placeId: business.location.placeId,
+      } : {}),
+      setBy: req.user._id,
+      setAt: new Date()
+    };
   }
+
+  // Clean up the formattedAddress from jobData since we've processed it
+  delete jobData.formattedAddress;
 
   const providedBusinessAddress =
     typeof jobData.businessAddress === 'string'
@@ -1237,6 +1285,100 @@ exports.hireApplicant = catchAsync(async (req, res, next) => {
     message: 'Applicant hired successfully and employment record created',
     data: responseData 
   });
+});
+
+// Create multiple jobs (bulk operation)
+exports.createJobsBulk = catchAsync(async (req, res) => {
+  const { jobs: jobsData } = req.body;
+  
+  if (!jobsData || !Array.isArray(jobsData) || jobsData.length === 0) {
+    return res.status(400).json({
+      status: 'error',
+      message: 'Jobs array is required and cannot be empty'
+    });
+  }
+
+  const createdJobs = [];
+  const errors = [];
+
+  for (let i = 0; i < jobsData.length; i++) {
+    try {
+      const jobData = jobsData[i];
+      
+      // Validate required fields
+      if (!jobData.title || !jobData.businessId) {
+        errors.push({
+          index: i,
+          error: 'Title and businessId are required'
+        });
+        continue;
+      }
+
+      // Get business information for location copying
+      const business = await Business.findById(jobData.businessId);
+      if (!business) {
+        errors.push({
+          index: i,
+          error: 'Business not found'
+        });
+        continue;
+      }
+
+      // Derive business address with employer override support
+      console.log(`[Bulk Job ${i}] Processing address for job: ${jobData.title}`);
+      console.log(`[Bulk Job ${i}] Employer-provided formattedAddress:`, jobData.formattedAddress);
+      console.log(`[Bulk Job ${i}] Business location:`, business.location);
+
+      const businessAddress = deriveBusinessAddress(
+        business.location, 
+        jobData.formattedAddress // Pass employer-provided address for override
+      );
+      
+      console.log(`[Bulk Job ${i}] Final derived address:`, businessAddress);
+
+      // Create job with derived location
+      const newJob = new Job({
+        ...jobData,
+        employer: req.user._id,
+        businessAddress
+      });
+
+      const savedJob = await newJob.save();
+      
+      // Populate job with related data
+      const populatedJob = await Job.findById(savedJob._id)
+        .populate('employer', 'firstName lastName email')
+        .populate('business', 'name address logoUrl')
+        .populate('hiredWorker', 'firstName lastName email');
+
+      createdJobs.push(populatedJob);
+      
+    } catch (error) {
+      console.error(`Error creating job at index ${i}:`, error);
+      errors.push({
+        index: i,
+        error: error.message
+      });
+    }
+  }
+
+  const response = {
+    status: createdJobs.length > 0 ? 'success' : 'error',
+    message: `${createdJobs.length} job(s) created successfully`,
+    data: {
+      createdJobs,
+      totalRequested: jobsData.length,
+      successCount: createdJobs.length,
+      errorCount: errors.length
+    }
+  };
+
+  if (errors.length > 0) {
+    response.errors = errors;
+  }
+
+  const statusCode = createdJobs.length > 0 ? 201 : 400;
+  res.status(statusCode).json(response);
 });
 
 // Get all jobs by id (for both employer and hired worker)
