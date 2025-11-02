@@ -2,32 +2,41 @@
 console.log('🚀 Testing Job Creation with Address Formatting');
 console.log('=' * 60);
 
-// Simulate the exact deriveBusinessAddress logic from the updated controller
+// Simulate the exact NEW deriveBusinessAddress logic from the updated controller
 function deriveBusinessAddress({ providedAddress, location, business }) {
-  const trimmed = typeof providedAddress === 'string' ? providedAddress.trim() : undefined;
-  
   console.log('\n🔍 deriveBusinessAddress called with:');
   console.log('  📍 providedAddress (employer):', providedAddress);
   console.log('  🏢 location (business):', JSON.stringify(location, null, 2));
   
-  if (trimmed) {
-    console.log('✅ Using employer-provided address:', trimmed);
-    return trimmed;
-  }
-
   const primaryLocation = location;
   if (primaryLocation) {
     const addressParts = [];
     
     console.log('\n🔄 Processing location components:');
     
-    if (primaryLocation.formattedAddress && primaryLocation.formattedAddress.trim()) {
-      console.log('  ✅ formattedAddress:', primaryLocation.formattedAddress);
-      addressParts.push(primaryLocation.formattedAddress.trim());
+    // First, add employer-provided formattedAddress if available
+    const trimmedProvidedAddress = typeof providedAddress === 'string' ? providedAddress.trim() : undefined;
+    if (trimmedProvidedAddress) {
+      console.log('  ✅ employer formattedAddress:', trimmedProvidedAddress);
+      addressParts.push(trimmedProvidedAddress);
     } else {
-      console.log('  ❌ formattedAddress: NOT SET or EMPTY');
+      console.log('  ❌ employer formattedAddress: NOT PROVIDED');
     }
     
+    // Then add business location formattedAddress if available and different from provided address
+    if (primaryLocation.formattedAddress && primaryLocation.formattedAddress.trim()) {
+      const businessFormatted = primaryLocation.formattedAddress.trim();
+      if (!trimmedProvidedAddress || businessFormatted !== trimmedProvidedAddress) {
+        console.log('  ✅ business formattedAddress:', businessFormatted);
+        addressParts.push(businessFormatted);
+      } else {
+        console.log('  ⚠️  business formattedAddress: SAME AS EMPLOYER, SKIPPED');
+      }
+    } else {
+      console.log('  ❌ business formattedAddress: NOT SET or EMPTY');
+    }
+    
+    // Add remaining location components
     if (primaryLocation.line1 && primaryLocation.line1.trim()) {
       console.log('  ✅ line1:', primaryLocation.line1);
       addressParts.push(primaryLocation.line1.trim());
