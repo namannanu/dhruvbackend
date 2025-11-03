@@ -13,9 +13,14 @@ const ensureViewJobsPermission = (req, res, next) => {
 };
 
 // Job management routes with permission protection
-router.get('/', protect, ensureViewJobsPermission, controller.listJobs); // Legacy endpoint for backward compatibility
-router.get('/worker', protect, controller.listJobsForWorker); // New endpoint specifically for workers
-router.get('/employer', protect, requirePermissions('view_jobs'), controller.listJobsForEmployer); // New endpoint specifically for employers
+// Specific routes first
+router.get('/worker', protect, controller.listJobsForWorker); // Workers endpoint
+router.get('/employer', protect, requirePermissions('view_jobs'), controller.listJobsForEmployer); // Employers endpoint
+router.post('/bulk', protect, requirePermissions('create_jobs'), controller.createJobsBulk);
+router.post('/applications/:applicationId/hire', protect, requirePermissions('hire_workers'), controller.hireApplicant);
+
+// Legacy and parameterized routes after specific routes
+router.get('/', protect, ensureViewJobsPermission, controller.listJobs); // Legacy endpoint
 router.get('/:jobId', protect, requirePermissions('view_jobs'), controller.getJob);
 router.get('/:jobId/applications', protect, requirePermissions('view_applications'), controller.listApplicationsForJob);
 router.post('/:jobId/applications', protect, applicationController.createApplication); // Workers can apply without special permission
