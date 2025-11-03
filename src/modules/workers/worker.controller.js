@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const sharp = require('sharp');
 const WorkerProfile = require('./workerProfile.model');
 const WorkerEmployment = require('./workerEmployment.model');
 const User = require('../users/user.model');
@@ -857,34 +858,93 @@ exports.uploadProfilePicture = catchAsync(async (req, res, next) => {
     throw new AppError('Only image uploads are supported', 400);
   }
 
-  const dataUrl = buildDataUrl({ buffer, mimeType: mimetype });
+  // Create optimized original and a square variant for profile pictures
+  try {
+    // Optimized original: resize down to max width 512 while preserving aspect
+    const optimizedOriginalBuffer = await sharp(buffer)
+      .rotate()
+      .resize({ width: 512, withoutEnlargement: true })
+      .webp({ quality: 75 })
+      .toBuffer();
 
-  profile.profilePicture = profile.profilePicture || {};
-  profile.profilePicture.original = {
-    data: buffer,
-    mimeType: mimetype,
-    size,
-    source: 'upload',
-    uploadedAt: new Date(),
-    url: dataUrl,
-  };
-  profile.profilePicture.square = undefined;
-  profile.profilePicture.updatedAt = new Date();
-  profile.profilePictureUrl = dataUrl;
+    // Square variant for avatars/cards - smaller size for profile pics
+    const squareBuffer = await sharp(buffer)
+      .rotate()
+      .resize(128, 128, { fit: 'cover' })
+      .webp({ quality: 70 })
+      .toBuffer();
 
-  await profile.save();
+    const now = new Date();
 
-  const responseProfilePicture = sanitizeProfilePictureAssetForResponse(
-    profile.profilePicture?.original?.toObject?.() ?? profile.profilePicture?.original
-  );
+    profile.profilePicture = profile.profilePicture || {};
+    profile.profilePicture.original = {
+      data: optimizedOriginalBuffer,
+      mimeType: 'image/webp',
+      size: optimizedOriginalBuffer.length,
+      source: 'upload',
+      uploadedAt: now,
+      url: buildDataUrl({ buffer: optimizedOriginalBuffer, mimeType: 'image/webp' }),
+    };
+    
+    profile.profilePicture.square = {
+      data: squareBuffer,
+      mimeType: 'image/webp',
+      size: squareBuffer.length,
+      source: 'upload',
+      uploadedAt: now,
+      url: buildDataUrl({ buffer: squareBuffer, mimeType: 'image/webp' }),
+    };
 
-  res.status(200).json({
-    status: 'success',
-    data: {
-      profilePicture: responseProfilePicture,
-    },
-    message: 'Profile picture uploaded successfully',
-  });
+    profile.profilePicture.updatedAt = now;
+    // Use the square variant as the primary profile picture URL (smaller size)
+    profile.profilePictureUrl = profile.profilePicture.square.url;
+
+    await profile.save();
+
+    const responseProfilePicture = sanitizeProfilePictureAssetForResponse(
+      profile.profilePicture?.square?.toObject?.() ?? profile.profilePicture?.square
+    );
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        profilePicture: responseProfilePicture,
+      },
+      message: 'Profile picture uploaded and optimized successfully',
+    });
+  } catch (err) {
+    console.error('Error processing profile picture upload:', err);
+    
+    // Fallback to non-optimized upload
+    const dataUrl = buildDataUrl({ buffer, mimeType: mimetype });
+
+    profile.profilePicture = profile.profilePicture || {};
+    profile.profilePicture.original = {
+      data: buffer,
+      mimeType: mimetype,
+      size,
+      source: 'upload',
+      uploadedAt: new Date(),
+      url: dataUrl,
+    };
+    profile.profilePicture.square = undefined;
+    profile.profilePicture.updatedAt = new Date();
+    profile.profilePictureUrl = dataUrl;
+
+    await profile.save();
+
+    const responseProfilePicture = sanitizeProfilePictureAssetForResponse(
+      profile.profilePicture?.original?.toObject?.() ?? profile.profilePicture?.original
+    );
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        profilePicture: responseProfilePicture,
+      },
+      message: 'Profile picture uploaded successfully (fallback)',
+    });
+  }
 });
 
 // Get profile picture controller

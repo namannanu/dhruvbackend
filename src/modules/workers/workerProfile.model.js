@@ -1,42 +1,6 @@
 const mongoose = require('mongoose');
 
-// Time slot schema for availability
-const timeSlotSchema = new mongoose.Schema({
-  startTime: { 
-    type: String, 
-    required: true,
-    validate: {
-      validator: function(v) {
-        return /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(v);
-      },
-      message: 'Start time must be in HH:MM format'
-    }
-  },
-  endTime: { 
-    type: String, 
-    required: true,
-    validate: {
-      validator: function(v) {
-        return /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(v);
-      },
-      message: 'End time must be in HH:MM format'
-    }
-  }
-}, { _id: false });
 
-// Daily availability schema
-const dailyAvailabilitySchema = new mongoose.Schema({
-  day: {
-    type: String,
-    required: true,
-    enum: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
-  },
-  isAvailable: {
-    type: Boolean,
-    default: false
-  },
-  timeSlots: [timeSlotSchema]
-}, { _id: false });
 
 // Profile picture asset schema (similar to business logo)
 const profilePictureAssetSchema = new mongoose.Schema(
@@ -110,20 +74,6 @@ const workerProfileSchema = new mongoose.Schema(
     locationEnabled: { type: Boolean, default: true },
     shareWorkHistory: { type: Boolean, default: true },
     
-    availability: {
-      type: [dailyAvailabilitySchema],
-      default: function() {
-        return [
-          { day: 'monday', isAvailable: false, timeSlots: [] },
-          { day: 'tuesday', isAvailable: false, timeSlots: [] },
-          { day: 'wednesday', isAvailable: false, timeSlots: [] },
-          { day: 'thursday', isAvailable: false, timeSlots: [] },
-          { day: 'friday', isAvailable: false, timeSlots: [] },
-          { day: 'saturday', isAvailable: false, timeSlots: [] },
-          { day: 'sunday', isAvailable: false, timeSlots: [] }
-        ];
-      }
-    },
     // Keep legacy availability for backwards compatibility (will be deprecated)
     legacyAvailability: {
       type: [String],
