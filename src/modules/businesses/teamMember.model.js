@@ -62,9 +62,7 @@ const teamMemberSchema = new mongoose.Schema(
             
             // Team Management
             'invite_team_members',
-            'view_team_members',
             'edit_team_members',
-            'manage_team_members',
             'remove_team_members',
             'manage_permissions',
             

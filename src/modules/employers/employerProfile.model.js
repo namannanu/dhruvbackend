@@ -11,26 +11,17 @@ const employerProfileSchema = new mongoose.Schema(
     companyName: { type: String, required: true, trim: true },
     description: { type: String, trim: true },
     phone: { type: String, trim: true },
+    profilePicture: { type: String, trim: true }, // Profile picture URL
+    companyLogo: { type: String, trim: true }, // Company logo URL
     rating: { type: Number, default: 0 },
     totalJobsPosted: { type: Number, default: 0 },
-    totalHires: { type: Number, default: 0 }
+    totalHires: { type: Number, default: 0 },
+    defaultBusiness: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Business'
+    }
   },
-  { 
-    timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
-  }
+  { timestamps: true }
 );
-
-// Virtual to access userId through user reference
-employerProfileSchema.virtual('userId', {
-  ref: 'User',
-  localField: 'user',
-  foreignField: '_id',
-  justOne: true,
-  get: function() {
-    return this.user?.userId;
-  }
-});
 
 module.exports = mongoose.model('EmployerProfile', employerProfileSchema);

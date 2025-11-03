@@ -1,53 +1,31 @@
 const express = require('express');
-const multer = require('multer');
 const controller = require('./business.controller');
 const { protect, restrictTo } = require('../../shared/middlewares/auth.middleware');
-const dbHealthCheck = require('../../shared/middlewares/dbHealthCheck');
-const AppError = require('../../shared/utils/appError');
+const { requirePermissions } = require('../../shared/middlewares/permissionMiddleware');
 
 const router = express.Router();
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    if (!file.mimetype || !file.mimetype.startsWith('image/')) {
-      return cb(new AppError('Only image files are allowed', 400));
-    }
-    cb(null, true);
-  }
-});
-
-// Apply database health check to all routes
-router.use(dbHealthCheck);
 router.use(protect);
 
-// Permission checks removed per user request
-// Business management routes 
-router.get('/', controller.listBusinesses);
-router.post('/', restrictTo('employer'), controller.createBusiness);
-router.patch('/:businessId', controller.updateBusiness);
-router.delete('/:businessId', controller.deleteBusiness);
-router.post('/:businessId/select', restrictTo('employer'), controller.selectBusiness);
-router.post(
-  '/:businessId/logo',
-  upload.single('logo'),
-  controller.uploadBusinessLogo
-);
-router.get(
-  '/:businessId/logo',
-  controller.getBusinessLogo
-);
+// Business management routes with permission protection
+router.get('/', controller.listBusinesses); // No specific permission needed - users can see their businesses
+router.post('/', restrictTo('employer'), requirePermissions('create_business'), controller.createBusiness);
+router.patch('/:businessId', requirePermissions('edit_business'), controller.updateBusiness);
+router.delete('/:businessId', requirePermissions('delete_business'), controller.deleteBusiness);
+router.post('/:businessId/select', restrictTo('employer'), controller.selectBusiness); // No specific permission needed
+router.get('/:businessId/address', controller.getBusinessAddress); // Get business address for job creation
 
-// Team management routes
-router.get('/:businessId/team-members', controller.manageTeamMember.list);
-router.post('/:businessId/team-members', controller.manageTeamMember.create);
+// Team management routes with permission protection
+router.get('/:businessId/team-members', requirePermissions(['view_team_members']), controller.manageTeamMember.list);
+router.post('/:businessId/team-members', requirePermissions('invite_team_members'), controller.manageTeamMember.create);
 router.patch(
   '/:businessId/team-members/:memberId',
+  requirePermissions('edit_team_members'),
   controller.manageTeamMember.update
 );
 router.delete(
   '/:businessId/team-members/:memberId',
+  requirePermissions('remove_team_members'),
   controller.manageTeamMember.remove
 );
 

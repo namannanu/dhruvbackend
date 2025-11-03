@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
 
 const userSchema = new mongoose.Schema(
   {
@@ -28,13 +27,12 @@ const userSchema = new mongoose.Schema(
     premium: { type: Boolean, default: false },
     freeJobsPosted: { type: Number, default: 0 },
     freeApplicationsUsed: { type: Number, default: 0 },
+    selectedBusiness: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Business'
+    },
     lastLoginAt: Date,
-    passwordChangedAt: Date,
-    
-    // Push notification fields
-    fcmToken: { type: String, select: false },
-    platform: { type: String, enum: ['android', 'ios', 'web', 'unknown'], default: 'unknown' },
-    fcmTokenUpdatedAt: Date
+    passwordChangedAt: Date
   },
   { timestamps: true }
 );

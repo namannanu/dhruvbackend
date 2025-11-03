@@ -249,172 +249,38 @@ async function getUserPermissions(userId, businessId) {
   try {
     console.log(`Getting permissions for user ${userId} and business ${businessId}`);
     
-    // For business creation, check TeamAccess without requiring business context
-    const User = require('../../modules/users/user.model');
-    const TeamAccess = require('../../modules/team/teamAccess.model');
-    
-    const user = await User.findById(userId);
-    if (user && user.email) {
-      const teamAccess = await TeamAccess.findOne({
-        userEmail: user.email.toLowerCase(),
-        status: 'active'
-      });
+    // First check if user is the business owner
+    const business = await Business.findById(businessId);
+    if (business && business.owner && business.owner.toString() === userId.toString()) {
+      console.log(`User ${userId} is owner of business ${businessId} - granting all permissions`);
+      return Object.keys(ALL_PERMISSIONS); // Owner gets all permissions
+    }
+
+    // Check if user is a team member of this business
+    const teamMember = await TeamMember.findOne({
+      user: userId,
+      business: businessId,
+      active: true
+    });
+
+    if (teamMember) {
+      console.log(`Found team member with role ${teamMember.role} for user ${userId}`);
       
-      if (teamAccess && teamAccess.isAccessValid) {
-        console.log(`Found team access with level ${teamAccess.accessLevel} for user ${userId}`);
-        console.log('TeamAccess permissions object:', teamAccess.permissions);
-        console.log('Specific view_jobs permission:', {
-          canViewJobs: teamAccess.permissions?.canViewJobs,
-          effectiveCanViewJobs: teamAccess.effectivePermissions?.canViewJobs
-        });
-        
-        // Check business context and scope
-        const permissions = [];
-        
-        // Handle different access scopes
-        if (teamAccess.accessScope === 'independent_operator') {
-          // Independent operators can create and manage their own businesses
-          if (teamAccess.permissions.canCreateBusiness) permissions.push('create_business');
-          if (teamAccess.permissions.canEditBusiness) permissions.push('edit_business');
-          if (teamAccess.permissions.canDeleteBusiness) permissions.push('delete_business');
-          if (teamAccess.permissions.canViewBusiness) permissions.push('view_business');
-          
-          // Check if the business belongs to this user
-          if (businessId) {
-            const Business = require('../../modules/businesses/business.model');
-            const business = await Business.findById(businessId);
-            if (business && business.owner.toString() === userId.toString()) {
-              // User owns this business, grant full permissions
-              console.log('User owns this business - granting full permissions');
-            } else {
-              // User doesn't own this business, check if they have specific access
-              if (!teamAccess.businessContext?.allBusinesses && 
-                  teamAccess.businessContext?.businessId?.toString() !== businessId) {
-                console.log('User does not have access to this specific business');
-                return []; // No access to businesses they don't own and aren't specifically granted access to
-              }
-            }
-          }
-        } else if (teamAccess.accessScope === 'business_specific') {
-          // Access is limited to specific business
-          if (businessId && teamAccess.businessContext?.businessId?.toString() !== businessId) {
-            console.log('Access is business-specific but wrong business ID');
-            return [];
-          }
-        } else if (teamAccess.accessScope === 'all_owner_businesses') {
-          // Access to all businesses owned by the original user
-          if (businessId) {
-            const Business = require('../../modules/businesses/business.model');
-            const business = await Business.findById(businessId);
-            if (business && business.owner.toString() !== teamAccess.originalUser.toString()) {
-              console.log('Business not owned by the original user');
-              return [];
-            }
-          }
-        }
-        
-        // Add standard permissions based on TeamAccess
-        if (teamAccess.permissions.canCreateBusiness) permissions.push('create_business');
-        if (teamAccess.permissions.canEditBusiness) permissions.push('edit_business');
-        if (teamAccess.permissions.canDeleteBusiness) permissions.push('delete_business');
-        if (teamAccess.permissions.canViewBusiness) permissions.push('view_business');
-        if (teamAccess.permissions.canCreateJobs) permissions.push('create_jobs');
-        if (teamAccess.permissions.canEditJobs) permissions.push('edit_jobs');
-        if (teamAccess.permissions.canDeleteJobs) permissions.push('delete_jobs');
-        if (teamAccess.permissions.canViewJobs) permissions.push('view_jobs');
-        if (teamAccess.permissions.canCreateAttendance) permissions.push('create_attendance');
-        if (teamAccess.permissions.canEditAttendance) permissions.push('edit_attendance');
-        if (teamAccess.permissions.canViewAttendance) permissions.push('view_attendance');
-        
-        // Map attendance permissions to schedule permissions (for attendance scheduling)
-        if (teamAccess.permissions.canCreateAttendance) permissions.push('create_schedules');
-        if (teamAccess.permissions.canEditAttendance) permissions.push('edit_schedules');
-        if (teamAccess.permissions.canViewAttendance) permissions.push('view_schedules');
-        if (teamAccess.permissions.canManageAttendance) permissions.push('manage_schedules');
-        
-        // Worker permissions - THIS WAS MISSING!
-        if (teamAccess.permissions.canHireWorkers) permissions.push('hire_workers');
-        if (teamAccess.permissions.canFireWorkers) permissions.push('fire_workers');
-        if (teamAccess.permissions.canManageWorkers) permissions.push('manage_workers');
-        if (teamAccess.permissions.canViewWorkers) permissions.push('view_workers');
-        
-        // Application permissions
-        if (teamAccess.permissions.canViewApplications) permissions.push('view_applications');
-        if (teamAccess.permissions.canManageApplications) permissions.push('manage_applications');
-        
-        // Shift permissions
-        if (teamAccess.permissions.canCreateShifts) permissions.push('create_shifts');
-        if (teamAccess.permissions.canEditShifts) permissions.push('edit_shifts');
-        if (teamAccess.permissions.canDeleteShifts) permissions.push('delete_shifts');
-        if (teamAccess.permissions.canViewShifts) permissions.push('view_shifts');
-        
-        // Schedule permissions (mapped from shift permissions)
-        if (teamAccess.permissions.canCreateShifts) permissions.push('create_schedules');
-        if (teamAccess.permissions.canEditShifts) permissions.push('edit_schedules');
-        if (teamAccess.permissions.canDeleteShifts) permissions.push('delete_schedules');
-        if (teamAccess.permissions.canViewShifts) permissions.push('view_schedules');
-        if (teamAccess.permissions.canManageShifts) permissions.push('manage_schedules');
-        
-        // Team permissions
-        if (teamAccess.permissions.canViewTeam) permissions.push('view_team');
-        if (teamAccess.permissions.canManageTeam) permissions.push('manage_team');
-        if (teamAccess.permissions.canGrantAccess) permissions.push('grant_access');
-        
-        // Payment permissions
-        if (teamAccess.permissions.canViewPayments) permissions.push('view_payments');
-        if (teamAccess.permissions.canManagePayments) permissions.push('manage_payments');
-        if (teamAccess.permissions.canProcessPayments) permissions.push('process_payments');
-        
-        // Budget permissions
-        if (teamAccess.permissions.canViewBudgets) permissions.push('view_budgets');
-        if (teamAccess.permissions.canManageBudgets) permissions.push('manage_budgets');
-        
-        // Analytics permissions
-        if (teamAccess.permissions.canViewAnalytics) permissions.push('view_analytics');
-        if (teamAccess.permissions.canViewReports) permissions.push('view_reports');
-        if (teamAccess.permissions.canExportData) permissions.push('export_data');
-        
-        console.log(`Using TeamAccess permissions for user ${userId}:`, permissions);
-        return permissions;
+      // If user is admin, return all permissions
+      if (teamMember.role === 'admin') {
+        return Object.keys(ALL_PERMISSIONS);
       }
-    }
-    
-    // If no TeamAccess found, check if user is business owner (when businessId is provided)
-    if (businessId) {
-      const business = await Business.findById(businessId);
-      if (business && business.owner && business.owner.toString() === userId.toString()) {
-        console.log(`User ${userId} is owner of business ${businessId} - granting all permissions`);
-        return Object.keys(ALL_PERMISSIONS); // Owner gets all permissions
+      
+      // If user has specific permissions assigned, use those
+      if (teamMember.permissions && teamMember.permissions.length > 0) {
+        console.log(`Using custom permissions for user ${userId}:`, teamMember.permissions);
+        return teamMember.permissions;
       }
-    }
-
-    // Check if user is a team member of this business (legacy system)
-    if (businessId) {
-      const teamMember = await TeamMember.findOne({
-        user: userId,
-        business: businessId,
-        active: true
-      });
-
-      if (teamMember) {
-        console.log(`Found team member with role ${teamMember.role} for user ${userId}`);
-        
-        // If user is admin, return all permissions
-        if (teamMember.role === 'admin') {
-          return Object.keys(ALL_PERMISSIONS);
-        }
-        
-        // If user has specific permissions assigned, use those
-        if (teamMember.permissions && teamMember.permissions.length > 0) {
-          console.log(`Using custom permissions for user ${userId}:`, teamMember.permissions);
-          return teamMember.permissions;
-        }
-        
-        // Fall back to role-based permissions
-        const rolePermissions = ROLE_PERMISSIONS[teamMember.role] || [];
-        console.log(`Using role-based permissions for ${teamMember.role}:`, rolePermissions);
-        return rolePermissions;
-      }
+      
+      // Fall back to role-based permissions
+      const rolePermissions = ROLE_PERMISSIONS[teamMember.role] || [];
+      console.log(`Using role-based permissions for ${teamMember.role}:`, rolePermissions);
+      return rolePermissions;
     }
 
     console.log(`No permissions found for user ${userId} in business ${businessId}`);
@@ -456,17 +322,12 @@ function hasAllPermissions(userPermissions, requiredPermissions) {
  */
 async function getBusinessIdFromRequest(req) {
   try {
-    // 1. Check JWT token payload first (for team members with active business context)
-    if (req.tokenPayload && req.tokenPayload.businessId) {
-      return req.tokenPayload.businessId;
-    }
-
-    // 2. Check URL parameters
+    // 1. Check URL parameters first
     if (req.params.businessId) {
       return req.params.businessId;
     }
 
-    // 3. Check if employerId parameter maps to a business
+    // 2. Check if employerId parameter maps to a business
     if (req.params.employerId) {
       const business = await Business.findOne({ owner: req.params.employerId });
       if (business) {
@@ -474,25 +335,7 @@ async function getBusinessIdFromRequest(req) {
       }
     }
 
-    // 4. Check if jobId parameter exists and fetch business from job
-    if (req.params.jobId) {
-      const Job = require('../../modules/jobs/job.model');
-      const job = await Job.findById(req.params.jobId).select('business');
-      if (job && job.business) {
-        return job.business.toString();
-      }
-    }
-
-    // 5. Check if applicationId parameter exists and fetch business from application's job
-    if (req.params.applicationId) {
-      const Application = require('../../modules/applications/application.model');
-      const application = await Application.findById(req.params.applicationId).populate('job', 'business');
-      if (application && application.job && application.job.business) {
-        return application.job.business.toString();
-      }
-    }
-
-    // 6. Check body and query parameters
+    // 3. Check body and query parameters
     if (req.body.businessId) {
       return req.body.businessId;
     }
@@ -501,12 +344,17 @@ async function getBusinessIdFromRequest(req) {
       return req.query.businessId;
     }
 
-    // 7. Check headers
+    // 4. Check headers
     if (req.headers['x-business-id']) {
       return req.headers['x-business-id'];
     }
 
-    // 8. If user is an employer, find their primary business
+    // 5. Use user's selected business
+    if (req.user && req.user.selectedBusiness) {
+      return req.user.selectedBusiness.toString();
+    }
+
+    // 6. If user is an employer, find their primary business
     if (req.user && req.user.userType === 'employer') {
       const business = await Business.findOne({ owner: req.user.id || req.user._id });
       if (business) {
@@ -641,56 +489,6 @@ function validatePermissions(permissions) {
   );
 }
 
-/**
- * Maps team access boolean permissions to business permission strings
- * @param {Object} teamAccess - Object containing boolean permission flags
- * @returns {Array} Array of business permission strings
- */
-const mapTeamAccessToBusinessPermissions = (teamAccess) => {
-  const flags = teamAccess?.permissions ? { ...teamAccess.permissions } : { ...teamAccess };
-  const permissions = [];
-  
-  // Job permissions
-  if (flags.canCreateJobs) permissions.push('create_jobs');
-  if (flags.canEditJobs) permissions.push('edit_jobs');
-  if (flags.canDeleteJobs) permissions.push('delete_jobs');
-  if (flags.canViewJobs) permissions.push('view_jobs');
-  
-  // Application permissions
-  if (flags.canViewApplications) permissions.push('view_applications');
-  if (flags.canManageApplications) permissions.push('manage_applications');
-  
-  // Shift permissions
-  if (flags.canCreateShifts) permissions.push('create_shifts');
-  if (flags.canEditShifts) permissions.push('edit_shifts');
-  if (flags.canDeleteShifts) permissions.push('delete_shifts');
-  if (flags.canViewShifts) permissions.push('view_shifts');
-  
-  // Worker permissions
-  if (flags.canViewWorkers) permissions.push('view_workers');
-  if (flags.canManageWorkers) permissions.push('manage_workers');
-  
-  // Team permissions
-  if (flags.canViewTeam) permissions.push('view_team_members');
-  if (flags.canManageTeam) permissions.push('manage_team_members');
-  
-  // Business permissions
-  if (flags.canEditBusiness) permissions.push('edit_business');
-  if (flags.canViewBusiness) permissions.push('view_business');
-  
-  // Financial permissions
-  if (flags.canViewPayments) permissions.push('view_payments');
-  if (flags.canManagePayments) permissions.push('manage_payments');
-  if (flags.canViewBudgets) permissions.push('view_budgets');
-  if (flags.canManageBudgets) permissions.push('manage_budgets');
-  
-  // Attendance permissions
-  if (flags.canViewAttendance) permissions.push('view_attendance');
-  if (flags.canManageAttendance) permissions.push('manage_attendance');
-  
-  return permissions;
-};
-
 module.exports = {
   ALL_PERMISSIONS,
   ROLE_PERMISSIONS,
@@ -705,5 +503,4 @@ module.exports = {
   checkUserPermission,
   getRolePermissions,
   validatePermissions,
-  mapTeamAccessToBusinessPermissions,
 };

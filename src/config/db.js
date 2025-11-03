@@ -58,14 +58,10 @@ const connectDB = async (retryCount = 0) => {
         heartbeatFrequencyMS: 10000,
         autoIndex: process.env.NODE_ENV !== 'production',
         // SSL/TLS Configuration for Atlas
-        ssl: true,
-        sslValidate: true,
-        sslCA: undefined, // Use default CA bundle
+        tls: true,
+        tlsCAFile: undefined, // Use default CA bundle
         tlsAllowInvalidCertificates: false,
         tlsAllowInvalidHostnames: false,
-        // Additional serverless optimizations
-        keepAlive: true,
-        keepAliveInitialDelay: 0,
         directConnection: false,
         // Remove compression for Atlas compatibility
         authSource: 'admin',

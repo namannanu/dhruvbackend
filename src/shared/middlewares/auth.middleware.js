@@ -23,22 +23,9 @@ exports.protect = catchAsync(async (req, res, next) => {
   try {
     const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
     
-    console.log('🔍 JWT Debug:', {
-      decodedId: decoded.id,
-      decodedIat: decoded.iat,
-      tokenValid: true
-    });
-    
     const currentUser = await User.findById(decoded.id)
       .select('+passwordChangedAt')
       .exec();
-
-    console.log('🔍 User Lookup:', {
-      userFound: !!currentUser,
-      userId: currentUser?._id,
-      userType: currentUser?.userType,
-      userEmail: currentUser?.email
-    });
 
     if (!currentUser) {
       return next(new AppError('User account no longer exists or has been disabled.', 401));
@@ -52,10 +39,7 @@ exports.protect = catchAsync(async (req, res, next) => {
     currentUser.lastActiveAt = new Date();
     await currentUser.save({ validateBeforeSave: false });
 
-    // Attach decoded JWT payload for team management context
     req.user = currentUser;
-    req.tokenPayload = decoded; // Includes businessId, teamRole, permissions if available
-    
     next();
   } catch (error) {
     if (error.name === 'JsonWebTokenError') {
@@ -69,31 +53,8 @@ exports.protect = catchAsync(async (req, res, next) => {
 });
 
 exports.restrictTo = (...roles) => (req, res, next) => {
-  // Add debugging
-  console.log('🔍 RestrictTo Debug:', {
-    hasUser: !!req.user,
-    userType: req.user?.userType,
-    userId: req.user?._id,
-    userEmail: req.user?.email,
-    requiredRoles: roles,
-    path: req.path,
-    method: req.method
-  });
-
-  if (!req.user) {
-    console.log('❌ No user in request');
-    return next(new AppError('User not found in request', 401));
+  if (!req.user || !roles.includes(req.user.userType)) {
+    return next(new AppError('You do not have permission to perform this action', 403));
   }
-  
-  if (!roles.includes(req.user.userType)) {
-    console.log('❌ Role mismatch:', {
-      userRole: req.user.userType,
-      requiredRoles: roles,
-      includes: roles.includes(req.user.userType)
-    });
-    return next(new AppError(`Access denied. Required roles: ${roles.join(', ')}. Your role: ${req.user.userType}`, 403));
-  }
-  
-  console.log('✅ Authorization successful');
   next();
 };

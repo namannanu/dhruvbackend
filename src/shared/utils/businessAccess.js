@@ -1,7 +1,6 @@
 const AppError = require('./appError');
 const Business = require('../../modules/businesses/business.model');
 const TeamMember = require('../../modules/businesses/teamMember.model');
-const TeamAccess = require('../../modules/team/teamAccess.model');
 const {
   ROLE_PERMISSIONS,
 } = require('../middlewares/permissionMiddleware');
@@ -56,133 +55,8 @@ async function ensureBusinessAccess({
     user: userId,
   });
 
-  // If no traditional team member found, check TeamAccess records
   if (!teamMember) {
-    const teamAccess = await TeamAccess.findOne({
-      $and: [
-        {
-          $or: [
-            { employeeId: userId },
-            { userEmail: user.email }
-          ]
-        },
-        {
-          status: { $in: ['active', 'pending'] }
-        },
-        {
-          $or: [
-            { 'businessContext.businessId': business._id },
-            { 'businessContext.allBusinesses': true },
-            { accessScope: 'all_owner_businesses' }
-          ]
-        }
-      ]
-    });
-    
-    if (!teamAccess) {
-      throw new AppError('You are not a team member of this business', 403);
-    }
-
-    // For allBusinesses access, verify the business belongs to the managed user
-    if (teamAccess.businessContext?.allBusinesses) {
-      const managedUserId = teamAccess.managedUser?._id || teamAccess.originalUser;
-      if (managedUserId && normalizeId(business.owner) !== normalizeId(managedUserId)) {
-        throw new AppError('This business does not belong to the user you have access to manage', 403);
-      }
-    }
-
-    // Check if TeamAccess has the required permissions
-    const permissionsToCheck = normalizePermissions(requiredPermissions);
-    
-    if (permissionsToCheck.length) {
-      // Get permissions from the most likely sources
-      const permissions = teamAccess.effectivePermissions || teamAccess.permissions || teamAccess;
-      
-      const hasRequiredPermissions = permissionsToCheck.every(permission => {
-        let hasPermission;
-        switch (permission) {
-          // Job permissions
-          case 'create_jobs': hasPermission = permissions.canCreateJobs; break;
-          case 'edit_jobs': hasPermission = permissions.canEditJobs; break;
-          case 'delete_jobs': hasPermission = permissions.canDeleteJobs; break;
-          case 'view_jobs': hasPermission = permissions.canViewJobs; break;
-          
-          // Business permissions
-          case 'create_business': hasPermission = permissions.canCreateBusiness; break;
-          case 'edit_business': hasPermission = permissions.canEditBusiness; break;
-          case 'delete_business': hasPermission = permissions.canDeleteBusiness; break;
-          case 'view_business': hasPermission = permissions.canViewBusiness; break;
-          
-          // Worker permissions
-          case 'hire_workers': hasPermission = permissions.canHireWorkers; break;
-          case 'fire_workers': hasPermission = permissions.canFireWorkers; break;
-          case 'manage_workers': hasPermission = permissions.canManageWorkers; break;
-          case 'view_workers': hasPermission = permissions.canViewWorkers; break;
-          
-          // Application permissions
-          case 'view_applications': hasPermission = permissions.canViewApplications; break;
-          case 'manage_applications': hasPermission = permissions.canManageApplications; break;
-          
-          // Shift permissions
-          case 'create_shifts': hasPermission = permissions.canCreateShifts; break;
-          case 'edit_shifts': hasPermission = permissions.canEditShifts; break;
-          case 'delete_shifts': hasPermission = permissions.canDeleteShifts; break;
-          case 'view_shifts': hasPermission = permissions.canViewShifts; break;
-          
-          // Schedule permissions (mapped from shift permissions)
-          case 'create_schedules': hasPermission = permissions.canCreateShifts; break;
-          case 'edit_schedules': hasPermission = permissions.canEditShifts; break;
-          case 'delete_schedules': hasPermission = permissions.canDeleteShifts; break;
-          case 'view_schedules': hasPermission = permissions.canViewShifts; break;
-          case 'manage_schedules': hasPermission = permissions.canManageShifts; break;
-          
-          // Team permissions
-          case 'view_team': hasPermission = permissions.canViewTeam; break;
-          case 'manage_team': hasPermission = permissions.canManageTeam; break;
-          case 'grant_access': hasPermission = permissions.canGrantAccess; break;
-          
-          // Attendance permissions
-          case 'create_attendance': hasPermission = permissions.canCreateAttendance; break;
-          case 'edit_attendance': hasPermission = permissions.canEditAttendance; break;
-          case 'view_attendance': hasPermission = permissions.canViewAttendance; break;
-          case 'manage_attendance': hasPermission = permissions.canManageAttendance; break;
-          
-          // Map attendance permissions to schedule permissions (attendance scheduling)
-          case 'create_schedules': hasPermission = permissions.canCreateAttendance || permissions.canCreateShifts; break;
-          case 'edit_schedules': hasPermission = permissions.canEditAttendance || permissions.canEditShifts; break;
-          case 'view_schedules': hasPermission = permissions.canViewAttendance || permissions.canViewShifts; break;
-          case 'manage_schedules': hasPermission = permissions.canManageAttendance || permissions.canManageShifts; break;
-          
-          // Employment permissions
-          case 'view_employment': hasPermission = permissions.canViewEmployment; break;
-          case 'manage_employment': hasPermission = permissions.canManageEmployment; break;
-          
-          // Payment permissions
-          case 'view_payments': hasPermission = permissions.canViewPayments; break;
-          case 'manage_payments': hasPermission = permissions.canManagePayments; break;
-          case 'process_payments': hasPermission = permissions.canProcessPayments; break;
-          
-          // Budget permissions
-          case 'view_budgets': hasPermission = permissions.canViewBudgets; break;
-          case 'manage_budgets': hasPermission = permissions.canManageBudgets; break;
-          
-          // Analytics permissions
-          case 'view_analytics': hasPermission = permissions.canViewAnalytics; break;
-          case 'view_reports': hasPermission = permissions.canViewReports; break;
-          case 'export_data': hasPermission = permissions.canExportData; break;
-          
-          default: hasPermission = false;
-        }
-        
-        return hasPermission;
-      });
-      
-      if (!hasRequiredPermissions) {
-        throw new AppError('Insufficient permissions for this business operation', 403);
-      }
-    }
-
-    return { business, isOwner: false, teamMember: null, teamAccess };
+    throw new AppError('You are not a team member of this business', 403);
   }
 
   if (requireActiveTeamMember && teamMember.active === false) {
@@ -215,7 +89,7 @@ async function ensureBusinessAccess({
 }
 
 /**
- * Retrieve the set of business IDs the user can access (owned, team member, or through TeamAccess).
+ * Retrieve the set of business IDs the user can access (owned or as active team member).
  */
 async function getAccessibleBusinessIds(user) {
   const userId = normalizeId(user._id || user.id);
@@ -223,50 +97,21 @@ async function getAccessibleBusinessIds(user) {
     return new Set();
   }
 
-  const [ownedBusinesses, teamMemberships, teamAccessRecords] = await Promise.all([
+  const [ownedBusinesses, teamMemberships] = await Promise.all([
     Business.find({ owner: userId }).select('_id'),
     TeamMember.find({ user: userId, active: true }).select('business'),
-    TeamAccess.find({
-      $or: [
-        { employeeId: userId },
-        { userEmail: user.email }
-      ],
-      status: { $in: ['active', 'pending'] }
-    }).populate('managedUser originalUser')
   ]);
 
   const ids = new Set();
-  
-  // Add owned businesses
   ownedBusinesses.forEach((business) => {
     const id = normalizeId(business._id);
     if (id) ids.add(id);
   });
 
-  // Add team memberships (old system)
   teamMemberships.forEach((member) => {
     const id = normalizeId(member.business);
     if (id) ids.add(id);
   });
-
-  // Add TeamAccess businesses (new system)
-  for (const access of teamAccessRecords) {
-    if (access.businessContext?.allBusinesses) {
-      // If user has access to all businesses of the managed user, get all their businesses
-      const managedUserId = access.managedUser?._id || access.originalUser?._id;
-      if (managedUserId) {
-        const managedUserBusinesses = await Business.find({ owner: managedUserId }).select('_id');
-        managedUserBusinesses.forEach((business) => {
-          const id = normalizeId(business._id);
-          if (id) ids.add(id);
-        });
-      }
-    } else if (access.businessContext?.businessId) {
-      // Specific business access
-      const id = normalizeId(access.businessContext.businessId);
-      if (id) ids.add(id);
-    }
-  }
 
   return ids;
 }
