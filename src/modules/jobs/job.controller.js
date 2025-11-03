@@ -461,27 +461,156 @@ const buildJobResponse = async (job, currentUser) => {
   return jobObj;
 };
 
-exports.listJobs = catchAsync(async (req, res) => {
-  const filter = {};
+// API for workers to fetch available jobs
+exports.listJobsForWorker = catchAsync(async (req, res) => {
+  const filter = {
+    status: 'active',
+    employer: { $ne: req.user._id }, // Exclude jobs posted by the worker themselves
+    isPublished: true
+  };
+
+  const accessContext = {
+    userType: 'worker',
+    userId: req.user._id,
+    userEmail: req.user.email,
+    accessSource: 'public_worker_access',
+    jobsFrom: 'all_public_jobs'
+  };
+
+  // Add location-based filtering if provided
+  if (req.query.lat && req.query.lng) {
+    const latitude = parseFloat(req.query.lat);
+    const longitude = parseFloat(req.query.lng);
+    const maxDistance = parseInt(req.query.radius) || DEFAULT_ALLOWED_RADIUS_METERS;
+
+    if (!isNaN(latitude) && !isNaN(longitude)) {
+      filter['location.coordinates'] = {
+        $near: {
+          $geometry: {
+            type: 'Point',
+            coordinates: [longitude, latitude]
+          },
+          $maxDistance: maxDistance
+        }
+      };
+    }
+  }
+
+  const jobs = await Job.find(filter)
+    .populate('business', BUSINESS_RESPONSE_FIELDS)
+    .populate('employer', 'firstName lastName email')
+    .sort({ createdAt: -1 });
+
+  res.status(200).json({
+    status: 'success',
+    results: jobs.length,
+    data: jobs,
+    accessContext
+  });
+});
+
+// API for employers to fetch their jobs
+exports.listJobsForEmployer = catchAsync(async (req, res) => {
   let accessContext = {
-    userType: req.user.userType,
+    userType: 'employer',
     userId: req.user._id,
     userEmail: req.user.email,
     accessibleBusinesses: [],
     accessSource: 'unknown',
     jobsFrom: 'all_accessible'
   };
-  const queryEmployerId = req.query.employerId ? req.query.employerId.toString() : null;
-  const paramEmployerId = req.params?.employerId;
-  let requestedEmployerId = queryEmployerId;
-  if (!requestedEmployerId && paramEmployerId && paramEmployerId !== 'me') {
-    requestedEmployerId = paramEmployerId.toString();
+
+  // Get accessible businesses
+  const accessibleBusinesses = await getAccessibleBusinessIds(req.user);
+
+  // Get detailed business information
+  const businessDetails = await Business.find({
+    _id: { $in: Array.from(accessibleBusinesses) }
+  })
+    .select('_id businessName logoUrl owner')
+    .populate('owner', 'email firstName lastName');
+
+  accessContext.accessibleBusinesses = businessDetails.map(b => ({
+    businessId: b._id,
+    businessName: b.businessName,
+    logoUrl: b.logo?.square?.url || b.logo?.original?.url || b.logoUrl || null,
+    owner: {
+      id: b.owner._id,
+      email: b.owner.email,
+      name: `${b.owner.firstName} ${b.owner.lastName}`,
+      isCurrentUser: b.owner._id.toString() === req.user._id.toString()
+    }
+  }));
+
+  if (!accessibleBusinesses.size) {
+    accessContext.accessSource = 'no_business_access';
+    accessContext.message = 'User has no access to any businesses';
+    return res.status(200).json({
+      status: 'success',
+      results: 0,
+      data: [],
+      accessContext
+    });
   }
-  if (requestedEmployerId && !mongoose.Types.ObjectId.isValid(requestedEmployerId)) {
-    requestedEmployerId = null;
+
+  // Build filter based on business access
+  const filter = {
+    business: { $in: Array.from(accessibleBusinesses) }
+  };
+
+  // Add specific business filter if provided
+  if (req.query.businessId) {
+    if (!accessibleBusinesses.has(req.query.businessId)) {
+      const requestedBusiness = await Business.findById(req.query.businessId)
+        .select('businessName owner logoUrl logo');
+      accessContext.accessSource = 'no_access_to_requested_business';
+      accessContext.requestedBusiness = requestedBusiness ? {
+        businessId: requestedBusiness._id,
+        businessName: requestedBusiness.businessName,
+        logoUrl: requestedBusiness.logo?.square?.url || requestedBusiness.logoUrl || null
+      } : null;
+      return res.status(403).json({
+        status: 'error',
+        message: 'You do not have access to view jobs for this business',
+        accessContext
+      });
+    }
+    filter.business = req.query.businessId;
   }
-  let requestedEmployerUser = null;
-  let requestedEmployerBusinessAccess = new Set();
+
+  // Set access source
+  const ownedBusinesses = accessContext.accessibleBusinesses.filter(b => b.owner.isCurrentUser);
+  const partnerBusinesses = accessContext.accessibleBusinesses.filter(b => !b.owner.isCurrentUser);
+  
+  if (ownedBusinesses.length > 0 && partnerBusinesses.length > 0) {
+    accessContext.accessSource = 'owned_and_partner_businesses';
+  } else if (ownedBusinesses.length > 0) {
+    accessContext.accessSource = 'owned_businesses_only';
+  } else {
+    accessContext.accessSource = 'partner_businesses_only';
+  }
+
+  const jobs = await Job.find(filter)
+    .populate('business', BUSINESS_RESPONSE_FIELDS)
+    .populate('employer', 'firstName lastName email')
+    .sort({ createdAt: -1 });
+
+  res.status(200).json({
+    status: 'success',
+    results: jobs.length,
+    data: jobs,
+    accessContext
+  });
+});
+
+// Legacy listJobs function for backward compatibility
+exports.listJobs = catchAsync(async (req, res) => {
+  if (req.user.userType === 'worker') {
+    return exports.listJobsForWorker(req, res);
+  } else {
+    return exports.listJobsForEmployer(req, res);
+  }
+});
   
   // Handle different user types
   if (req.user.userType === 'worker') {
@@ -773,7 +902,7 @@ exports.listJobs = catchAsync(async (req, res) => {
     data: filtered,
     accessContext
   });
-});
+
 
 exports.getJobAccessContext = catchAsync(async (req, res) => {
   const accessContext = {
