@@ -14,9 +14,11 @@ const ensureViewJobsPermission = (req, res, next) => {
   return requirePermissions('view_jobs')(req, res, next);
 };
 
-// Dedicated list endpoints
-router.get('/list/worker', protect, controller.listJobsForWorker);
-router.get('/list/employer', protect, requirePermissions('view_jobs'), controller.listJobsForEmployer);
+// Worker and Employer specific routes (support legacy and new paths)
+router.get('/available', protect, controller.listJobsForWorker); // Legacy worker path
+router.get('/worker', protect, controller.listJobsForWorker);
+router.get('/my-listings', protect, requirePermissions('view_jobs'), controller.listJobsForEmployer); // Legacy employer path
+router.get('/employer', protect, requirePermissions('view_jobs'), controller.listJobsForEmployer);
 
 // Bulk operations (no parameters, so safe to be here)
 router.post('/bulk', protect, requirePermissions('create_jobs'), controller.createJobsBulk);

@@ -3,9 +3,6 @@ const Job = require('./job.model');
 const Application = require('../applications/application.model');
 const Business = require('../businesses/business.model');
 const User = require('../users/user.model');
-const EmployerProfile = require('../employers/employerProfile.model');
-const WorkerProfile = require('../workers/workerProfile.model');
-const WorkerEmployment = require('../workers/workerEmployment.model');
 const catchAsync = require('../../shared/utils/catchAsync');
 const AppError = require('../../shared/utils/appError');
 const { haversine } = require('../../shared/utils/distance');
@@ -17,7 +14,6 @@ const {
   ensureBusinessAccess,
   getAccessibleBusinessIds,
 } = require('../../shared/utils/businessAccess');
-const { resolveOwnershipTag } = require('../../shared/utils/ownershipTag');
 
 const JOB_FREE_QUOTA = 2;
 const JOB_PUBLISH_STATUS = Object.freeze({
@@ -462,56 +458,69 @@ const buildJobResponse = async (job, currentUser) => {
 };
 
 // API for workers to fetch available jobs
+// Worker jobs listing API
 exports.listJobsForWorker = catchAsync(async (req, res) => {
-  const filter = {
-    status: 'active',
-    employer: { $ne: req.user._id }, // Exclude jobs posted by the worker themselves
-    isPublished: true
-  };
+  try {
+    const filter = {
+      status: 'active',
+      employer: { $ne: req.user._id }, // Exclude jobs posted by the worker themselves
+      isPublished: true
+    };
 
-  const accessContext = {
-    userType: 'worker',
-    userId: req.user._id,
-    userEmail: req.user.email,
-    accessSource: 'public_worker_access',
-    jobsFrom: 'all_public_jobs'
-  };
+    const accessContext = {
+      userType: 'worker',
+      userId: req.user._id,
+      userEmail: req.user.email,
+      accessSource: 'public_worker_access',
+      jobsFrom: 'all_public_jobs'
+    };
 
-  // Add location-based filtering if provided
-  if (req.query.lat && req.query.lng) {
-    const latitude = parseFloat(req.query.lat);
-    const longitude = parseFloat(req.query.lng);
-    const maxDistance = parseInt(req.query.radius) || DEFAULT_ALLOWED_RADIUS_METERS;
+    // Add location-based filtering if provided
+    if (req.query.lat && req.query.lng) {
+      const latitude = parseFloat(req.query.lat);
+      const longitude = parseFloat(req.query.lng);
+      const maxDistance = parseInt(req.query.radius) || DEFAULT_ALLOWED_RADIUS_METERS;
 
-    if (!isNaN(latitude) && !isNaN(longitude)) {
-      filter['location.coordinates'] = {
-        $near: {
-          $geometry: {
-            type: 'Point',
-            coordinates: [longitude, latitude]
-          },
-          $maxDistance: maxDistance
-        }
-      };
+      if (!isNaN(latitude) && !isNaN(longitude)) {
+        filter['location.coordinates'] = {
+          $near: {
+            $geometry: {
+              type: 'Point',
+              coordinates: [longitude, latitude]
+            },
+            $maxDistance: maxDistance
+          }
+        };
+      }
     }
+
+    const jobs = await Job.find(filter)
+      .populate('business', BUSINESS_RESPONSE_FIELDS)
+      .populate('employer', 'firstName lastName email')
+      .sort({ createdAt: -1 });
+
+    const processedJobs = await Promise.all(
+      jobs.map(job => buildJobResponse(job, req.user))
+    );
+
+    res.status(200).json({
+      status: 'success',
+      results: processedJobs.length,
+      data: processedJobs,
+      accessContext
+    });
+  } catch (error) {
+    console.error('Error in listJobsForWorker:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to fetch jobs'
+    });
   }
-
-  const jobs = await Job.find(filter)
-    .populate('business', BUSINESS_RESPONSE_FIELDS)
-    .populate('employer', 'firstName lastName email')
-    .sort({ createdAt: -1 });
-
-  res.status(200).json({
-    status: 'success',
-    results: jobs.length,
-    data: jobs,
-    accessContext
-  });
 });
 
 // API for employers to fetch their jobs
 exports.listJobsForEmployer = catchAsync(async (req, res) => {
-  let accessContext = {
+  const accessContext = {
     userType: 'employer',
     userId: req.user._id,
     userEmail: req.user.email,
@@ -520,10 +529,8 @@ exports.listJobsForEmployer = catchAsync(async (req, res) => {
     jobsFrom: 'all_accessible'
   };
 
-  // Get accessible businesses
   const accessibleBusinesses = await getAccessibleBusinessIds(req.user);
 
-  // Get detailed business information
   const businessDetails = await Business.find({
     _id: { $in: Array.from(accessibleBusinesses) }
   })
@@ -533,7 +540,11 @@ exports.listJobsForEmployer = catchAsync(async (req, res) => {
   accessContext.accessibleBusinesses = businessDetails.map(b => ({
     businessId: b._id,
     businessName: b.businessName,
-    logoUrl: b.logo?.square?.url || b.logo?.original?.url || b.logoUrl || null,
+    logoUrl:
+      b.logo?.square?.url ||
+      b.logo?.original?.url ||
+      b.logoUrl ||
+      null,
     owner: {
       id: b.owner._id,
       email: b.owner.email,
@@ -553,22 +564,25 @@ exports.listJobsForEmployer = catchAsync(async (req, res) => {
     });
   }
 
-  // Build filter based on business access
   const filter = {
     business: { $in: Array.from(accessibleBusinesses) }
   };
 
-  // Add specific business filter if provided
   if (req.query.businessId) {
     if (!accessibleBusinesses.has(req.query.businessId)) {
       const requestedBusiness = await Business.findById(req.query.businessId)
         .select('businessName owner logoUrl logo');
       accessContext.accessSource = 'no_access_to_requested_business';
-      accessContext.requestedBusiness = requestedBusiness ? {
-        businessId: requestedBusiness._id,
-        businessName: requestedBusiness.businessName,
-        logoUrl: requestedBusiness.logo?.square?.url || requestedBusiness.logoUrl || null
-      } : null;
+      accessContext.requestedBusiness = requestedBusiness
+        ? {
+            businessId: requestedBusiness._id,
+            businessName: requestedBusiness.businessName,
+            logoUrl:
+              requestedBusiness.logo?.square?.url ||
+              requestedBusiness.logoUrl ||
+              null
+          }
+        : null;
       return res.status(403).json({
         status: 'error',
         message: 'You do not have access to view jobs for this business',
@@ -578,10 +592,13 @@ exports.listJobsForEmployer = catchAsync(async (req, res) => {
     filter.business = req.query.businessId;
   }
 
-  // Set access source
-  const ownedBusinesses = accessContext.accessibleBusinesses.filter(b => b.owner.isCurrentUser);
-  const partnerBusinesses = accessContext.accessibleBusinesses.filter(b => !b.owner.isCurrentUser);
-  
+  const ownedBusinesses = accessContext.accessibleBusinesses.filter(
+    b => b.owner.isCurrentUser
+  );
+  const partnerBusinesses = accessContext.accessibleBusinesses.filter(
+    b => !b.owner.isCurrentUser
+  );
+
   if (ownedBusinesses.length > 0 && partnerBusinesses.length > 0) {
     accessContext.accessSource = 'owned_and_partner_businesses';
   } else if (ownedBusinesses.length > 0) {
@@ -607,12 +624,24 @@ exports.listJobsForEmployer = catchAsync(async (req, res) => {
 exports.listJobs = catchAsync(async (req, res) => {
   if (req.user.userType === 'worker') {
     return exports.listJobsForWorker(req, res);
-  } else {
-    return exports.listJobsForEmployer(req, res);
   }
+  return exports.listJobsForEmployer(req, res);
 });
-  
-  // Handle different user types
+
+exports.listJobsLegacy = catchAsync(async (req, res) => {
+  const filter = {};
+  let requestedEmployerId = req.query.employerId;
+  let requestedEmployerUser = null;
+  let requestedEmployerBusinessAccess = new Set();
+
+  let accessContext = {
+    userType: req.user.userType,
+    userId: req.user._id,
+    userEmail: req.user.email,
+    accessibleBusinesses: [],
+    accessSource: 'unknown',
+    jobsFrom: 'all_accessible'
+  };
   if (req.user.userType === 'worker') {
     // For workers, show all active jobs except their own (if they're also employers)
     filter.status = 'active';
@@ -622,14 +651,14 @@ exports.listJobs = catchAsync(async (req, res) => {
     accessContext.jobsFrom = 'all_public_jobs';
   } else if (req.user.userType === 'employer') {
     // For employers and team members, limit jobs to accessible businesses
-    const accessibleBusinesses = await getAccessibleBusinessIds(req.user);
+    const accessibleBusinesses =  getAccessibleBusinessIds(req.user);
 
     // Get detailed business information for transparency
     const businessDetails = await Business.find({
-      _id: { $in: Array.from(accessibleBusinesses) }
-    })
-      .select('_id businessName logoUrl owner')
-      .populate('owner', 'email firstName lastName');
+        _id: { $in: Array.from(accessibleBusinesses) }
+      })
+        .select('_id businessName logoUrl owner')
+        .populate('owner', 'email firstName lastName');
 
     accessContext.accessibleBusinesses = businessDetails.map(b => ({
       businessId: b._id,
@@ -672,7 +701,7 @@ exports.listJobs = catchAsync(async (req, res) => {
 
     if (req.query.businessId) {
       if (!accessibleBusinesses.has(req.query.businessId)) {
-        const requestedBusiness = await Business.findById(req.query.businessId).select('businessName owner logoUrl logo');
+        const requestedBusiness =  Business.findById(req.query.businessId).select('businessName owner logoUrl logo');
         accessContext.accessSource = 'no_access_to_requested_business';
         accessContext.requestedBusiness = requestedBusiness ? {
           businessId: requestedBusiness._id,
@@ -902,7 +931,7 @@ exports.listJobs = catchAsync(async (req, res) => {
     data: filtered,
     accessContext
   });
-
+});
 
 exports.getJobAccessContext = catchAsync(async (req, res) => {
   const accessContext = {
@@ -1606,7 +1635,8 @@ exports.getJobsByUserId = catchAsync(async (req, res) => {
   }
 
   // Find user by _id
-  const user = await User.findById(id).select('_id firstName lastName email userType');  if (!user) {
+  const user = await User.findById(id).select('_id firstName lastName email userType');
+  if (!user) {
     return res.status(404).json({
       status: 'error',
       message: 'User not found with the provided id'
