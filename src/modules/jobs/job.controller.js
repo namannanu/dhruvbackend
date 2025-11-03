@@ -88,8 +88,7 @@ const normalizeAddressObject = (addr) => {
   };
 };
 
-const buildFormattedAddressChain = ({
-  formattedAddress,
+const buildAddressChain = ({
   line1,
   city,
   state,
@@ -107,7 +106,6 @@ const buildFormattedAddressChain = ({
     parts.push(normalized);
   };
 
-  addPart(formattedAddress);
   addPart(line1);
   addPart(city);
   addPart(state);
@@ -125,8 +123,7 @@ const buildLocationAddressString = (location) => {
 
   const addressObj = normalizeAddressObject(plain.address);
 
-  return buildFormattedAddressChain({
-    formattedAddress: plain.formattedAddress,
+  return buildAddressChain({
     line1:
       normalizeString(plain.line1) ||
       normalizeString(plain.address) ||
@@ -151,7 +148,6 @@ const resolveLocationLabel = (location) => {
 
   const addressObj = normalizeAddressObject(plain.address);
   const parts = {
-    formattedAddress: normalizeString(plain.formattedAddress),
     label: normalizeString(plain.label) || normalizeString(plain.name),
     address:
       normalizeString(plain.address) ||
@@ -193,8 +189,7 @@ const resolveAddressValue = (address) => {
   }
 
   const normalized = normalizeAddressObject(plain);
-  const formatted = buildFormattedAddressChain({
-    formattedAddress: normalizeString(plain.formattedAddress),
+  const formatted = buildAddressChain({
     line1:
       normalizeString(plain.line1) ||
       normalized.line1,
@@ -252,12 +247,9 @@ const deriveBusinessAddress = ({ providedAddress, location, business }) => {
   if (primaryLocation) {
     const plain = toPlainObject(primaryLocation);
     
-    // Build full address from all components: formattedAddress + line1 + city + state + postalCode + country
+    // Build full address from all components: line1 + city + state + postalCode + country
     const addressParts = [];
     
-    if (plain.formattedAddress && plain.formattedAddress.trim()) {
-      addressParts.push(plain.formattedAddress.trim());
-    }
     if (plain.line1 && plain.line1.trim()) {
       addressParts.push(plain.line1.trim());
     }
@@ -283,15 +275,9 @@ const deriveBusinessAddress = ({ providedAddress, location, business }) => {
   // Fallback: if no primary location, try to build from business data directly
   if (businessObj) {
     const addressObj = normalizeAddressObject(businessObj.address);
-    const businessFormatted = buildFormattedAddressChain({
-      formattedAddress:
-        trimmed ||
-        normalizeString(businessObj.formattedAddress) ||
-        normalizeString(businessObj.locationFormattedAddress) ||
-        normalizeString(
-          businessObj.location && businessObj.location.formattedAddress
-        ),
+    const businessFormatted = buildAddressChain({
       line1:
+        trimmed ||
         normalizeString(businessObj.line1) ||
         normalizeString(businessObj.addressLine1) ||
         addressObj.line1,
@@ -921,6 +907,25 @@ exports.createJob = catchAsync(async (req, res, next) => {
     return next(new AppError('Business owner not found for job creation', 400));
   }
 
+  // Validate schedule and recurrence
+  if (req.body.schedule && req.body.schedule.recurrence) {
+    const validRecurrenceTypes = ['one-time', 'weekly', 'monthly', 'custom'];
+    if (!validRecurrenceTypes.includes(req.body.schedule.recurrence)) {
+      return next(new AppError(`Invalid recurrence type. Must be one of: ${validRecurrenceTypes.join(', ')}`, 400));
+    }
+    
+    // Additional validation for weekly recurrence
+    if (req.body.schedule.recurrence === 'weekly' && req.body.schedule.workDays) {
+      const validDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+      const invalidDays = req.body.schedule.workDays.filter(day => 
+        !validDays.includes(day.toLowerCase().trim())
+      );
+      if (invalidDays.length > 0) {
+        return next(new AppError(`Invalid work days: ${invalidDays.join(', ')}. Must be valid day names.`, 400));
+      }
+    }
+  }
+
   const freeJobsUsed = Number(ownerUser.freeJobsPosted || 0);
   const requiresPayment = !ownerUser.premium && freeJobsUsed >= JOB_FREE_QUOTA;
   const shouldAutoPublish = !requiresPayment;
@@ -942,19 +947,17 @@ exports.createJob = catchAsync(async (req, res, next) => {
 
   const initialStatus = shouldAutoPublish ? 'active' : 'draft';
 
-  // Handle employer-provided location and formattedAddress
+  // Handle employer-provided location
   let jobLocation = jobData.location;
   
-  // Check if employer provided a custom formattedAddress for this job
-  // Flutter sends formattedAddress inside location object: { location: { formattedAddress: "..." } }
-  // Also check direct formattedAddress field for backwards compatibility
+  // Check if employer provided a custom address for this job
   const employerProvidedAddress = 
-    jobData.formattedAddress?.trim() || 
-    (jobLocation && jobLocation.formattedAddress?.trim());
+    jobData.businessAddress?.trim() || 
+    (jobLocation && jobLocation.address?.trim());
   
   console.log(`[Job Creation] Processing address for job: ${jobData.title}`);
   console.log(`[Job Creation] Raw jobData.location:`, jobLocation);
-  console.log(`[Job Creation] Raw jobData.formattedAddress:`, jobData.formattedAddress);
+  console.log(`[Job Creation] Raw jobData.businessAddress:`, jobData.businessAddress);
   console.log(`[Job Creation] Employer-provided address:`, employerProvidedAddress);
   console.log(`[Job Creation] Business location:`, business.location);
   
@@ -966,25 +969,24 @@ exports.createJob = catchAsync(async (req, res, next) => {
       setAt: new Date()
     };
     
-    // Override with employer-provided formattedAddress if provided
+    // Override with employer-provided address if provided
     if (employerProvidedAddress) {
       console.log(`📝 Employer provided custom address: "${employerProvidedAddress}"`);
-      jobLocation.formattedAddress = employerProvidedAddress;
+      jobLocation.line1 = employerProvidedAddress;
     }
     
-    console.log(`📍 Job location set to: ${jobLocation.formattedAddress || jobLocation.line1 || 'Unknown'}`);
+    console.log(`📍 Job location set to: ${jobLocation.line1 || jobLocation.city || 'Unknown'}`);
   } else if (jobLocation && employerProvidedAddress) {
     // If location exists but employer provided a custom address, override it
     console.log(`📝 Overriding job location with employer address: "${employerProvidedAddress}"`);
-    jobLocation.formattedAddress = employerProvidedAddress;
+    jobLocation.line1 = employerProvidedAddress;
   } else if (!jobLocation && employerProvidedAddress) {
     // Create new location with employer-provided address and business coordinates
     console.log(`📝 Creating job location from employer address: "${employerProvidedAddress}"`);
     jobLocation = {
-      formattedAddress: employerProvidedAddress,
+      line1: employerProvidedAddress,
       // Use business location for coordinates if available
       ...(business.location ? {
-        line1: business.location.line1,
         city: business.location.city,
         state: business.location.state,
         postalCode: business.location.postalCode,
@@ -998,9 +1000,6 @@ exports.createJob = catchAsync(async (req, res, next) => {
       setAt: new Date()
     };
   }
-
-  // Clean up the formattedAddress from jobData since we've processed it
-  delete jobData.formattedAddress;
 
   // Use employer-provided address from location object or direct businessAddress field
   const providedBusinessAddress =
@@ -1018,7 +1017,7 @@ exports.createJob = catchAsync(async (req, res, next) => {
 
   console.log(`🏢 DEBUG: Final providedBusinessAddress: "${providedBusinessAddress}"`);
   console.log(`🏢 DEBUG: Derived business address: "${jobBusinessAddress}"`);
-  console.log(`🏢 DEBUG: From location formattedAddress: "${jobLocation?.formattedAddress}"`);
+  console.log(`🏢 DEBUG: From location line1: "${jobLocation?.line1}"`);
   console.log(`🏢 DEBUG: From location city: "${jobLocation?.city}"`);
   console.log(`🏢 DEBUG: From location state: "${jobLocation?.state}"`);
 
@@ -1266,8 +1265,7 @@ exports.hireApplicant = catchAsync(async (req, res, next) => {
   if (application.job.location && (application.job.location.latitude != null && application.job.location.longitude != null)) {
     const { latitude, longitude } = application.job.location;
     workLocationLabel = buildLocationLabel({
-      formattedAddress: application.job.location.formattedAddress,
-      address: application.job.location.address,
+      address: application.job.location.line1 || application.job.location.address,
       city: application.job.location.city,
       state: application.job.location.state,
       postalCode: application.job.location.postalCode,
@@ -1275,7 +1273,7 @@ exports.hireApplicant = catchAsync(async (req, res, next) => {
     });
     workLocationDetails = {
       label: application.job.title,
-      formattedAddress: workLocationLabel,
+      address: workLocationLabel,
       latitude,
       longitude,
       allowedRadius: DEFAULT_ALLOWED_RADIUS_METERS,
@@ -1284,8 +1282,7 @@ exports.hireApplicant = catchAsync(async (req, res, next) => {
     };
   } else if (application.job.location) {
     workLocationLabel = buildLocationLabel({
-      formattedAddress: application.job.location.formattedAddress,
-      address: application.job.location.address,
+      address: application.job.location.line1 || application.job.location.address,
       city: application.job.location.city,
       state: application.job.location.state,
       postalCode: application.job.location.postalCode,
@@ -1405,8 +1402,8 @@ exports.createJobsBulk = catchAsync(async (req, res) => {
 
       // Handle employer-provided address for bulk job creation
       const employerProvidedAddress = 
-        jobData.formattedAddress?.trim() || 
-        (jobData.location && jobData.location.formattedAddress?.trim());
+        jobData.businessAddress?.trim() || 
+        (jobData.location && jobData.location.line1?.trim());
 
       console.log(`[Bulk Job ${i}] Processing address for job: ${jobData.title}`);
       console.log(`[Bulk Job ${i}] Employer-provided address:`, employerProvidedAddress);

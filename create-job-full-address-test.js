@@ -3,7 +3,7 @@ const Job = require('./src/modules/jobs/job.model');
 const Business = require('./src/modules/businesses/business.model');
 const User = require('./src/modules/users/user.model');
 
-async function createJobWithFullAddress() {
+async function createJobTest() {
   try {
     console.log('🔄 Connecting to MongoDB...');
     await mongoose.connect('mongodb://localhost:27017/talent', {
@@ -24,10 +24,10 @@ async function createJobWithFullAddress() {
     console.log('👤 Using employer:', user.firstName, user.lastName);
     console.log('🏢 Using business:', business.name);
 
-    // Create a job with employer-provided custom address that has all components
+    // Create a basic test job
     const jobData = {
-      title: 'Security Guard - Full Address Test',
-      description: 'Test job to verify full address concatenation',
+      title: 'Security Guard - Test Job',
+      description: 'Test job posting for backend validation',
       businessId: business._id,
       employer: user._id,
       category: 'Security',
@@ -40,13 +40,10 @@ async function createJobWithFullAddress() {
         hoursPerWeek: 40
       },
       isPublished: true,
-      status: 'active',
-      // Employer provides custom address with all components
-      formattedAddress: 'Grand Mall Security Desk'
+      status: 'active'
     };
 
-    console.log('🚀 Creating job with employer-provided address...');
-    console.log('📍 Employer Address:', jobData.formattedAddress);
+    console.log('🚀 Creating test job...');
     console.log('📍 Business Location:', JSON.stringify(business.location, null, 2));
 
     // Make API call to create job (simulating the controller logic)
@@ -69,8 +66,7 @@ async function createJobWithFullAddress() {
       
       // Direct creation for testing
       const newJob = new Job({
-        ...jobData,
-        businessAddress: 'Grand Mall Security Desk, Mahaveer Nagar III Circle, Kota, Rajasthan, 324005, India' // Expected full format
+        ...jobData
       });
 
       const savedJob = await newJob.save();
@@ -87,4 +83,4 @@ async function createJobWithFullAddress() {
   }
 }
 
-createJobWithFullAddress();
+createJobTest();

@@ -6,7 +6,11 @@ const scheduleSchema = new mongoose.Schema(
     endDate: Date,
     startTime: String,
     endTime: String,
-    recurrence: String,
+    recurrence: {
+      type: String,
+      enum: ['one-time', 'weekly', 'monthly', 'custom'],
+      default: 'one-time'
+    },
     workDays: {
       type: [String],
       default: []
@@ -35,7 +39,6 @@ const locationSchema = new mongoose.Schema(
     country: String,
     
     // Google Places API integration
-    formattedAddress: { type: String, trim: true }, // From Google Places API
     name: { type: String, trim: true }, // Place name from Google
     placeId: { type: String, trim: true }, // Google Place ID
     
@@ -322,7 +325,7 @@ jobSchema.virtual('businessLocationInfo').get(function() {
   const businessLocation = business.location;
   return {
     hasGPS: Boolean(businessLocation.latitude && businessLocation.longitude),
-    formattedAddress: businessLocation.formattedAddress || businessLocation.line1,
+    address: businessLocation.line1 || businessLocation.city,
     businessName: business.name,
     allowedRadius: businessLocation.allowedRadius || 150,
     isActive: businessLocation.isActive !== false,
