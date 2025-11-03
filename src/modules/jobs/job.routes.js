@@ -5,7 +5,6 @@ const { protect } = require('../../shared/middlewares/auth.middleware');
 const { requirePermissions } = require('../../shared/middlewares/permissionMiddleware');
 
 const router = express.Router();
-const listRouter = express.Router(); // Create a separate router for list operations
 
 // Permission middleware
 const ensureViewJobsPermission = (req, res, next) => {
@@ -15,12 +14,9 @@ const ensureViewJobsPermission = (req, res, next) => {
   return requirePermissions('view_jobs')(req, res, next);
 };
 
-// Set up routes for the list router
-listRouter.get('/worker', protect, controller.listJobsForWorker);
-listRouter.get('/employer', protect, requirePermissions('view_jobs'), controller.listJobsForEmployer);
-
-// Mount the list router
-router.use('/list', listRouter);
+// Dedicated list endpoints
+router.get('/list/worker', protect, controller.listJobsForWorker);
+router.get('/list/employer', protect, requirePermissions('view_jobs'), controller.listJobsForEmployer);
 
 // Bulk operations (no parameters, so safe to be here)
 router.post('/bulk', protect, requirePermissions('create_jobs'), controller.createJobsBulk);
