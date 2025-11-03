@@ -5,6 +5,9 @@ const { protect } = require('../../shared/middlewares/auth.middleware');
 const { requirePermissions } = require('../../shared/middlewares/permissionMiddleware');
 
 const router = express.Router();
+const listRouter = express.Router(); // Create a separate router for list operations
+
+// Permission middleware
 const ensureViewJobsPermission = (req, res, next) => {
   if (req.user?.userType === 'worker') {
     return next();
@@ -12,12 +15,12 @@ const ensureViewJobsPermission = (req, res, next) => {
   return requirePermissions('view_jobs')(req, res, next);
 };
 
-// Define a separate router for job-specific routes to avoid parameter conflicts
-const jobSpecificRouter = express.Router();
+// Set up routes for the list router
+listRouter.get('/worker', protect, controller.listJobsForWorker);
+listRouter.get('/employer', protect, requirePermissions('view_jobs'), controller.listJobsForEmployer);
 
-// Worker and employer specific routes (must be before any routes with parameters)
-router.get('/by-worker', protect, controller.listJobsForWorker);
-router.get('/by-employer', protect, requirePermissions('view_jobs'), controller.listJobsForEmployer);
+// Mount the list router
+router.use('/list', listRouter);
 
 // Bulk operations (no parameters, so safe to be here)
 router.post('/bulk', protect, requirePermissions('create_jobs'), controller.createJobsBulk);
