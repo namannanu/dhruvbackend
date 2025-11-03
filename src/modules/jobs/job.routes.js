@@ -12,30 +12,28 @@ const ensureViewJobsPermission = (req, res, next) => {
   return requirePermissions('view_jobs')(req, res, next);
 };
 
-// Worker and employer specific routes
-router.get('/worker-jobs', protect, controller.listJobsForWorker);
-router.get('/employer-jobs', protect, requirePermissions('view_jobs'), controller.listJobsForEmployer);
+// Define a separate router for job-specific routes to avoid parameter conflicts
+const jobSpecificRouter = express.Router();
 
-// Basic routes
+// Worker and employer specific routes (must be before any routes with parameters)
+router.get('/by-worker', protect, controller.listJobsForWorker);
+router.get('/by-employer', protect, requirePermissions('view_jobs'), controller.listJobsForEmployer);
+
+// Bulk operations (no parameters, so safe to be here)
+router.post('/bulk', protect, requirePermissions('create_jobs'), controller.createJobsBulk);
+
+// Basic routes (no parameters)
 router.get('/', protect, ensureViewJobsPermission, controller.listJobs);
 router.post('/', protect, requirePermissions('create_jobs'), controller.createJob);
 
-// Bulk operations
-router.post('/bulk', protect, requirePermissions('create_jobs'), controller.createJobsBulk);
+// Application hire route (specific enough to not conflict)
 router.post('/applications/:applicationId/hire', protect, requirePermissions('hire_workers'), controller.hireApplicant);
 
-// Job specific operations with ID
+// All job-specific routes with :jobId parameter
 router.get('/:jobId', protect, requirePermissions('view_jobs'), controller.getJob);
 router.patch('/:jobId', protect, requirePermissions('edit_jobs'), controller.updateJob);
 router.patch('/:jobId/status', protect, requirePermissions('edit_jobs'), controller.updateJobStatus);
 router.get('/:jobId/applications', protect, requirePermissions('view_applications'), controller.listApplicationsForJob);
 router.post('/:jobId/applications', protect, applicationController.createApplication);
-router.get('/:jobId/applications', protect, requirePermissions('view_applications'), controller.listApplicationsForJob);
-router.post('/:jobId/applications', protect, applicationController.createApplication); // Workers can apply without special permission
-router.patch('/:jobId/status', protect, requirePermissions('edit_jobs'), controller.updateJobStatus);
-router.patch('/:jobId', protect, requirePermissions('edit_jobs'), controller.updateJob);
-router.post('/', protect, requirePermissions('create_jobs'), controller.createJob);
-router.post('/bulk', protect, requirePermissions('create_jobs'), controller.createJobsBulk);
-router.post('/applications/:applicationId/hire', protect, requirePermissions('hire_workers'), controller.hireApplicant);
 
 module.exports = router;
