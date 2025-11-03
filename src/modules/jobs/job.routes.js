@@ -12,17 +12,17 @@ const ensureViewJobsPermission = (req, res, next) => {
   return requirePermissions('view_jobs')(req, res, next);
 };
 
-// Static routes must come before dynamic routes
-router.get('/list/worker', protect, controller.listJobsForWorker);
-router.get('/list/employer', protect, requirePermissions('view_jobs'), controller.listJobsForEmployer);
+// Worker and employer specific routes
+router.get('/worker-jobs', protect, controller.listJobsForWorker);
+router.get('/employer-jobs', protect, requirePermissions('view_jobs'), controller.listJobsForEmployer);
 
-// Job application and bulk operations
-router.post('/bulk/create', protect, requirePermissions('create_jobs'), controller.createJobsBulk);
-router.post('/applications/:applicationId/hire', protect, requirePermissions('hire_workers'), controller.hireApplicant);
-
-// Job CRUD operations
+// Basic routes
 router.get('/', protect, ensureViewJobsPermission, controller.listJobs);
 router.post('/', protect, requirePermissions('create_jobs'), controller.createJob);
+
+// Bulk operations
+router.post('/bulk', protect, requirePermissions('create_jobs'), controller.createJobsBulk);
+router.post('/applications/:applicationId/hire', protect, requirePermissions('hire_workers'), controller.hireApplicant);
 
 // Job specific operations with ID
 router.get('/:jobId', protect, requirePermissions('view_jobs'), controller.getJob);
