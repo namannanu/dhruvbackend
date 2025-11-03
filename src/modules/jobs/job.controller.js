@@ -483,7 +483,6 @@ exports.listJobsForWorker = catchAsync(async (req, res) => {
     const maxDistanceMeters = Number.isNaN(radiusFromQuery)
       ? DEFAULT_ALLOWED_RADIUS_METERS
       : Math.max(radiusFromQuery, 0);
-    const maxDistanceKm = maxDistanceMeters / 1000;
 
     if (locationFilterEnabled) {
       accessContext.locationFilter = {
@@ -498,57 +497,14 @@ exports.listJobsForWorker = catchAsync(async (req, res) => {
       .populate('employer', 'firstName lastName email')
       .sort({ createdAt: -1 });
 
-    const resolveCoordinates = (jobDoc) => {
-      const candidates = [
-        jobDoc.location,
-        jobDoc.location?.coordinates,
-        jobDoc.business?.location,
-        jobDoc.business?.location?.coordinates
-      ];
-
-      for (const source of candidates) {
-        if (!source) continue;
-
-        const latitudeCandidate = [source.latitude, source.lat, source.y]
-          .find((value) => typeof value === 'number' && !Number.isNaN(value));
-        const longitudeCandidate = [source.longitude, source.lng, source.x]
-          .find((value) => typeof value === 'number' && !Number.isNaN(value));
-
-        if (
-          typeof latitudeCandidate === 'number' &&
-          typeof longitudeCandidate === 'number'
-        ) {
-          return {
-            latitude: latitudeCandidate,
-            longitude: longitudeCandidate
-          };
-        }
-
-        if (
-          Array.isArray(source.coordinates) &&
-          source.coordinates.length === 2 &&
-          source.coordinates.every(
-            (value) => typeof value === 'number' && !Number.isNaN(value)
-          )
-        ) {
-          return {
-            longitude: source.coordinates[0],
-            latitude: source.coordinates[1]
-          };
-        }
-      }
-
-      return null;
-    };
-
     const jobsWithDistance = [];
     for (const job of jobs) {
       let distanceKm = null;
 
       if (locationFilterEnabled) {
-        const coords = resolveCoordinates(job);
-        if (!coords) {
-          // Skip jobs without coordinates when filtering by location
+        const coords = job.location || job.business?.location;
+
+        if (!coords || typeof coords.latitude !== 'number' || typeof coords.longitude !== 'number') {
           continue;
         }
 
@@ -572,27 +528,22 @@ exports.listJobsForWorker = catchAsync(async (req, res) => {
       if (locationFilterEnabled && typeof distanceKm === 'number') {
         jobResponse.distance = distanceKm;
       }
-      jobsWithDistance.push({
-        job: jobResponse,
-        distanceKm
-      });
+      jobsWithDistance.push(jobResponse);
     }
 
     if (locationFilterEnabled) {
       jobsWithDistance.sort((a, b) => {
-        if (a.distanceKm == null && b.distanceKm == null) return 0;
-        if (a.distanceKm == null) return 1;
-        if (b.distanceKm == null) return -1;
-        return a.distanceKm - b.distanceKm;
+        if (a.distance == null && b.distance == null) return 0;
+        if (a.distance == null) return 1;
+        if (b.distance == null) return -1;
+        return a.distance - b.distance;
       });
     }
 
-    const processedJobs = jobsWithDistance.map(({ job }) => job);
-
     res.status(200).json({
       status: 'success',
-      results: processedJobs.length,
-      data: processedJobs,
+      results: jobsWithDistance.length,
+      data: jobsWithDistance,
       accessContext
     });
   } catch (error) {
