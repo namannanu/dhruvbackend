@@ -25,6 +25,8 @@ const JOB_PUBLISH_STATUS = Object.freeze({
   READY_TO_PUBLISH: 'ready_to_publish',
   PUBLISHED: 'published',
 });
+const BUSINESS_RESPONSE_FIELDS =
+  'businessName name logoUrl logo location address businessAddress formattedAddress';
 const parsePublishToggle = (value) => {
   if (typeof value === 'boolean') {
     return value;
@@ -629,21 +631,22 @@ exports.listJobs = catchAsync(async (req, res) => {
     req.user.userType === 'employer'
       ? {
           path: 'business',
-          select: 'businessName name logoUrl logo owner location',
+          select: `${BUSINESS_RESPONSE_FIELDS} owner`,
           populate: { path: 'owner', select: 'email firstName lastName' },
         }
       : {
           path: 'business',
-          select: 'businessName name logoUrl logo location',
+          select: BUSINESS_RESPONSE_FIELDS,
         };
+  const businessIdPopulate = {
+    path: 'businessId',
+    select: BUSINESS_RESPONSE_FIELDS,
+  };
 
   let jobQuery = Job.find(filter)
     .sort({ createdAt: -1 })
     .populate(businessPopulate)
-    .populate({
-      path: 'businessId',
-      select: 'businessName name logoUrl logo location'
-    });
+    .populate(businessIdPopulate);
 
   if (req.user.userType === 'employer') {
     jobQuery = jobQuery
@@ -852,17 +855,17 @@ exports.getJob = catchAsync(async (req, res, next) => {
     req.user.userType === 'employer'
       ? {
           path: 'business',
-          select: 'businessName name logoUrl logo owner',
+          select: `${BUSINESS_RESPONSE_FIELDS} owner`,
           populate: { path: 'owner', select: 'email firstName lastName' },
         }
       : {
           path: 'business',
-          select: 'businessName name logoUrl logo',
+          select: BUSINESS_RESPONSE_FIELDS,
         };
 
-  let jobQuery = Job.findById(req.params.jobId).populate(
-    businessPopulateForDetail
-  );
+  let jobQuery = Job.findById(req.params.jobId)
+    .populate(businessPopulateForDetail)
+    .populate({ path: 'businessId', select: BUSINESS_RESPONSE_FIELDS });
   if (req.user.userType === 'employer') {
     jobQuery = jobQuery
       .populate('employer', 'email firstName lastName userType')
