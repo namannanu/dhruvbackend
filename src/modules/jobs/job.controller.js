@@ -14,6 +14,7 @@ const {
   ensureBusinessAccess,
   getAccessibleBusinessIds,
 } = require('../../shared/utils/businessAccess');
+const { resolveOwnershipTag } = require('../../shared/utils/ownershipTag');
 
 const JOB_FREE_QUOTA = 2;
 const JOB_PUBLISH_STATUS = Object.freeze({
