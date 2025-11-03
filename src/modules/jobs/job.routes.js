@@ -12,16 +12,24 @@ const ensureViewJobsPermission = (req, res, next) => {
   return requirePermissions('view_jobs')(req, res, next);
 };
 
-// Job management routes with permission protection
-// Specific routes first
-router.get('/worker', protect, controller.listJobsForWorker); // Workers endpoint
-router.get('/employer', protect, requirePermissions('view_jobs'), controller.listJobsForEmployer); // Employers endpoint
-router.post('/bulk', protect, requirePermissions('create_jobs'), controller.createJobsBulk);
+// Static routes must come before dynamic routes
+router.get('/list/worker', protect, controller.listJobsForWorker);
+router.get('/list/employer', protect, requirePermissions('view_jobs'), controller.listJobsForEmployer);
+
+// Job application and bulk operations
+router.post('/bulk/create', protect, requirePermissions('create_jobs'), controller.createJobsBulk);
 router.post('/applications/:applicationId/hire', protect, requirePermissions('hire_workers'), controller.hireApplicant);
 
-// Legacy and parameterized routes after specific routes
-router.get('/', protect, ensureViewJobsPermission, controller.listJobs); // Legacy endpoint
+// Job CRUD operations
+router.get('/', protect, ensureViewJobsPermission, controller.listJobs);
+router.post('/', protect, requirePermissions('create_jobs'), controller.createJob);
+
+// Job specific operations with ID
 router.get('/:jobId', protect, requirePermissions('view_jobs'), controller.getJob);
+router.patch('/:jobId', protect, requirePermissions('edit_jobs'), controller.updateJob);
+router.patch('/:jobId/status', protect, requirePermissions('edit_jobs'), controller.updateJobStatus);
+router.get('/:jobId/applications', protect, requirePermissions('view_applications'), controller.listApplicationsForJob);
+router.post('/:jobId/applications', protect, applicationController.createApplication);
 router.get('/:jobId/applications', protect, requirePermissions('view_applications'), controller.listApplicationsForJob);
 router.post('/:jobId/applications', protect, applicationController.createApplication); // Workers can apply without special permission
 router.patch('/:jobId/status', protect, requirePermissions('edit_jobs'), controller.updateJobStatus);
