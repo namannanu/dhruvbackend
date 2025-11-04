@@ -1146,58 +1146,53 @@ exports.createJob = catchAsync(async (req, res, next) => {
 
   const initialStatus = shouldAutoPublish ? 'active' : 'draft';
 
-  // Handle employer-provided location
-  let jobLocation = jobData.location;
-  
+  const businessLocation = business.location
+    ? (typeof business.location.toObject === 'function'
+        ? business.location.toObject()
+        : { ...business.location })
+    : null;
+
+  // Handle employer-provided location, ensuring we work with plain objects
+  let jobLocation = jobData.location ? toPlainObject(jobData.location) : null;
+
   // Check if employer provided a custom address for this job
-  const employerProvidedAddress = 
-    jobData.businessAddress?.trim() || 
-    (jobLocation && jobLocation.address?.trim());
-  
+  const employerProvidedAddress =
+    normalizeString(jobData.businessAddress) ||
+    normalizeString(jobLocation?.address) ||
+    normalizeString(jobLocation?.line1);
+
   console.log(`[Job Creation] Processing address for job: ${jobData.title}`);
   console.log(`[Job Creation] Raw jobData.location:`, jobLocation);
   console.log(`[Job Creation] Raw jobData.businessAddress:`, jobData.businessAddress);
   console.log(`[Job Creation] Employer-provided address:`, employerProvidedAddress);
-  console.log(`[Job Creation] Business location:`, business.location);
-  
-  if (!jobLocation && business.location) {
+  console.log(`[Job Creation] Business location:`, businessLocation);
+
+  if (!jobLocation && businessLocation) {
     console.log(`📍 Copying business location to job for business: ${business.name}`);
-    jobLocation = {
-      ...business.location.toObject ? business.location.toObject() : business.location,
-      setBy: req.user._id,
-      setAt: new Date()
-    };
-    
-    // Override with employer-provided address if provided
-    if (employerProvidedAddress) {
-      console.log(`📝 Employer provided custom address: "${employerProvidedAddress}"`);
-      jobLocation.line1 = employerProvidedAddress;
-    }
-    
-    console.log(`📍 Job location set to: ${jobLocation.line1 || jobLocation.city || 'Unknown'}`);
-  } else if (jobLocation && employerProvidedAddress) {
-    // If location exists but employer provided a custom address, override it
-    console.log(`📝 Overriding job location with employer address: "${employerProvidedAddress}"`);
-    jobLocation.line1 = employerProvidedAddress;
-  } else if (!jobLocation && employerProvidedAddress) {
-    // Create new location with employer-provided address and business coordinates
+    jobLocation = { ...businessLocation };
+  } else if (jobLocation && businessLocation) {
+    jobLocation = { ...businessLocation, ...jobLocation };
+  }
+
+  if (!jobLocation && employerProvidedAddress) {
     console.log(`📝 Creating job location from employer address: "${employerProvidedAddress}"`);
     jobLocation = {
+      ...(businessLocation || {}),
       line1: employerProvidedAddress,
-      // Use business location for coordinates if available
-      ...(business.location ? {
-        city: business.location.city,
-        state: business.location.state,
-        postalCode: business.location.postalCode,
-        country: business.location.country,
-        latitude: business.location.latitude,
-        longitude: business.location.longitude,
-        allowedRadius: business.location.allowedRadius,
-        placeId: business.location.placeId,
-      } : {}),
-      setBy: req.user._id,
-      setAt: new Date()
+      address: employerProvidedAddress
     };
+  } else if (jobLocation && employerProvidedAddress) {
+    console.log(`📝 Employer provided custom address: "${employerProvidedAddress}"`);
+    jobLocation.line1 = employerProvidedAddress;
+    jobLocation.address = jobLocation.address || employerProvidedAddress;
+  }
+
+  if (jobLocation) {
+    jobLocation.setBy = jobLocation.setBy || req.user._id;
+    jobLocation.setAt = jobLocation.setAt || new Date();
+    if (!jobLocation.address && jobLocation.line1) {
+      jobLocation.address = jobLocation.line1;
+    }
   }
 
   // Use employer-provided address from location object or direct businessAddress field
@@ -1219,6 +1214,15 @@ exports.createJob = catchAsync(async (req, res, next) => {
   console.log(`🏢 DEBUG: From location line1: "${jobLocation?.line1}"`);
   console.log(`🏢 DEBUG: From location city: "${jobLocation?.city}"`);
   console.log(`🏢 DEBUG: From location state: "${jobLocation?.state}"`);
+
+  if (jobLocation && jobBusinessAddress) {
+    if (!jobLocation.address) {
+      jobLocation.address = jobBusinessAddress;
+    }
+    if (!jobLocation.line1) {
+      jobLocation.line1 = jobBusinessAddress;
+    }
+  }
 
   const job = await Job.create({
     ...jobData,

@@ -17,6 +17,7 @@ const LOGO_CONTEXT_TO_FIELD = [
   { context: 'job-list', field: 'logoSmall' },
   { context: 'business-profile', field: 'logoMedium' }
 ];
+const LOGO_CONTEXTS = LOGO_CONTEXT_TO_FIELD.map(({ context }) => context);
 
 const resolveLogoSource = (business) => {
   if (!business) return null;
@@ -66,6 +67,104 @@ const stripInlineLogoPayload = (business, fallbackValue) => {
   }
 };
 
+const logoOptimizationQueue = new Set();
+let isProcessingLogoQueue = false;
+
+const processLogoOptimization = async (businessId) => {
+  const id = businessId.toString();
+  const business = await Business.findById(id)
+    .select('logo logoUrl logoSmall logoMedium logoSignature logoOptimizedAt')
+    .lean();
+
+  if (!business) return;
+
+  const logoSource = resolveLogoSource(business);
+  if (!logoSource) return;
+
+  const signature = createLogoSignature(logoSource);
+  const hasValidVariants =
+    business.logoSmall &&
+    business.logoMedium &&
+    business.logoSignature &&
+    business.logoSignature === signature;
+
+  if (hasValidVariants) {
+    if (!business.logoOptimizedAt) {
+      await Business.updateOne(
+        { _id: id },
+        { $set: { logoOptimizedAt: new Date() } }
+      );
+    }
+    return;
+  }
+
+  try {
+    const variants = await generateLogoVariants(logoSource, LOGO_CONTEXTS);
+    const updatePayload = {};
+
+    LOGO_CONTEXT_TO_FIELD.forEach(({ context, field }) => {
+      if (variants[context]) {
+        updatePayload[field] = variants[context];
+      }
+    });
+
+    if (Object.keys(updatePayload).length === 0) {
+      return;
+    }
+
+    updatePayload.logoSignature = signature;
+    updatePayload.logoOptimizedAt = new Date();
+
+    await Business.updateOne({ _id: id }, { $set: updatePayload });
+  } catch (error) {
+    console.warn(`Failed to optimize business logo for business ${id}:`, error);
+  }
+};
+
+const drainLogoOptimizationQueue = () => {
+  if (isProcessingLogoQueue) return;
+  isProcessingLogoQueue = true;
+
+  const processNext = async () => {
+    const iterator = logoOptimizationQueue.values().next();
+
+    if (iterator.done) {
+      isProcessingLogoQueue = false;
+      return;
+    }
+
+    const nextId = iterator.value;
+    logoOptimizationQueue.delete(nextId);
+
+    try {
+      await processLogoOptimization(nextId);
+    } catch (error) {
+      console.warn(`Logo optimization task failed for business ${nextId}:`, error);
+    } finally {
+      setImmediate(processNext);
+    }
+  };
+
+  setImmediate(processNext);
+};
+
+const scheduleLogoOptimization = (businessIds = []) => {
+  let added = false;
+
+  businessIds.forEach((rawId) => {
+    if (!rawId) return;
+    const id = rawId.toString();
+    if (!logoOptimizationQueue.has(id)) {
+      logoOptimizationQueue.add(id);
+      added = true;
+    }
+  });
+
+  if (added) {
+    drainLogoOptimizationQueue();
+  }
+};
+
 exports.listBusinesses = catchAsync(async (req, res) => {
   let filter = {};
 
@@ -83,102 +182,49 @@ exports.listBusinesses = catchAsync(async (req, res) => {
   }
 
   const includeOriginalLogo = req.query.includeOriginalLogo === 'true';
-  const businesses = await Business.find(filter).select('-logo').lean();
+  const baseQuery = Business.find(filter);
+  if (!includeOriginalLogo) {
+    baseQuery.select('-logo');
+  }
+  const businesses = await baseQuery.lean();
 
-  const businessesWithOptimizedLogos = await Promise.all(
-    businesses.map(async (business) => {
-      const optimizedBusiness = { ...business };
-      let logoSource = resolveLogoSource(optimizedBusiness);
-      let hydratedOriginal = false;
+  const businessesNeedingOptimization = [];
 
-      const hydrateOriginalLogo = async () => {
-        if (hydratedOriginal) return logoSource;
-        const sourceDoc = await Business.findById(business._id).select('logo logoUrl').lean();
-        if (sourceDoc) {
-          if (typeof sourceDoc.logo !== 'undefined') {
-            optimizedBusiness.logo = sourceDoc.logo;
-          }
-          if (!optimizedBusiness.logoUrl && sourceDoc.logoUrl) {
-            optimizedBusiness.logoUrl = sourceDoc.logoUrl;
-          }
-          logoSource = resolveLogoSource(optimizedBusiness);
-        }
-        hydratedOriginal = true;
-        return logoSource;
-      };
+  const businessesWithOptimizedLogos = businesses.map((business) => {
+    const optimizedBusiness = { ...business };
 
-      const missingContexts = LOGO_CONTEXT_TO_FIELD.filter(({ field }) => !optimizedBusiness[field]).map(
-        ({ context }) => context
-      );
+    const needsOptimization =
+      !optimizedBusiness.logoSmall ||
+      !optimizedBusiness.logoMedium ||
+      !optimizedBusiness.logoSignature;
 
-      if ((!logoSource && missingContexts.length) || (!logoSource && includeOriginalLogo)) {
-        await hydrateOriginalLogo();
+    if (needsOptimization) {
+      businessesNeedingOptimization.push(optimizedBusiness._id);
+    }
+
+    if (!includeOriginalLogo) {
+      const fallbackLogo = optimizedBusiness.logoMedium || optimizedBusiness.logoSmall || null;
+      stripInlineLogoPayload(optimizedBusiness, fallbackLogo);
+    } else if (optimizedBusiness.logoUrl && isDataUri(optimizedBusiness.logoUrl)) {
+      if (optimizedBusiness.logoMedium) {
+        optimizedBusiness.logoUrl = optimizedBusiness.logoMedium;
+      } else if (optimizedBusiness.logoSmall) {
+        optimizedBusiness.logoUrl = optimizedBusiness.logoSmall;
       }
+    }
 
-      logoSource = resolveLogoSource(optimizedBusiness);
-      const existingSignature = optimizedBusiness.logoSignature || null;
-      const signature = logoSource ? createLogoSignature(logoSource) : null;
-      const signatureChanged =
-        Boolean(signature && existingSignature && signature !== existingSignature);
-
-      const contextsToGenerate = signatureChanged
-        ? LOGO_CONTEXT_TO_FIELD.map(({ context }) => context)
-        : missingContexts;
-
-      if (logoSource && contextsToGenerate.length) {
-        try {
-          const variants = await generateLogoVariants(logoSource, contextsToGenerate);
-          const updatePayload = {};
-
-          LOGO_CONTEXT_TO_FIELD.forEach(({ context, field }) => {
-            if (variants[context]) {
-              optimizedBusiness[field] = variants[context];
-              updatePayload[field] = variants[context];
-            }
-          });
-
-          if (Object.keys(updatePayload).length) {
-            if (signature) {
-              optimizedBusiness.logoSignature = signature;
-              updatePayload.logoSignature = signature;
-              updatePayload.logoOptimizedAt = new Date();
-              optimizedBusiness.logoOptimizedAt = updatePayload.logoOptimizedAt;
-            }
-
-            // Persist optimized variants asynchronously to avoid repeated processing.
-            Business.updateOne({ _id: business._id }, { $set: updatePayload })
-              .catch((err) => console.warn(`Failed to persist optimized logo variants for business ${business._id}:`, err));
-          }
-        } catch (error) {
-          console.warn(`Unable to optimize business logo for business ${optimizedBusiness._id}:`, error);
-        }
-      } else if (signature && !optimizedBusiness.logoSignature) {
-        optimizedBusiness.logoSignature = signature;
-        const optimizedAt = optimizedBusiness.logoOptimizedAt || new Date();
-        optimizedBusiness.logoOptimizedAt = optimizedAt;
-        Business.updateOne(
-          { _id: business._id },
-          { $set: { logoSignature: signature, logoOptimizedAt: optimizedAt } }
-        ).catch((err) => console.warn(`Failed to persist logo signature for business ${business._id}:`, err));
-      }
-
-      const isInlineSource = logoSource ? isDataUri(logoSource) : false;
-      if (!includeOriginalLogo && logoSource && isInlineSource) {
-        const fallbackLogo = optimizedBusiness.logoMedium || optimizedBusiness.logoSmall || null;
-        if (fallbackLogo) {
-          stripInlineLogoPayload(optimizedBusiness, fallbackLogo);
-        }
-      }
-
-      return optimizedBusiness;
-    })
-  );
+    return optimizedBusiness;
+  });
 
   res.status(200).json({
     status: 'success',
     results: businessesWithOptimizedLogos.length,
     data: businessesWithOptimizedLogos
   });
+
+  if (businessesNeedingOptimization.length) {
+    scheduleLogoOptimization(businessesNeedingOptimization);
+  }
 });
 
 

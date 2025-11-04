@@ -25,12 +25,22 @@ const overtimeSchema = new mongoose.Schema(
 
 const locationSchema = new mongoose.Schema(
   {
+    line1: String,
+    line2: String,
     address: String,
     city: String,
     state: String,
     postalCode: String,
+    country: String,
     latitude: Number,
-    longitude: Number
+    longitude: Number,
+    allowedRadius: Number,
+    placeId: String,
+    setBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    setAt: Date
   },
   { _id: false }
 );
