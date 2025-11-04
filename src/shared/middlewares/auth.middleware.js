@@ -4,25 +4,53 @@ const User = require('../../modules/users/user.model');
 const AppError = require('../utils/appError');
 const catchAsync = require('../utils/catchAsync');
 
-exports.protect = catchAsync(async (req, res, next) => {
-  let token;
-  
-  // Check Authorization header first
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-    token = req.headers.authorization.split(' ')[1];
-  } 
-  // Fallback to cookie
-  else if (req.cookies && req.cookies.jwt) {
-    token = req.cookies.jwt;
+const extractToken = (req) => {
+  const headerValue = req.headers.authorization || req.headers.Authorization;
+  if (headerValue) {
+    const parts = headerValue.trim().split(/\s+/);
+    if (parts.length === 2 && /^Bearer$/i.test(parts[0])) {
+      return parts[1];
+    }
+    if (parts.length === 1) {
+      return parts[0];
+    }
   }
 
+  const fallbacks = [
+    'x-auth-token',
+    'x-access-token',
+    'token',
+  ];
+
+  for (const key of fallbacks) {
+    if (req.headers[key]) {
+      return req.headers[key].trim();
+    }
+  }
+
+  if (req.cookies?.jwt) {
+    return req.cookies.jwt;
+  }
+
+  if (typeof req.query?.token === 'string' && req.query.token.trim()) {
+    return req.query.token.trim();
+  }
+
+  return null;
+};
+
+exports.protect = catchAsync(async (req, res, next) => {
+  const token = extractToken(req);
   if (!token) {
     return next(new AppError('Authentication required. Please log in.', 401));
   }
 
   try {
     const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
-    
+    if (!decoded?.id) {
+      return next(new AppError('Invalid authentication token. Please log in again.', 401));
+    }
+
     const currentUser = await User.findById(decoded.id)
       .select('+passwordChangedAt')
       .exec();

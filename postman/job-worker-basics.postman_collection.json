@@ -25,6 +25,10 @@
     {
       "key": "workerId",
       "value": ""
+    },
+    {
+      "key": "applicationId",
+      "value": ""
     }
   ],
   "item": [
@@ -59,6 +63,40 @@
               ]
             },
             "description": "Create a job posting for the selected business. Requires an employer token with the `create_jobs` permission. Leave the `location` out to let the API auto-fill it from the business record."
+          },
+          "response": []
+        },
+        {
+          "name": "Hire Applicant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"startDate\": \"2024-10-15T09:00:00.000Z\",\n  \"hiringNotes\": \"Starting next Tuesday at 9 AM\",\n  \"businessId\": \"{{businessId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs/applications/{{applicationId}}/hire",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "jobs",
+                "applications",
+                "{{applicationId}}",
+                "hire"
+              ]
+            },
+            "description": "Mark an application as hired. Requires employer credentials with the `hire_workers` permission. Optionally include `startDate` (ISO 8601) and `hiringNotes`. If your account manages multiple businesses, pass `businessId` or set the `x-business-id` header to satisfy access checks."
           },
           "response": []
         }

@@ -1,3 +1,4 @@
+// job.routes.js
 const express = require('express');
 const controller = require('./job.controller');
 const applicationController = require('../applications/application.controller');
@@ -6,37 +7,34 @@ const { requirePermissions } = require('../../shared/middlewares/permissionMiddl
 
 const router = express.Router();
 
-// Permission middleware
-const ensureViewJobsPermission = (req, res, next) => {
-  if (req.user?.userType === 'worker') {
-    return next();
-  }
+// Workers can list publicly published jobs without extra perms;
+// Employers/team must have view_jobs to read employer views
+const ensureViewJobs = (req, res, next) => {
+  if (req.user?.userType === 'worker') return next();
   return requirePermissions('view_jobs')(req, res, next);
 };
 
-// Worker and Employer specific routes (support legacy and new paths)
-router.get('/available', protect, controller.listJobsForWorker); // Legacy worker path
+// Worker view
 router.get('/worker', protect, controller.listJobsForWorker);
-router.get('/my-listings', protect, requirePermissions('view_jobs'), controller.listJobsForEmployer); // Legacy employer path
+
+// Employer view
 router.get('/employer', protect, requirePermissions('view_jobs'), controller.listJobsForEmployer);
 
-// Bulk operations (no parameters, so safe to be here)
-router.post('/bulk', protect, requirePermissions('create_jobs'), controller.createJobsBulk);
+// CRUD
+router.get('/', protect, controller.listJobsForEmployer); // optional: default employer list
+router.post('/', protect, controller.createJob);
 
-// Basic routes (no parameters)
-router.get('/', protect, ensureViewJobsPermission, controller.listJobs);
-router.post('/', protect, requirePermissions('create_jobs'), controller.createJob);
+const idRe = '[0-9a-fA-F]{24}';
+router.get(`/:jobId(${idRe})`, protect, ensureViewJobs, controller.getJob);
+router.patch(`/:jobId(${idRe})`, protect, requirePermissions('edit_jobs'), controller.updateJob);
+
+// Applications (keep just the essentials you need)
+router.post(`/:jobId(${idRe})/applications`, protect, applicationController.createApplication);
+
+
 
 // Application hire route (specific enough to not conflict)
 router.post('/applications/:applicationId/hire', protect, requirePermissions('hire_workers'), controller.hireApplicant);
 
-// All job-specific routes with :jobId parameter
-const objectIdPattern = '[0-9a-fA-F]{24}';
-
-router.get(`/:jobId(${objectIdPattern})`, protect, requirePermissions('view_jobs'), controller.getJob);
-router.patch(`/:jobId(${objectIdPattern})`, protect, requirePermissions('edit_jobs'), controller.updateJob);
-router.patch(`/:jobId(${objectIdPattern})/status`, protect, requirePermissions('edit_jobs'), controller.updateJobStatus);
-router.get(`/:jobId(${objectIdPattern})/applications`, protect, requirePermissions('view_applications'), controller.listApplicationsForJob);
-router.post(`/:jobId(${objectIdPattern})/applications`, protect, applicationController.createApplication);
 
 module.exports = router;
