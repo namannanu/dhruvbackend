@@ -1,10 +1,10 @@
 const Application = require('./application.model');
 const Job = require('../jobs/job.model');
 const WorkerProfile = require('../workers/workerProfile.model');
-const User = require('../users/user.model');
 const catchAsync = require('../../shared/utils/catchAsync');
 const AppError = require('../../shared/utils/appError');
 const { ensureBusinessAccess } = require('../../shared/utils/businessAccess');
+const { buildApplicationPresenter } = require('./application.presenter');
 
 const APPLICATION_FREE_QUOTA = 3;
 
@@ -58,9 +58,37 @@ exports.listMyApplications = catchAsync(async (req, res, next) => {
     return next(new AppError('Only workers can view their applications', 403));
   }
   const applications = await Application.find({ worker: req.user._id })
-    .populate('job')
+    .populate({
+      path: 'job',
+      populate: {
+        path: 'business',
+        select: 'name description logo logoSmall logoMedium logoUrl location'
+      }
+    })
+    .populate({
+      path: 'worker',
+      select: 'firstName lastName email phone userType'
+    })
     .sort({ createdAt: -1 });
-  res.status(200).json({ status: 'success', data: applications });
+
+  const workerProfiles = await WorkerProfile.find({ user: req.user._id });
+  const profileMap = new Map(
+    workerProfiles.map((profile) => [profile.user.toString(), profile])
+  );
+
+  const data = applications.map((application) => {
+    const workerId =
+      application.worker && application.worker._id
+        ? application.worker._id.toString()
+        : application.worker?.toString();
+    const workerProfile = workerId ? profileMap.get(workerId) || null : null;
+    return buildApplicationPresenter(application, {
+      workerProfile,
+      includeApplicantDetails: true
+    });
+  });
+
+  res.status(200).json({ status: 'success', results: data.length, data });
 });
 
 exports.updateApplication = catchAsync(async (req, res, next) => {
@@ -142,6 +170,56 @@ exports.listApplications = catchAsync(async (req, res) => {
   if (req.query.jobId) {
     filter.job = req.query.jobId;
   }
-  const applications = await Application.find(filter).populate('job worker');
-  res.status(200).json({ status: 'success', data: applications });
+  const applications = await Application.find(filter)
+    .populate({
+      path: 'job',
+      populate: {
+        path: 'business',
+        select: 'name description logo logoSmall logoMedium logoUrl location'
+      }
+    })
+    .populate({
+      path: 'worker',
+      select: 'firstName lastName email phone userType'
+    })
+    .sort({ createdAt: -1 });
+
+  const workerIds = new Set();
+  applications.forEach((application) => {
+    const worker = application.worker;
+    if (!worker) return;
+    const id =
+      worker && worker._id
+        ? worker._id.toString()
+        : typeof worker === 'string'
+        ? worker
+        : null;
+    if (id) {
+      workerIds.add(id);
+    }
+  });
+
+  const profiles = workerIds.size
+    ? await WorkerProfile.find({ user: { $in: Array.from(workerIds) } })
+    : [];
+  const profileMap = new Map(
+    profiles.map((profile) => [profile.user.toString(), profile])
+  );
+
+  const data = applications.map((application) => {
+    const worker = application.worker;
+    const workerId =
+      worker && worker._id
+        ? worker._id.toString()
+        : typeof worker === 'string'
+        ? worker
+        : null;
+    const workerProfile = workerId ? profileMap.get(workerId) || null : null;
+    return buildApplicationPresenter(application, {
+      workerProfile,
+      includeApplicantDetails: true
+    });
+  });
+
+  res.status(200).json({ status: 'success', results: data.length, data });
 });

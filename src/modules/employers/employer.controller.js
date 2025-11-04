@@ -3,6 +3,8 @@ const EmployerProfile = require('./employerProfile.model');
 const Business = require('../businesses/business.model');
 const Job = require('../jobs/job.model');
 const Application = require('../applications/application.model');
+const WorkerProfile = require('../workers/workerProfile.model');
+const { buildApplicationPresenter } = require('../applications/application.presenter');
 const AttendanceRecord = require('../attendance/attendance.model');
 const catchAsync = require('../../shared/utils/catchAsync');
 const AppError = require('../../shared/utils/appError');
@@ -168,7 +170,12 @@ exports.listEmployerApplications = catchAsync(async (req, res, next) => {
   const applicationsQuery = Application.find(filter)
     .populate({
       path: 'job',
-      select: 'title status business schedule location createdAt hiredWorker'
+      select:
+        'title status description hourlyRate business schedule location urgency tags overtime verificationRequired premiumRequired applicantsCount createdAt hiredWorker',
+      populate: {
+        path: 'business',
+        select: 'name description logo logoSmall logoMedium logoUrl location'
+      }
     })
     .populate({
       path: 'worker',
@@ -199,6 +206,43 @@ exports.listEmployerApplications = catchAsync(async (req, res, next) => {
     }
   });
 
+  const workerIds = new Set();
+  applications.forEach((application) => {
+    const worker = application.worker;
+    if (!worker) return;
+    const workerId =
+      worker && worker._id
+        ? worker._id.toString()
+        : typeof worker === 'string'
+        ? worker
+        : null;
+    if (workerId) {
+      workerIds.add(workerId);
+    }
+  });
+
+  const workerProfiles = workerIds.size
+    ? await WorkerProfile.find({ user: { $in: Array.from(workerIds) } })
+    : [];
+  const profileMap = new Map(
+    workerProfiles.map((profile) => [profile.user.toString(), profile])
+  );
+
+  const formattedApplications = applications.map((application) => {
+    const worker = application.worker;
+    const workerId =
+      worker && worker._id
+        ? worker._id.toString()
+        : typeof worker === 'string'
+        ? worker
+        : null;
+    const workerProfile = workerId ? profileMap.get(workerId) || null : null;
+    return buildApplicationPresenter(application, {
+      workerProfile,
+      includeApplicantDetails: true
+    });
+  });
+
   res.status(200).json({
     status: 'success',
     pagination: {
@@ -208,7 +252,7 @@ exports.listEmployerApplications = catchAsync(async (req, res, next) => {
       limit
     },
     summary,
-    data: applications
+    data: formattedApplications
   });
 });
 

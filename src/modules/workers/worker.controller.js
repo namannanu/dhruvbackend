@@ -7,6 +7,7 @@ const SwapRequest = require('../shifts/swapRequest.model');
 const catchAsync = require('../../shared/utils/catchAsync');
 const AppError = require('../../shared/utils/appError');
 const { minimizeProfileImages } = require('../../shared/utils/logoUrlMinimizer');
+const { buildApplicationPresenter } = require('../applications/application.presenter');
 
 exports.getWorkerProfile = catchAsync(async (req, res, next) => {
   const workerId = req.params.workerId || req.user._id;
@@ -59,9 +60,31 @@ exports.getWorkerApplications = catchAsync(async (req, res, next) => {
     return next(new AppError('You can only view your own applications', 403));
   }
   const applications = await Application.find({ worker: workerId })
-    .populate({ path: 'job', populate: { path: 'business' } })
+    .populate({
+      path: 'job',
+      select:
+        'title status description hourlyRate business schedule location urgency tags overtime verificationRequired premiumRequired applicantsCount',
+      populate: {
+        path: 'business',
+        select: 'name description logo logoSmall logoMedium logoUrl location'
+      }
+    })
+    .populate({
+      path: 'worker',
+      select: 'firstName lastName email phone userType'
+    })
     .sort({ createdAt: -1 });
-  res.status(200).json({ status: 'success', results: applications.length, data: applications });
+
+  const workerProfile = await WorkerProfile.findOne({ user: workerId });
+
+  const data = applications.map((application) =>
+    buildApplicationPresenter(application, {
+      workerProfile,
+      includeApplicantDetails: true
+    })
+  );
+
+  res.status(200).json({ status: 'success', results: data.length, data });
 });
 
 exports.getWorkerAttendance = catchAsync(async (req, res, next) => {
