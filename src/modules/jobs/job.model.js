@@ -35,6 +35,11 @@ const locationSchema = new mongoose.Schema(
     latitude: Number,
     longitude: Number,
     allowedRadius: Number,
+    formattedAddress: String,
+    name: String,
+    notes: String,
+    timezone: String,
+    isActive: { type: Boolean, default: true },
     placeId: String,
     setBy: {
       type: mongoose.Schema.Types.ObjectId,
@@ -52,6 +57,10 @@ const jobSchema = new mongoose.Schema(
       ref: 'User',
       required: true
     },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
     business: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Business'
@@ -64,12 +73,20 @@ const jobSchema = new mongoose.Schema(
     tags: { type: [String], default: [] },
     schedule: scheduleSchema,
     location: locationSchema,
+    businessAddress: { type: String, trim: true },
     verificationRequired: { type: Boolean, default: false },
     premiumRequired: { type: Boolean, default: false },
     status: {
       type: String,
       enum: ['draft', 'active', 'filled', 'closed'],
       default: 'active'
+    },
+    isPublished: { type: Boolean, default: false },
+    publishedAt: { type: Date, default: null },
+    publishedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
     },
     applicantsCount: { type: Number, default: 0 },
     hiredWorker: {

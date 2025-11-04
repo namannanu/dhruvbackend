@@ -244,30 +244,18 @@ const deriveBusinessAddress = ({ providedAddress, location, business }) => {
 
   // Priority 2: Build full address from location components only if no employer override
   if (primaryLocation) {
-    const plain = toPlainObject(primaryLocation);
-    
-    // Build full address from all components: line1 + city + state + postalCode + country
-    const addressParts = [];
-    
-    if (plain.line1 && plain.line1.trim()) {
-      addressParts.push(plain.line1.trim());
+    const label = buildLocationAddressString(primaryLocation);
+    if (label) {
+      console.log(`🏢 Using location label: "${label}"`);
+      return label;
     }
-    if (plain.city && plain.city.trim()) {
-      addressParts.push(plain.city.trim());
-    }
-    if (plain.state && plain.state.trim()) {
-      addressParts.push(plain.state.trim());
-    }
-    if (plain.postalCode && plain.postalCode.trim()) {
-      addressParts.push(plain.postalCode.trim());
-    }
-    if (plain.country && plain.country.trim()) {
-      addressParts.push(plain.country.trim());
-    }
-    
-    if (addressParts.length > 0) {
-      console.log(`🏢 Using business location components: "${addressParts.join(', ')}"`);
-      return addressParts.join(', ');
+  }
+
+  if (businessLocation) {
+    const label = buildLocationAddressString(businessLocation);
+    if (label) {
+      console.log(`🏢 Using business location label: "${label}"`);
+      return label;
     }
   }
 
@@ -1193,6 +1181,18 @@ exports.createJob = catchAsync(async (req, res, next) => {
     if (!jobLocation.address && jobLocation.line1) {
       jobLocation.address = jobLocation.line1;
     }
+    const locationLabel = buildLocationAddressString(jobLocation);
+    if (locationLabel) {
+      if (!jobLocation.line1) {
+        jobLocation.line1 = locationLabel;
+      }
+      if (!jobLocation.address) {
+        jobLocation.address = locationLabel;
+      }
+      if (!jobLocation.formattedAddress) {
+        jobLocation.formattedAddress = locationLabel;
+      }
+    }
   }
 
   // Use employer-provided address from location object or direct businessAddress field
@@ -1221,6 +1221,9 @@ exports.createJob = catchAsync(async (req, res, next) => {
     }
     if (!jobLocation.line1) {
       jobLocation.line1 = jobBusinessAddress;
+    }
+    if (!jobLocation.formattedAddress) {
+      jobLocation.formattedAddress = jobBusinessAddress;
     }
   }
 

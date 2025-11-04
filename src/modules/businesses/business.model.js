@@ -4,12 +4,28 @@ const locationSchema = new mongoose.Schema(
   {
     line1: String,
     line2: String,
+    address: String,
     city: String,
     state: String,
     postalCode: String,
     country: String,
     latitude: Number,
-    longitude: Number
+    longitude: Number,
+    allowedRadius: {
+      type: Number,
+      default: 150
+    },
+    formattedAddress: String,
+    name: String,
+    notes: String,
+    timezone: String,
+    isActive: { type: Boolean, default: true },
+    placeId: String,
+    setBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    setAt: { type: Date, default: Date.now }
   },
   { _id: false }
 );
