@@ -28,6 +28,10 @@ const businessSchema = new mongoose.Schema(
     email: { type: String, trim: true },
     location: locationSchema,
     logo: { type: String, trim: true }, // Full logo URL stored here
+    logoSmall: { type: String, trim: true }, // Cached small variant for fast responses
+    logoMedium: { type: String, trim: true }, // Cached medium variant
+    logoSignature: { type: String, trim: true }, // Hash of current logo source to detect changes
+    logoOptimizedAt: { type: Date },
     isActive: { type: Boolean, default: true },
     stats: {
       jobsPosted: { type: Number, default: 0 },
@@ -36,5 +40,15 @@ const businessSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+businessSchema.pre('save', function (next) {
+  if (this.isModified('logo') || this.isModified('logoUrl')) {
+    this.logoSmall = undefined;
+    this.logoMedium = undefined;
+    this.logoSignature = undefined;
+    this.logoOptimizedAt = undefined;
+  }
+  next();
+});
 
 module.exports = mongoose.model('Business', businessSchema);

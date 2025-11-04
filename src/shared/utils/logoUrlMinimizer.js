@@ -3,9 +3,12 @@
  * Reduces logo payload size for faster API responses while maintaining quality.
  */
 
+const crypto = require('crypto');
 const sharp = require('sharp');
 
 const DATA_URI_REGEX = /^data:(image\/[a-zA-Z0-9.+-]+);base64,([\s\S]+)$/;
+const MAX_INLINE_CACHE_ENTRIES = 200;
+const DATA_URI_VARIANT_CACHE = new Map();
 
 const CONTEXT_OPTIONS = {
   'job-list': { width: 50, height: 50, quality: 70, format: 'webp' },
@@ -27,6 +30,121 @@ const resolveContextOptions = (context) =>
   CONTEXT_OPTIONS[context] || CONTEXT_OPTIONS.default;
 
 const isDataUri = (value) => typeof value === 'string' && DATA_URI_REGEX.test(value);
+
+const createLogoSignature = (source) => {
+  if (!source) return null;
+  return crypto.createHash('sha1').update(source).digest('hex');
+};
+
+const getCachedDataUriVariants = (signature, contexts) => {
+  if (!signature || !DATA_URI_VARIANT_CACHE.has(signature)) {
+    return { cached: {}, missing: contexts };
+  }
+
+  const cachedEntry = DATA_URI_VARIANT_CACHE.get(signature);
+  const cached = {};
+  const missing = [];
+
+  contexts.forEach((context) => {
+    if (cachedEntry[context]) {
+      cached[context] = cachedEntry[context];
+    } else {
+      missing.push(context);
+    }
+  });
+
+  if (missing.length === 0) {
+    // Maintain simple LRU behaviour
+    DATA_URI_VARIANT_CACHE.delete(signature);
+    DATA_URI_VARIANT_CACHE.set(signature, cachedEntry);
+  }
+
+  return { cached, missing };
+};
+
+const setCachedDataUriVariants = (signature, variants) => {
+  if (!signature || !variants) return;
+
+  const existing = DATA_URI_VARIANT_CACHE.get(signature) || {};
+  DATA_URI_VARIANT_CACHE.delete(signature);
+  DATA_URI_VARIANT_CACHE.set(signature, { ...existing, ...variants });
+
+  while (DATA_URI_VARIANT_CACHE.size > MAX_INLINE_CACHE_ENTRIES) {
+    const oldestKey = DATA_URI_VARIANT_CACHE.keys().next().value;
+    DATA_URI_VARIANT_CACHE.delete(oldestKey);
+  }
+};
+
+const buildDataUriVariants = async (logoSource, contexts) => {
+  if (!isDataUri(logoSource) || !contexts.length) return {};
+
+  const match = DATA_URI_REGEX.exec(logoSource);
+  if (!match) return {};
+
+  const [, mimeType, base64Data] = match;
+  const inputBuffer = Buffer.from(base64Data, 'base64');
+  const baseImage = sharp(inputBuffer).rotate();
+  const variants = {};
+
+  await Promise.all(
+    contexts.map(async (context) => {
+      const options = resolveContextOptions(context);
+      const {
+        width = null,
+        height = null,
+        quality = 75,
+        format = 'webp'
+      } = options;
+
+      try {
+        const pipeline = baseImage.clone();
+
+        if (width || height) {
+          pipeline.resize({
+            width,
+            height,
+            fit: sharp.fit.cover,
+            position: sharp.strategy.attention
+          });
+        }
+
+        const normalizedFormat = (format || '').toLowerCase();
+        let targetMime = `image/${normalizedFormat || mimeType.split('/')[1] || 'png'}`;
+
+        switch (normalizedFormat) {
+          case 'webp':
+            pipeline.webp({ quality, effort: 4 });
+            targetMime = 'image/webp';
+            break;
+          case 'jpeg':
+          case 'jpg':
+            pipeline.jpeg({ quality, mozjpeg: true });
+            targetMime = 'image/jpeg';
+            break;
+          case 'png':
+            pipeline.png({
+              compressionLevel: Math.max(0, Math.min(9, Math.round((100 - quality) / 10))),
+              adaptiveFiltering: true
+            });
+            targetMime = 'image/png';
+            break;
+          default:
+            pipeline.webp({ quality, effort: 4 });
+            targetMime = 'image/webp';
+            break;
+        }
+
+        const buffer = await pipeline.toBuffer();
+        variants[context] = `data:${targetMime};base64,${buffer.toString('base64')}`;
+      } catch (error) {
+        console.warn(`Failed to generate optimized inline logo for context "${context}":`, error);
+        variants[context] = logoSource;
+      }
+    })
+  );
+
+  return variants;
+};
 
 /**
  * Minimize logo URL by adding compression parameters and optimizations.
@@ -139,83 +257,28 @@ const addGenericCompressionParams = (url, { width, height, quality }) => {
 };
 
 /**
- * Generate a downsized data URI using sharp for the provided context options.
- */
-const generateDataUriVariant = async (dataUri, { width, height, quality, format }) => {
-  if (!isDataUri(dataUri)) return null;
-
-  const match = DATA_URI_REGEX.exec(dataUri);
-  if (!match) return null;
-
-  const [, mimeType, base64Data] = match;
-  const inputBuffer = Buffer.from(base64Data, 'base64');
-  const transformer = sharp(inputBuffer).rotate();
-
-  if (width || height) {
-    transformer.resize({
-      width,
-      height,
-      fit: sharp.fit.cover
-    });
-  }
-
-  const targetFormat = (format || '').toLowerCase();
-  const outputFormat = targetFormat === 'jpg' ? 'jpeg' : targetFormat || mimeType.split('/')[1] || 'png';
-
-  let outputBuffer;
-  switch (outputFormat) {
-    case 'webp':
-      outputBuffer = await transformer.webp({ quality }).toBuffer();
-      break;
-    case 'jpeg':
-      outputBuffer = await transformer.jpeg({ quality, mozjpeg: true }).toBuffer();
-      break;
-    case 'png':
-      outputBuffer = await transformer.png({
-        compressionLevel: Math.max(0, Math.min(9, Math.round((100 - quality) / 10)))
-      }).toBuffer();
-      break;
-    default:
-      outputBuffer = await transformer.toBuffer();
-  }
-
-  const generatedMime =
-    outputFormat === 'webp'
-      ? 'image/webp'
-      : outputFormat === 'jpeg'
-      ? 'image/jpeg'
-      : outputFormat === 'png'
-      ? 'image/png'
-      : mimeType;
-
-  return `data:${generatedMime};base64,${outputBuffer.toString('base64')}`;
-};
-
-/**
  * Build optimized logo variants for the requested contexts. Supports both URLs and inline data URIs.
  */
 const generateLogoVariants = async (logoSource, contexts = []) => {
   if (!logoSource) return {};
 
   const uniqueContexts = Array.from(new Set(contexts.length ? contexts : ['job-list', 'business-profile']));
-  const variants = {};
 
   if (isDataUri(logoSource)) {
-    for (const context of uniqueContexts) {
-      const options = resolveContextOptions(context);
-      try {
-        const variant = await generateDataUriVariant(logoSource, options);
-        if (variant) {
-          variants[context] = variant;
-        }
-      } catch (error) {
-        console.warn(`Failed to generate optimized inline logo for context "${context}":`, error);
-        variants[context] = logoSource;
-      }
+    const signature = createLogoSignature(logoSource);
+    const { cached, missing } = getCachedDataUriVariants(signature, uniqueContexts);
+    const variants = { ...cached };
+
+    if (missing.length) {
+      const computed = await buildDataUriVariants(logoSource, missing);
+      Object.assign(variants, computed);
+      setCachedDataUriVariants(signature, computed);
     }
+
     return variants;
   }
 
+  const variants = {};
   uniqueContexts.forEach((context) => {
     variants[context] = minimizeLogoUrl(logoSource, resolveContextOptions(context));
   });
@@ -316,6 +379,7 @@ module.exports = {
   getLogoUrlVariants,
   minimizeForContext,
   minimizeProfileImages,
+  createLogoSignature,
   minimizeCloudinaryUrl,
   minimizeS3Url,
   minimizeFirebaseUrl,
