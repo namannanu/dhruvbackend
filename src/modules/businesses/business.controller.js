@@ -7,7 +7,58 @@ const {
   ensureBusinessAccess,
   getAccessibleBusinessIds,
 } = require('../../shared/utils/businessAccess');
-const { minimizeForContext } = require('../../shared/utils/logoUrlMinimizer');
+const {
+  generateLogoVariants,
+  isDataUri
+} = require('../../shared/utils/logoUrlMinimizer');
+
+const resolveLogoSource = (business) => {
+  if (!business) return null;
+
+  const candidates = [
+    business.logo?.square?.url,
+    business.logo?.square?.dataUri,
+    business.logo?.original?.url,
+    business.logo?.original?.dataUri,
+    business.logo?.dataUri,
+    typeof business.logo === 'string' ? business.logo : null,
+    business.logoUrl
+  ];
+
+  return candidates.find((value) => typeof value === 'string' && value.trim().length);
+};
+
+const stripInlineLogoPayload = (business, fallbackValue) => {
+  if (!business) return;
+
+  if (typeof business.logo === 'string' && isDataUri(business.logo)) {
+    delete business.logo;
+  }
+
+  if (business.logo && typeof business.logo === 'object') {
+    for (const key of Object.keys(business.logo)) {
+      const value = business.logo[key];
+      if (typeof value === 'string' && isDataUri(value)) {
+        delete business.logo[key];
+      } else if (value && typeof value === 'object') {
+        if (typeof value.url === 'string' && isDataUri(value.url)) {
+          delete business.logo[key].url;
+        }
+        if (typeof value.dataUri === 'string' && isDataUri(value.dataUri)) {
+          delete business.logo[key].dataUri;
+        }
+      }
+    }
+  }
+
+  if (business.logoUrl && isDataUri(business.logoUrl)) {
+    if (fallbackValue) {
+      business.logoUrl = fallbackValue;
+    } else {
+      delete business.logoUrl;
+    }
+  }
+};
 
 exports.listBusinesses = catchAsync(async (req, res) => {
   let filter = {};
@@ -25,20 +76,39 @@ exports.listBusinesses = catchAsync(async (req, res) => {
     filter.owner = req.query.ownerId;
   }
 
-  const businesses = await Business.find(filter);
+  const includeOriginalLogo = req.query.includeOriginalLogo === 'true';
+  const businesses = await Business.find(filter).lean();
 
-  // Minimize logo URLs for faster response
-  const businessesWithOptimizedLogos = businesses.map(business => {
-    const businessObj = business.toObject();
-    if (businessObj.logo) {
-      businessObj.logoSmall = minimizeForContext(businessObj.logo, 'job-list');
-      businessObj.logoMedium = minimizeForContext(businessObj.logo, 'business-profile');
-      
-      // Remove original logo URL to save bandwidth
-      delete businessObj.logo;
-    }
-    return businessObj;
-  });
+  const businessesWithOptimizedLogos = await Promise.all(
+    businesses.map(async (business) => {
+      const optimizedBusiness = { ...business };
+      const logoSource = resolveLogoSource(optimizedBusiness);
+
+      if (logoSource) {
+        try {
+          const variants = await generateLogoVariants(logoSource, ['job-list', 'business-profile']);
+          const logoSmall = variants['job-list'];
+          const logoMedium = variants['business-profile'];
+
+          if (logoSmall) {
+            optimizedBusiness.logoSmall = logoSmall;
+          }
+          if (logoMedium) {
+            optimizedBusiness.logoMedium = logoMedium;
+          }
+
+          const fallbackLogo = logoMedium || logoSmall;
+          if (!includeOriginalLogo && isDataUri(logoSource) && fallbackLogo) {
+            stripInlineLogoPayload(optimizedBusiness, fallbackLogo);
+          }
+        } catch (error) {
+          console.warn(`Unable to optimize business logo for business ${optimizedBusiness._id}:`, error);
+        }
+      }
+
+      return optimizedBusiness;
+    })
+  );
 
   res.status(200).json({
     status: 'success',

@@ -31,10 +31,12 @@ router.post('/', protect, requirePermissions('create_jobs'), controller.createJo
 router.post('/applications/:applicationId/hire', protect, requirePermissions('hire_workers'), controller.hireApplicant);
 
 // All job-specific routes with :jobId parameter
-router.get('/:jobId', protect, requirePermissions('view_jobs'), controller.getJob);
-router.patch('/:jobId', protect, requirePermissions('edit_jobs'), controller.updateJob);
-router.patch('/:jobId/status', protect, requirePermissions('edit_jobs'), controller.updateJobStatus);
-router.get('/:jobId/applications', protect, requirePermissions('view_applications'), controller.listApplicationsForJob);
-router.post('/:jobId/applications', protect, applicationController.createApplication);
+const objectIdPattern = '[0-9a-fA-F]{24}';
+
+router.get(`/:jobId(${objectIdPattern})`, protect, requirePermissions('view_jobs'), controller.getJob);
+router.patch(`/:jobId(${objectIdPattern})`, protect, requirePermissions('edit_jobs'), controller.updateJob);
+router.patch(`/:jobId(${objectIdPattern})/status`, protect, requirePermissions('edit_jobs'), controller.updateJobStatus);
+router.get(`/:jobId(${objectIdPattern})/applications`, protect, requirePermissions('view_applications'), controller.listApplicationsForJob);
+router.post(`/:jobId(${objectIdPattern})/applications`, protect, applicationController.createApplication);
 
 module.exports = router;
