@@ -52,6 +52,7 @@ const locationSchema = new mongoose.Schema(
         message: 'Longitude must be between -180 and 180 degrees'
       }
     },
+    
     formattedAddress: {
       type: String,
       required: true,
