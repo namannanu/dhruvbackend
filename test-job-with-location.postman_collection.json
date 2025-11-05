@@ -1,0 +1,44 @@
+{
+  "info": {
+    "_postman_id": "b8d52e4c-f3d2-4e8b-9f8d-987654321def",
+    "name": "Job Location Test",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Create Job with Location",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"title\": \"Dishwasher\",\n    \"description\": \"Dishwashing job\",\n    \"hourlyRate\": 52,\n    \"business\": \"{{businessId}}\",\n    \"location\": {\n        \"type\": \"Point\",\n        \"coordinates\": [75.8647527, 25.2138156],\n        \"address\": {\n            \"line1\": \"3 Mahaveer Nagar III Circle\",\n            \"city\": \"Kota\",\n            \"state\": \"Rajasthan\",\n            \"country\": \"India\",\n            \"postalCode\": \"324005\",\n            \"formattedAddress\": \"3 Mahaveer Nagar III Circle, Mahaveer Nagar, Kota, Rajasthan 324005, India\"\n        }\n    },\n    \"schedule\": {\n        \"startDate\": \"2025-11-05T00:30:00.000Z\",\n        \"endDate\": \"2025-11-05T01:45:00.000Z\",\n        \"startTime\": \"00:30\",\n        \"endTime\": \"01:45\",\n        \"recurrence\": \"one-time\"\n    },\n    \"overtime\": {\n        \"allowed\": false,\n        \"rateMultiplier\": 0.015\n    },\n    \"urgency\": \"medium\",\n    \"tags\": [\"dishwasher\"],\n    \"verificationRequired\": false,\n    \"premiumRequired\": false,\n    \"status\": \"active\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/jobs",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "jobs"]
+        }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    }
+  ]
+}

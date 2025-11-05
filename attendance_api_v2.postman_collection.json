@@ -1,0 +1,271 @@
+{
+	"info": {
+		"_postman_id": "b8d52e4c-f3d2-4e8b-9f8d-987654321abc",
+		"name": "Dhruv Attendance API V2",
+		"description": "Collection for testing attendance management endpoints",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Create Attendance",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"worker\": \"{{workerId}}\",\n    \"business\": \"{{businessId}}\",\n    \"job\": \"{{jobId}}\",\n    \"date\": \"2025-11-05\",\n    \"scheduledStartTime\": \"09:00\",\n    \"scheduledEndTime\": \"17:00\",\n    \"notes\": \"Regular shift\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/attendance",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "attendance"]
+				},
+				"description": "Create a new attendance record for a worker"
+			},
+			"response": []
+		},
+		{
+			"name": "Clock In",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"location\": {\n        \"latitude\": 25.2138156,\n        \"longitude\": 75.8647527,\n        \"accuracy\": 10,\n        \"address\": \"123 Test St, Test City\"\n    },\n    \"notes\": \"On time check-in\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/attendance/{{attendanceId}}/clock-in",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "attendance", "{{attendanceId}}", "clock-in"]
+				},
+				"description": "Record worker clock-in with location"
+			},
+			"response": []
+		},
+		{
+			"name": "Clock Out",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"location\": {\n        \"latitude\": 25.2138156,\n        \"longitude\": 75.8647527,\n        \"accuracy\": 10,\n        \"address\": \"123 Test St, Test City\"\n    },\n    \"notes\": \"Completed all tasks\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/attendance/{{attendanceId}}/clock-out",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "attendance", "{{attendanceId}}", "clock-out"]
+				},
+				"description": "Record worker clock-out with location"
+			},
+			"response": []
+		},
+		{
+			"name": "Get Attendance Details",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/api/attendance/{{attendanceId}}",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "attendance", "{{attendanceId}}"]
+				},
+				"description": "Get details of a specific attendance record"
+			},
+			"response": []
+		},
+		{
+			"name": "List Attendance Records (Business)",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/api/attendance?businessId={{businessId}}&startDate=2025-11-01&endDate=2025-11-30",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "attendance"],
+					"query": [
+						{
+							"key": "businessId",
+							"value": "{{businessId}}"
+						},
+						{
+							"key": "startDate",
+							"value": "2025-11-01"
+						},
+						{
+							"key": "endDate",
+							"value": "2025-11-30"
+						},
+						{
+							"key": "status",
+							"value": "all",
+							"disabled": true
+						}
+					]
+				},
+				"description": "List attendance records for a business with date filters"
+			},
+			"response": []
+		},
+		{
+			"name": "List Worker Attendance",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/api/attendance?workerId={{workerId}}&startDate=2025-11-01&endDate=2025-11-30",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "attendance"],
+					"query": [
+						{
+							"key": "workerId",
+							"value": "{{workerId}}"
+						},
+						{
+							"key": "startDate",
+							"value": "2025-11-01"
+						},
+						{
+							"key": "endDate",
+							"value": "2025-11-30"
+						}
+					]
+				},
+				"description": "List attendance records for a specific worker"
+			},
+			"response": []
+		},
+		{
+			"name": "Update Attendance",
+			"request": {
+				"method": "PATCH",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"scheduledStartTime\": \"08:00\",\n    \"scheduledEndTime\": \"16:00\",\n    \"notes\": \"Updated shift timing\",\n    \"status\": \"approved\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/attendance/{{attendanceId}}",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "attendance", "{{attendanceId}}"]
+				},
+				"description": "Update attendance record details"
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:3000",
+			"type": "string"
+		},
+		{
+			"key": "token",
+			"value": "your_jwt_token_here",
+			"type": "string"
+		},
+		{
+			"key": "businessId",
+			"value": "your_business_id_here",
+			"type": "string"
+		},
+		{
+			"key": "workerId",
+			"value": "your_worker_id_here",
+			"type": "string"
+		},
+		{
+			"key": "jobId",
+			"value": "your_job_id_here",
+			"type": "string"
+		},
+		{
+			"key": "attendanceId",
+			"value": "your_attendance_id_here",
+			"type": "string"
+		}
+	]
+}
