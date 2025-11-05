@@ -280,6 +280,18 @@ exports.createJob = catchAsync(async (req, res, next) => {
   const businessId = req.body.business || req.body.businessId;
   if (!businessId) return next(new AppError('Business must be specified (business or businessId)', 400));
 
+  // Validate that location is provided in the request
+  if (!req.body.location) {
+    return next(new AppError('Location is required for job posting', 400));
+  }
+
+  // Validate required location fields
+  const requiredLocationFields = ['latitude', 'longitude'];
+  const missingFields = requiredLocationFields.filter(field => !req.body.location[field]);
+  if (missingFields.length > 0) {
+    return next(new AppError(`Missing required location fields: ${missingFields.join(', ')}`, 400));
+  }
+
   const { business } = await ensureBusinessAccess({
     user: req.user,
     businessId,
@@ -307,7 +319,20 @@ exports.createJob = catchAsync(async (req, res, next) => {
   delete jobData.premiumRequired;
   delete jobData.businessAddress;
 
-  // leave location empty to let model pre-save hook derive it from business if needed
+  // Ensure location is properly formatted and has all required fields
+  const location = jobData.location;
+  if (!location.label) {
+    location.label = business.businessName || business.name;
+  }
+  if (!location.formattedAddress && business.location) {
+    location.formattedAddress = [
+      location.line1 || business.location.line1,
+      location.city || business.location.city,
+      location.state || business.location.state,
+      location.postalCode || business.location.postalCode
+    ].filter(Boolean).join(', ');
+  }
+
   const initialStatus = shouldAutoPublish ? 'active' : 'draft';
 
   const job = await Job.create({
