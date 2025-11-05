@@ -1,0 +1,471 @@
+{
+	"info": {
+		"_postman_id": "a7b52e4c-f3d2-4e8b-9f8d-123456789abc",
+		"name": "Dhruv Backend Complete API",
+		"description": "Complete API collection for Dhruv Backend with updated business and location integration",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Login",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"test@example.com\",\n    \"password\": \"password123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/login",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "Register",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"test@example.com\",\n    \"password\": \"password123\",\n    \"firstName\": \"John\",\n    \"lastName\": \"Doe\",\n    \"userType\": \"worker\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/register",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "auth", "register"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Jobs",
+			"item": [
+				{
+					"name": "List Jobs (Worker View)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/jobs/worker?lat=25.2138156&lng=75.8647527&radius=5000",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "jobs", "worker"],
+							"query": [
+								{
+									"key": "lat",
+									"value": "25.2138156"
+								},
+								{
+									"key": "lng",
+									"value": "75.8647527"
+								},
+								{
+									"key": "radius",
+									"value": "5000"
+								}
+							]
+						},
+						"description": "List available jobs for workers with location filtering"
+					}
+				},
+				{
+					"name": "List Jobs (Employer View)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/jobs/employer?businessId={{businessId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "jobs", "employer"],
+							"query": [
+								{
+									"key": "businessId",
+									"value": "{{businessId}}"
+								}
+							]
+						},
+						"description": "List jobs for employer with business filtering"
+					}
+				},
+				{
+					"name": "Get Job Details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/jobs/{{jobId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "jobs", "{{jobId}}"]
+						}
+					}
+				},
+				{
+					"name": "Create Job",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"business\": \"{{businessId}}\",\n    \"title\": \"Test Job\",\n    \"description\": \"Test job description\",\n    \"hourlyRate\": 15,\n    \"location\": {\n        \"line1\": \"123 Test St\",\n        \"city\": \"Test City\",\n        \"state\": \"TS\",\n        \"postalCode\": \"12345\",\n        \"country\": \"India\",\n        \"latitude\": 25.2138156,\n        \"longitude\": 75.8647527\n    },\n    \"schedule\": {\n        \"startDate\": \"2025-11-06T00:00:00.000Z\",\n        \"endDate\": \"2025-11-07T00:00:00.000Z\",\n        \"startTime\": \"09:00\",\n        \"endTime\": \"17:00\",\n        \"recurrence\": \"one-time\"\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/jobs",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "jobs"]
+						}
+					}
+				},
+				{
+					"name": "Update Job",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Updated Job Title\",\n    \"description\": \"Updated job description\",\n    \"hourlyRate\": 20,\n    \"publish\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/jobs/{{jobId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "jobs", "{{jobId}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Applications",
+			"item": [
+				{
+					"name": "Create Application",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"message\": \"I am interested in this job\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/jobs/{{jobId}}/applications",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "jobs", "{{jobId}}", "applications"]
+						}
+					}
+				},
+				{
+					"name": "Hire Applicant",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"startDate\": \"2025-11-06T00:00:00.000Z\",\n    \"hiringNotes\": \"Welcome aboard!\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/jobs/applications/{{applicationId}}/hire",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "jobs", "applications", "{{applicationId}}", "hire"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Attendance",
+			"item": [
+				{
+					"name": "Clock In",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"location\": {\n        \"latitude\": 25.2138156,\n        \"longitude\": 75.8647527,\n        \"accuracy\": 10,\n        \"address\": \"123 Test St, Test City\"\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/attendance/{{attendanceId}}/clock-in",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "attendance", "{{attendanceId}}", "clock-in"]
+						}
+					}
+				},
+				{
+					"name": "Clock Out",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"location\": {\n        \"latitude\": 25.2138156,\n        \"longitude\": 75.8647527,\n        \"accuracy\": 10,\n        \"address\": \"123 Test St, Test City\"\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/attendance/{{attendanceId}}/clock-out",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "attendance", "{{attendanceId}}", "clock-out"]
+						}
+					}
+				},
+				{
+					"name": "List Attendance Records",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/attendance?startDate=2025-11-01&endDate=2025-11-30&businessId={{businessId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "attendance"],
+							"query": [
+								{
+									"key": "startDate",
+									"value": "2025-11-01"
+								},
+								{
+									"key": "endDate",
+									"value": "2025-11-30"
+								},
+								{
+									"key": "businessId",
+									"value": "{{businessId}}"
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Business",
+			"item": [
+				{
+					"name": "Create Business",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Test Business\",\n    \"description\": \"Test business description\",\n    \"phone\": \"+919876543210\",\n    \"email\": \"business@test.com\",\n    \"location\": {\n        \"line1\": \"123 Business St\",\n        \"city\": \"Business City\",\n        \"state\": \"BS\",\n        \"postalCode\": \"54321\",\n        \"country\": \"India\",\n        \"latitude\": 25.2138156,\n        \"longitude\": 75.8647527,\n        \"allowedRadius\": 100\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/businesses",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "businesses"]
+						}
+					}
+				},
+				{
+					"name": "List Businesses",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/businesses",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "businesses"]
+						}
+					}
+				},
+				{
+					"name": "Update Business",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Updated Business Name\",\n    \"description\": \"Updated business description\",\n    \"location\": {\n        \"line1\": \"456 Updated St\",\n        \"city\": \"Updated City\",\n        \"state\": \"UC\",\n        \"postalCode\": \"98765\",\n        \"country\": \"India\",\n        \"latitude\": 25.2138156,\n        \"longitude\": 75.8647527,\n        \"allowedRadius\": 150\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/businesses/{{businessId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "businesses", "{{businessId}}"]
+						}
+					}
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:3000",
+			"type": "string"
+		},
+		{
+			"key": "token",
+			"value": "your_jwt_token_here",
+			"type": "string"
+		},
+		{
+			"key": "businessId",
+			"value": "your_business_id_here",
+			"type": "string"
+		},
+		{
+			"key": "jobId",
+			"value": "your_job_id_here",
+			"type": "string"
+		},
+		{
+			"key": "applicationId",
+			"value": "your_application_id_here",
+			"type": "string"
+		},
+		{
+			"key": "attendanceId",
+			"value": "your_attendance_id_here",
+			"type": "string"
+		}
+	]
+}

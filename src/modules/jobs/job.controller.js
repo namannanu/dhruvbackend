@@ -426,12 +426,12 @@ exports.hireApplicant = catchAsync(async (req, res, next) => {
     return next(new AppError('Application not found', 404));
   }
 
-  const job = await Job.findById(application.job);
+  const job = await Job.findById(application.job).populate('business');
   if (!job) {
     return next(new AppError('Job not found for this application', 404));
   }
 
-  const jobBusinessId = job.business ? job.business.toString() : null;
+  const jobBusinessId = job.business ? job.business._id.toString() : null;
   const requestedBusinessId = req.body.businessId ? req.body.businessId.toString() : null;
 
   if (requestedBusinessId && jobBusinessId && requestedBusinessId !== jobBusinessId) {
