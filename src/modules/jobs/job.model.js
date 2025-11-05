@@ -94,14 +94,14 @@ const jobSchema = new mongoose.Schema(
 jobSchema.index({ employer: 1, status: 1 });
 jobSchema.index({ 'location.latitude': 1, 'location.longitude': 1 });
 
-jobSchema.pre('save', async function jobLocationAutofill(next) {
+jobSchema.pre('validate', async function(next) {
   try {
     if (!this.business) {
       throw new Error('Business ID is required');
     }
 
-    // If no location is provided, try to get it from the business
-    if (!this.location) {
+    // If there's no location at all, try to get it from the business
+    if (!this.location || Object.keys(this.location).length === 0) {
       const business = await Business.findById(this.business).lean();
       if (!business || !business.location) {
         throw new Error('Job location is required. Either provide location in the job or set a location for the business.');
@@ -116,20 +116,54 @@ jobSchema.pre('save', async function jobLocationAutofill(next) {
         throw new Error('Unable to derive location from business. Please provide location details.');
       }
 
-      this.location = derived;
+      this.location = {
+        line1: derived.line1,
+        address: derived.address || derived.line1,
+        city: derived.city,
+        state: derived.state,
+        postalCode: derived.postalCode,
+        country: derived.country,
+        latitude: derived.latitude,
+        longitude: derived.longitude,
+        formattedAddress: derived.formattedAddress || [
+          derived.line1,
+          derived.city,
+          derived.state,
+          derived.postalCode,
+          derived.country
+        ].filter(Boolean).join(', '),
+        allowedRadius: derived.allowedRadius || 150
+      };
     }
 
-    // Ensure all required fields are present
+    // Validate all required fields are present and have values
     const requiredFields = ['line1', 'address', 'city', 'state', 'postalCode', 'country', 'latitude', 'longitude'];
-    const missingFields = requiredFields.filter(field => !this.location[field]);
+    const missingFields = requiredFields.filter(field => {
+      const value = this.location[field];
+      return value === undefined || value === null || value === '';
+    });
     
     if (missingFields.length > 0) {
-      throw new Error(`Missing required location fields: ${missingFields.join(', ')}`);
+      throw new Error(`Missing or invalid required location fields: ${missingFields.join(', ')}`);
     }
 
-    // Generate formatted address if not provided
+    // Validate coordinates
+    if (this.location.latitude < -90 || this.location.latitude > 90) {
+      throw new Error('Invalid latitude. Must be between -90 and 90 degrees');
+    }
+    if (this.location.longitude < -180 || this.location.longitude > 180) {
+      throw new Error('Invalid longitude. Must be between -180 and 180 degrees');
+    }
+
+    // Ensure formattedAddress
     if (!this.location.formattedAddress) {
-      this.location.formattedAddress = buildLocationAddressString(this.location);
+      this.location.formattedAddress = [
+        this.location.line1,
+        this.location.city,
+        this.location.state,
+        this.location.postalCode,
+        this.location.country
+      ].filter(Boolean).join(', ');
     }
 
     next();

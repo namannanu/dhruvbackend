@@ -372,7 +372,8 @@ exports.createJob = catchAsync(async (req, res, next) => {
 
   const initialStatus = shouldAutoPublish ? 'active' : 'draft';
 
-  const job = await Job.create({
+  // Create a new Job instance first to trigger validation
+  const job = new Job({
     ...jobData,
     employer: business.owner,
     createdBy: req.user._id,
@@ -383,6 +384,16 @@ exports.createJob = catchAsync(async (req, res, next) => {
     publishedAt: shouldAutoPublish ? new Date() : null,
     publishedBy: shouldAutoPublish ? req.user._id : null,
   });
+
+  try {
+    // This will trigger the pre-validate hook
+    await job.validate();
+  } catch (err) {
+    return next(new AppError(err.message, 400));
+  }
+
+  // If validation passes, save the job
+  await job.save();
 
   await job.populate([
     {
