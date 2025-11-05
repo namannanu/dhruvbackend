@@ -1,5 +1,19 @@
 const mongoose = require('mongoose');
 
+const locationSchema = new mongoose.Schema(
+  {
+    line1: String,
+    address: String,
+    city: String,
+    state: String,
+    postalCode: String,
+    country: String,
+    latitude: Number,
+    longitude: Number
+  },
+  { _id: false }
+);
+
 const snapshotSchema = new mongoose.Schema(
   {
     name: String,
@@ -18,6 +32,12 @@ const applicationSchema = new mongoose.Schema(
       ref: 'Job',
       required: true
     },
+    business: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Business',
+      required: true
+    },
+    location: locationSchema,
     worker: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

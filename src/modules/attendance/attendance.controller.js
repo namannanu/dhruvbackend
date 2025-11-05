@@ -81,17 +81,44 @@ const buildWorkerName = (worker, snapshot) => {
 };
 
 const pickJobLocationSnapshot = (job) => {
-  if (!job || !job.location) {
-    return null;
+  if (!job) return null;
+  
+  // First try job's location
+  const jobLocation = job.location;
+  if (jobLocation) {
+    return {
+      line1: jobLocation.line1,
+      address: jobLocation.address,
+      city: jobLocation.city,
+      state: jobLocation.state,
+      postalCode: jobLocation.postalCode,
+      country: jobLocation.country,
+      latitude: jobLocation.latitude,
+      longitude: jobLocation.longitude,
+      name: jobLocation.name || `${job.title} Location`,
+      description: jobLocation.description,
+      isActive: true
+    };
   }
-  const { city, state, address } = job.location;
-  const cityState = [city, state].filter(Boolean).join(', ');
-  if (cityState) {
-    return cityState;
+  
+  // If no job location, try business location
+  if (job.business && job.business.location) {
+    const bizLocation = job.business.location;
+    return {
+      line1: bizLocation.line1,
+      address: bizLocation.address,
+      city: bizLocation.city,
+      state: bizLocation.state,
+      postalCode: bizLocation.postalCode,
+      country: bizLocation.country,
+      latitude: bizLocation.latitude,
+      longitude: bizLocation.longitude,
+      name: bizLocation.name || `${job.business.name} Location`,
+      description: bizLocation.description,
+      isActive: true
+    };
   }
-  if (address) {
-    return address;
-  }
+  
   return null;
 };
 

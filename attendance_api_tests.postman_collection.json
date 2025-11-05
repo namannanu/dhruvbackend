@@ -1,0 +1,251 @@
+{
+	"info": {
+		"_postman_id": "e8d3a45f-9c21-4d12-8f9e-1f2b3c4d5e6f",
+		"name": "Attendance API Tests",
+		"description": "Test collection for WorkConnect Attendance API endpoints",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000/api",
+			"type": "string"
+		},
+		{
+			"key": "token",
+			"value": "your_auth_token_here",
+			"type": "string"
+		},
+		{
+			"key": "record_id",
+			"value": "attendance_record_id_here",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Get Management View",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/attendance/management?date=2025-11-05&status=all&workerId=worker123&businessId=business123",
+					"host": ["{{base_url}}"],
+					"path": ["attendance", "management"],
+					"query": [
+						{
+							"key": "date",
+							"value": "2025-11-05"
+						},
+						{
+							"key": "status",
+							"value": "all"
+						},
+						{
+							"key": "workerId",
+							"value": "worker123"
+						},
+						{
+							"key": "businessId",
+							"value": "business123"
+						}
+					]
+				},
+				"description": "Get attendance management view with filters"
+			}
+		},
+		{
+			"name": "List Attendance Records",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/attendance",
+					"host": ["{{base_url}}"],
+					"path": ["attendance"]
+				},
+				"description": "List all attendance records"
+			}
+		},
+		{
+			"name": "Schedule Attendance",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"worker\": \"worker_id_here\",\n    \"job\": \"job_id_here\",\n    \"scheduledStart\": \"2025-11-05T09:00:00.000Z\",\n    \"scheduledEnd\": \"2025-11-05T17:00:00.000Z\",\n    \"hourlyRate\": 25.00,\n    \"jobLocation\": {\n        \"latitude\": 37.7749,\n        \"longitude\": -122.4194,\n        \"address\": \"123 Main St, San Francisco, CA 94105\",\n        \"allowedRadius\": 100,\n        \"name\": \"Main Office\",\n        \"description\": \"San Francisco HQ\",\n        \"isActive\": true\n    }\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/attendance",
+					"host": ["{{base_url}}"],
+					"path": ["attendance"]
+				},
+				"description": "Create a new attendance schedule"
+			}
+		},
+		{
+			"name": "Clock In",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"clockInLocation\": {\n        \"latitude\": 37.7749,\n        \"longitude\": -122.4194,\n        \"address\": \"123 Main St, San Francisco, CA 94105\",\n        \"accuracy\": 10,\n        \"timestamp\": \"2025-11-05T09:00:00.000Z\"\n    }\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/attendance/{{record_id}}/clock-in",
+					"host": ["{{base_url}}"],
+					"path": ["attendance", "{{record_id}}", "clock-in"]
+				},
+				"description": "Clock in for a shift with location"
+			}
+		},
+		{
+			"name": "Clock Out",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"clockOutLocation\": {\n        \"latitude\": 37.7749,\n        \"longitude\": -122.4194,\n        \"address\": \"123 Main St, San Francisco, CA 94105\",\n        \"accuracy\": 10,\n        \"timestamp\": \"2025-11-05T17:00:00.000Z\"\n    }\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/attendance/{{record_id}}/clock-out",
+					"host": ["{{base_url}}"],
+					"path": ["attendance", "{{record_id}}", "clock-out"]
+				},
+				"description": "Clock out from a shift with location"
+			}
+		},
+		{
+			"name": "Mark Complete",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"notes\": \"Shift completed successfully\"\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/attendance/{{record_id}}/mark-complete",
+					"host": ["{{base_url}}"],
+					"path": ["attendance", "{{record_id}}", "mark-complete"]
+				},
+				"description": "Mark an attendance record as complete"
+			}
+		},
+		{
+			"name": "Update Hours",
+			"request": {
+				"method": "PATCH",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"totalHours\": 8.5,\n    \"hourlyRate\": 25.00\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/attendance/{{record_id}}/hours",
+					"host": ["{{base_url}}"],
+					"path": ["attendance", "{{record_id}}", "hours"]
+				},
+				"description": "Update hours and rate for an attendance record"
+			}
+		},
+		{
+			"name": "Update Attendance",
+			"request": {
+				"method": "PATCH",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"scheduledStart\": \"2025-11-05T10:00:00.000Z\",\n    \"scheduledEnd\": \"2025-11-05T18:00:00.000Z\",\n    \"notes\": \"Schedule updated\",\n    \"jobLocation\": {\n        \"latitude\": 37.7749,\n        \"longitude\": -122.4194,\n        \"address\": \"123 Main St, San Francisco, CA 94105\",\n        \"allowedRadius\": 150,\n        \"name\": \"Main Office\",\n        \"description\": \"San Francisco HQ\",\n        \"isActive\": true\n    }\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/attendance/{{record_id}}",
+					"host": ["{{base_url}}"],
+					"path": ["attendance", "{{record_id}}"]
+				},
+				"description": "Update an attendance record details"
+			}
+		}
+	]
+}

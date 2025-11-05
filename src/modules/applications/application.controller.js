@@ -13,7 +13,7 @@ exports.createApplication = catchAsync(async (req, res, next) => {
     return next(new AppError('Only workers can apply to jobs', 403));
   }
 
-  const job = await Job.findById(req.params.jobId);
+  const job = await Job.findById(req.params.jobId).populate('business');
   if (!job || job.status !== 'active') {
     return next(new AppError('Job is not available for applications', 400));
   }
@@ -29,9 +29,23 @@ exports.createApplication = catchAsync(async (req, res, next) => {
 
   const profile = await WorkerProfile.findOne({ user: req.user._id });
 
+  // Get location from job or business
+  const location = job.location || job.business?.location;
+
   const application = await Application.create({
     job: job._id,
     worker: req.user._id,
+    business: job.business._id,
+    location: location ? {
+      line1: location.line1,
+      address: location.address,
+      city: location.city,
+      state: location.state,
+      postalCode: location.postalCode,
+      country: location.country,
+      latitude: location.latitude,
+      longitude: location.longitude
+    } : undefined,
     message: req.body.message || '',
     snapshot: {
       name: req.user.fullName,

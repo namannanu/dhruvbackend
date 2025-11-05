@@ -27,7 +27,7 @@ const JOB_PUBLISH_STATUS = Object.freeze({
   PUBLISHED: 'published',
 });
 
-const BUSINESS_RESPONSE_FIELDS = 'businessName name logoUrl logo location address';
+const BUSINESS_RESPONSE_FIELDS = 'businessName name logoUrl logo location address line1 city state postalCode country latitude longitude allowedRadius';
 
 const parsePublishToggle = (value) => {
   if (typeof value === 'boolean') return value;
@@ -75,6 +75,22 @@ const buildJobResponse = async (job, currentUser) => {
     j.businessDetails = j.business;
     j.businessName = j.business.businessName || j.business.name || j.businessName || null;
     j.businessLogoUrl = normalizeLogoUrl(j.business);
+
+    // Enhanced location handling
+    if (!j.location && j.business.location) {
+      j.location = {
+        line1: j.business.location.line1,
+        address: j.business.location.address,
+        city: j.business.location.city,
+        state: j.business.location.state,
+        postalCode: j.business.location.postalCode,
+        country: j.business.location.country,
+        latitude: j.business.location.latitude,
+        longitude: j.business.location.longitude,
+        allowedRadius: j.business.location.allowedRadius
+      };
+    }
+
     if (!currentUser || currentUser.userType !== 'employer') {
       j.business = j.businessId;
     }
@@ -83,6 +99,21 @@ const buildJobResponse = async (job, currentUser) => {
     j.businessId = j.businessId._id.toString();
     j.businessName = j.businessDetails.businessName || j.businessDetails.name || j.businessName || null;
     j.businessLogoUrl = normalizeLogoUrl(j.businessDetails);
+
+    // Enhanced location handling for populated businessId
+    if (!j.location && j.businessDetails.location) {
+      j.location = {
+        line1: j.businessDetails.location.line1,
+        address: j.businessDetails.location.address,
+        city: j.businessDetails.location.city,
+        state: j.businessDetails.location.state,
+        postalCode: j.businessDetails.location.postalCode,
+        country: j.businessDetails.location.country,
+        latitude: j.businessDetails.location.latitude,
+        longitude: j.businessDetails.location.longitude,
+        allowedRadius: j.businessDetails.location.allowedRadius
+      };
+    }
   }
 
   // publishedBy

@@ -14,9 +14,14 @@ const locationSchema = new mongoose.Schema({
 
 // Job location schema with geofencing radius
 const jobLocationSchema = new mongoose.Schema({
+  line1: String,
+  address: String,
+  city: String,
+  state: String,
+  postalCode: String,
+  country: String,
   latitude: { type: Number, required: true },
   longitude: { type: Number, required: true },
-  address: String,
   accuracy: Number,
   timestamp: Date,
   altitude: Number,
